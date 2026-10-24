@@ -1,1 +1,1 @@
-Cytoscape.js instalado, com tipos próprios. Implementação no marco de grafo: separar adapter, layout, visibility e styles; ledger local de expansões/raízes, sem estado global adicional. Não atribuir semântica histórica à geometria.
+Ledger deriva conjunto visível de raízes/expansões alcançáveis. adapter converte modelo provisório em elementos; layout preserva posições existentes/fixadas; styles preserva direção/evidência/intensidade. GraphCanvas usa instância local, ResizeObserver e destroy no cleanup. Modo lista oferece navegação por teclado.

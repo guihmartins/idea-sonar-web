@@ -1,1 +1,1 @@
-Componentes compartilhados serão extraídos quando houver reutilização entre telas. Os estados iniciais estão em `src/pages`.
+Feedback compartilhado, links externos seguros e conversão explícita de períodos históricos.
