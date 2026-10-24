@@ -1,1 +1,1 @@
-Container estático independente previsto no marco de deploy. Veja `docs/deploy.md`.
+Dockerfile multi-stage e Nginx não root independente. Compose e smoke em docs/deploy.md.

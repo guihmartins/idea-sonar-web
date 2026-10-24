@@ -18,9 +18,21 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+      - run: npm install --global npm@11.9.0
+        working-directory: ${{ runner.temp }}
       - run: npm ci
+      - run: npm run format:check
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      - run: npm run test:e2e:fixtures
+      - name: Build estático Docker
+        run: >-
+          docker build -f infra/docker/Dockerfile -t idea-sonar-web:test
+          --build-arg VITE_API_BASE_URL
+          --build-arg VITE_OIDC_ISSUER
+          --build-arg VITE_OIDC_CLIENT_ID
+          --build-arg VITE_OIDC_AUDIENCE .
+      - run: npm run test:container
