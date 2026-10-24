@@ -4,8 +4,9 @@
   "path": "contracts/openapi.json",
   "checkedRef": "main",
   "checkedAt": "2026-10-24",
-  "result": "404: contrato indisponível por este caminho/acesso",
+  "result": "OpenAPI ausente na árvore main consultada; somente PLAN.md publicado. Integração oficial pendente.",
   "commit": null,
   "infoVersion": null,
-  "sha256": null
+  "sha256": null,
+  "checkedTree": "b50cf3f50cc865a6f35fba56f8400135fbe7bb64"
 }

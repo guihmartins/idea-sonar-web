@@ -1,1 +1,1 @@
-Reservado ao SDK oficial OIDC/PKCE e ciclo de sessão. Requisitos em `docs/auth.md`. Nenhuma autenticação simulada.
+Session encapsula SDK oficial Auth0/PKCE, com access token em memória. Configuração externa e limites em docs/auth.md.

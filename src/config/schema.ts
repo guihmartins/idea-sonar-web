@@ -13,12 +13,18 @@ export interface AppConfig {
 function required(input: EnvironmentInput, key: string): string {
   const value = input[key];
   if (typeof value !== 'string' || !value.trim() || value !== value.trim()) {
-    throw new Error(`${key}: informe um valor público válido, sem espaços nas extremidades.`);
+    throw new Error(
+      `${key}: informe um valor público válido, sem espaços nas extremidades.`,
+    );
   }
   return value;
 }
 
-function publicUrl(input: EnvironmentInput, key: string, development: boolean): URL {
+function publicUrl(
+  input: EnvironmentInput,
+  key: string,
+  development: boolean,
+): URL {
   const value = required(input, key);
   let url: URL;
   try {
@@ -27,27 +33,52 @@ function publicUrl(input: EnvironmentInput, key: string, development: boolean): 
     throw new Error(`${key}: use uma URL absoluta HTTP(S).`);
   }
   const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
-  if (url.protocol !== 'https:' && !(development && local && url.protocol === 'http:')) {
-    throw new Error(`${key}: HTTPS obrigatório; HTTP somente em localhost/127.0.0.1 no desenvolvimento.`);
+  if (
+    url.protocol !== 'https:' &&
+    !(development && local && url.protocol === 'http:')
+  ) {
+    throw new Error(
+      `${key}: HTTPS obrigatório; HTTP somente em localhost/127.0.0.1 no desenvolvimento.`,
+    );
   }
   // Verifica também delimitadores vazios e sintaxe antes da normalização de URL.
-  if (url.username || url.password || /[?#@\\\s]/u.test(value) || !/^https?:\/\//u.test(value)) {
-    throw new Error(`${key}: não use credenciais, query, fragmento ou espaços.`);
+  if (
+    url.username ||
+    url.password ||
+    /[?#@\\\s]/u.test(value) ||
+    !/^https?:\/\//u.test(value)
+  ) {
+    throw new Error(
+      `${key}: não use credenciais, query, fragmento ou espaços.`,
+    );
   }
   return url;
 }
 
-export function parseEnvironment(input: EnvironmentInput, development: boolean): AppConfig {
+export function parseEnvironment(
+  input: EnvironmentInput,
+  development: boolean,
+): AppConfig {
+  if (
+    !development &&
+    input['VITE_ENABLE_FIXTURES'] !== undefined &&
+    input['VITE_ENABLE_FIXTURES'] !== 'false'
+  )
+    throw new Error('VITE_ENABLE_FIXTURES: fixtures proibidas em builds.');
   const api = publicUrl(input, 'VITE_API_BASE_URL', development);
   const rawApi = required(input, 'VITE_API_BASE_URL');
   if (!/^https?:\/\/[^/]+\/?$/u.test(rawApi) || api.pathname !== '/') {
-    throw new Error('VITE_API_BASE_URL: use somente a origem, sem caminho ou /api/v1.');
+    throw new Error(
+      'VITE_API_BASE_URL: use somente a origem, sem caminho ou /api/v1.',
+    );
   }
   const issuer = publicUrl(input, 'VITE_OIDC_ISSUER', development);
   const clientId = required(input, 'VITE_OIDC_CLIENT_ID');
   const audience = required(input, 'VITE_OIDC_AUDIENCE');
   if (/\s/u.test(clientId) || /\s/u.test(audience)) {
-    throw new Error('VITE_OIDC_CLIENT_ID e VITE_OIDC_AUDIENCE: não use espaços.');
+    throw new Error(
+      'VITE_OIDC_CLIENT_ID e VITE_OIDC_AUDIENCE: não use espaços.',
+    );
   }
   return {
     apiBaseUrl: api.origin,
