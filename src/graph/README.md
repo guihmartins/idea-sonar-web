@@ -1,0 +1,1 @@
+Cytoscape.js instalado, com tipos próprios. Implementação no marco de grafo: separar adapter, layout, visibility e styles; ledger local de expansões/raízes, sem estado global adicional. Não atribuir semântica histórica à geometria.

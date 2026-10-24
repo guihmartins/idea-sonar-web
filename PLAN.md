@@ -278,8 +278,8 @@ S3/CloudFront:
 
 ## 12. Checklist
 
-- [ ] Inspecionar repo, fixar versões e registrar decisões.
-- [ ] Configuração de build e VITE_API_BASE_URL com validação.
+- [x] Inspecionar repo, fixar versões e registrar decisões.
+- [x] Configuração de build e VITE_API_BASE_URL com validação.
 - [ ] Importar contrato versionado e gerar cliente.
 - [ ] Autenticação e requests HTTP.
 - [ ] Busca, navegação, expansão/recolhimento e painel.

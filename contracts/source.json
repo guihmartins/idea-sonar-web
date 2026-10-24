@@ -1,0 +1,11 @@
+{
+  "status": "pending",
+  "repository": "guihmartins/idea-sonar-api",
+  "path": "contracts/openapi.json",
+  "checkedRef": "main",
+  "checkedAt": "2026-10-24",
+  "result": "404: contrato indisponível por este caminho/acesso",
+  "commit": null,
+  "infoVersion": null,
+  "sha256": null
+}
