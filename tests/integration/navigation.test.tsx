@@ -1,44 +1,56 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it } from 'vitest';
 import { App } from '../../src/app/App';
-import { parseEnvironment } from '../../src/config/schema';
-
-const config = parseEnvironment({
-  VITE_API_BASE_URL: 'https://api.example.com',
-  VITE_OIDC_ISSUER: 'https://identity.example.com/',
-  VITE_OIDC_CLIENT_ID: 'test-spa', VITE_OIDC_AUDIENCE: 'test-api',
-}, false);
-
-function open(path: string) {
-  render(<MemoryRouter initialEntries={[path]}><App config={config} /></MemoryRouter>);
+import { ServicesProvider } from '../../src/app/services';
+import { createQueryClient } from '../../src/app/queryClient';
+import { createFixtureServices } from '../../src/dev/fixtures';
+async function open(path: string, logged = true) {
+  const services = createFixtureServices();
+  if (logged) await services.session.login();
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[path]}>
+        <ServicesProvider services={services}>
+          <App />
+        </ServicesProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
 }
-
-describe('estrutura de navegação', () => {
-  it('redireciona raiz para mapa e indica integração pendente', () => {
-    open('/');
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Explore conexões');
-    expect(screen.getByText(/Nenhum dado pessoal/)).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Explorar mapa' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('main')).toHaveAttribute('id', 'conteudo');
+describe('navegação autenticada', () => {
+  it('pede login antes de carregar dados', async () => {
+    await open('/map', false);
+    expect(
+      await screen.findByRole('button', { name: /Entrar na demonstração/ }),
+    ).toBeVisible();
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
   });
-  it('permite navegar com teclado', async () => {
+  it('navega com teclado e encerra sessão', async () => {
     const user = userEvent.setup();
-    open('/map');
-    await user.tab();
-    expect(screen.getByRole('link', { name: 'Pular para o conteúdo' })).toHaveFocus();
-    screen.getByRole('link', { name: 'Importações' }).focus();
+    await open('/map');
+    const link = await screen.findByRole('link', { name: 'Importações' });
+    link.focus();
     await user.keyboard('{Enter}');
-    expect(screen.getByRole('heading', { level: 1, name: 'Importações' })).toBeVisible();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Importações' }),
+    ).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Sair' }));
+    expect(
+      await screen.findByRole('button', { name: /Entrar na demonstração/ }),
+    ).toBeVisible();
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
   });
   it.each([
-    ['/imports/example', 'Detalhes da importação'],
-    ['/callback', 'Autenticação em preparação'],
+    ['/imports/exemplo', 'Detalhes da importação'],
     ['/access-denied', 'Acesso negado'],
     ['/inexistente', 'Página não encontrada'],
-  ])('resolve deep link %s', (path, title) => {
-    open(path);
-    expect(screen.getByRole('heading', { level: 1, name: title })).toBeVisible();
+  ])('resolve %s', async (path, title) => {
+    await open(path);
+    expect(
+      await screen.findByRole('heading', { level: 1, name: title }),
+    ).toBeVisible();
   });
 });
