@@ -65,9 +65,20 @@ npm run contracts:check
 
 O comando importa um snapshot local revisado, registra origem/commit/`info.version`/SHA-256 e gera tipos/cliente com openapi-typescript/openapi-fetch. O build verifica checksum e regeneração; não baixam `latest`. Enquanto pendente, o comando informa a dependência e não inventa arquivos. `REQUIRE_API_CONTRACT=true npm run build` bloqueia uma release que exija contrato integrado. Depois da publicação ainda será necessário reconciliar o adapter e executar smoke real. Veja [api-contract.md](docs/api-contract.md).
 
-## Workflows desativados
+## Workflows
 
-Por solicitação do usuário em 25/10/2026, todos os workflows do frontend foram movidos de `.github/workflows/` para `.github/workflows-disabled/`. O GitHub Actions não executa esses arquivos, nem por push/PR nem manualmente. Os comandos locais de teste, Stryker, build e Docker continuam disponíveis. Para reativar, mover os arquivos de volta em uma alteração explícita.
+O CI automático do frontend permanece desativado, com definição em `.github/workflows-disabled/ci.yml`. **Mutation tests** está disponível somente por `workflow_dispatch` em `.github/workflows/mutation.yml`, para execução manual pelo usuário após a definição estar na branch padrão. Não roda em push/PR e não foi disparado nesta alteração. Stryker também continua disponível por `npm run test:mutation`.
+
+## ESLint e complexidade
+
+```sh
+npm run lint
+npm run lint:fix
+```
+
+ESLint 10 com configuração flat em `eslint.config.mjs` e suporte TypeScript. A regra `complexity: ['error', { max: 10, variant: 'classic' }]` permite 10 e falha em 11 ou mais por função. Aplica-se a JavaScript/TypeScript/TSX próprios, incluindo componentes, fixtures, scripts e testes; só artefatos/gerados são ignorados. Sem exceções de complexidade. `--max-warnings 0` também reprova warnings.
+
+O build executa lint antes de TypeScript/Vite. As funções que ultrapassavam o limite foram separadas por responsabilidade. Há teste de integração que usa o ESLint real para verificar o limite 10/11. O workflow automático continua desligado.
 
 ## Verificar
 
@@ -93,7 +104,7 @@ npm run test:mutation           # mutação real com Vitest + checker TypeScript
 
 Configuração em `stryker.config.mjs`, com versões exatas e dois processos concorrentes. Escopo: parser de ambiente, transporte HTTP, adapter Auth0, ledger de visibilidade, adaptação de elementos do grafo e conversão/exibição de períodos históricos. Não inclui telas React, estilos, gerados, fixtures, testes de navegador ou scripts de build; a nota não representa todo o frontend.
 
-Relatórios gerados em `reports/mutation/index.html` e `reports/mutation/mutation.json` (ignorados no Git/Docker). Resultados e análise ficam em [docs/mutation-testing.md](docs/mutation-testing.md). A definição **Mutation tests** está arquivada em `.github/workflows-disabled/`; enquanto desativada, os relatórios são gerados localmente. Mutantes estáticos e operadores padrão permanecem habilitados; não são suprimidos para elevar a nota.
+Relatórios gerados em `reports/mutation/index.html` e `reports/mutation/mutation.json` (ignorados no Git/Docker). Resultados e análise ficam em [docs/mutation-testing.md](docs/mutation-testing.md). **Mutation tests** é exclusivamente manual (`workflow_dispatch`); o comando local também gera os relatórios. Mutantes estáticos e operadores padrão permanecem habilitados; não são suprimidos para elevar a nota.
 
 ## Docker
 

@@ -15,17 +15,7 @@ export function Failure({
           ? error.message
           : 'Não foi possível carregar os dados.'}
       </p>
-      {error instanceof ApiError &&
-        error.details !== null &&
-        typeof error.details === 'object' &&
-        Object.keys(error.details).length > 0 && (
-          <details>
-            <summary>Detalhes retornados pela API</summary>
-            <pre className="error-details">
-              {JSON.stringify(error.details, null, 2)}
-            </pre>
-          </details>
-        )}
+      {error instanceof ApiError && <ErrorDetails details={error.details} />}
       {error instanceof ApiError && error.requestId && (
         <p>Identificador: {error.requestId}</p>
       )}
@@ -69,3 +59,18 @@ export const editorialLabels = {
   pending: 'Pendente',
   archived: 'Arquivado',
 };
+
+function ErrorDetails({ details }: { details: unknown }) {
+  if (
+    details === null ||
+    typeof details !== 'object' ||
+    Object.keys(details).length === 0
+  )
+    return null;
+  return (
+    <details>
+      <summary>Detalhes retornados pela API</summary>
+      <pre className="error-details">{JSON.stringify(details, null, 2)}</pre>
+    </details>
+  );
+}

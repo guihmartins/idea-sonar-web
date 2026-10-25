@@ -29,6 +29,8 @@ Configuração: `stryker.config.mjs` e `vitest.mutation.config.ts`. Cobertura po
 
 ## Resultado
 
+Histórico: os números abaixo são da execução anterior à refatoração para ESLint/complexidade 10. Os arquivos foram reorganizados depois; a nota não foi recalculada. Por solicitação do usuário, nenhuma nova execução do Stryker foi feita na alteração de lint; a próxima rodada fica para execução manual.
+
 Rodada inicial em 25/10/2026, usando os testes originais do commit `5eb1c98` com a nova configuração Stryker (gate desativado apenas na primeira medição): **61,45%**, com 50 testes unitários. Foram gerados 521 mutantes: 206 mortos, 14 detectados por timeout, 96 sobreviventes, 42 sem cobertura e 163 erros de compilação. Os timeouts iniciais correspondem a loops/esperas sem resolução introduzidos pelas mutações no ledger e no transporte.
 
 A suíte foi reforçada sem mudar os seis arquivos de produção: limites exatos de 500 pontos, ciclos órfãos, dados/cursor entre páginas, formas/direção/representação, intervalos históricos, delegação ao SDK, URL/query, cancelamento, timeout, Retry-After e erros estruturados.
@@ -73,7 +75,7 @@ O JSON preserva IDs, localizações, substituições e testes associados para re
 - HTML navegável: `reports/mutation/index.html`.
 - Dados por mutante/teste: `reports/mutation/mutation.json`.
 - HTML/JSON e `.stryker-tmp` são ignorados no Git, no contexto Docker e no formatter.
-- Workflow **Mutation tests** desativado por solicitação de 25/10/2026; definição preservada em `.github/workflows-disabled/mutation.yml`. Não há execução manual/automática ou publicação de artifacts enquanto desativado. Os relatórios continuam disponíveis pelo comando local.
+- Conforme correção do usuário, **Mutation tests** fica disponível apenas manualmente por `workflow_dispatch` em `.github/workflows/mutation.yml`, com relatórios como artifact. Não roda em push/PR. O CI automático permanece arquivado/desativado. O comando local também permanece disponível.
 - Gate configurado em 80% no escopo acima; nota inferior faz `npm run test:mutation` falhar. O workflow de verificação também está desativado; testes de integração, build, E2E e container continuam disponíveis por comandos locais.
 
 Sobrevivência não prova que o código tem um bug: pode indicar falta de teste ou uma alteração equivalente sob os dados/contrato válidos. A análise deve olhar o efeito de cada mutante. Uma nota alta tampouco substitui revisão ou testes com API real.

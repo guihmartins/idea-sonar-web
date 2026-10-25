@@ -1,3 +1,4 @@
+/* exported handler */
 // CloudFront Function (viewer-request). Associar ao comportamento padrão, não à API externa.
 function handler(event) {
   var request = event.request;

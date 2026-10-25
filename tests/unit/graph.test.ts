@@ -304,16 +304,16 @@ it('mapeia todos os tipos, preserva identidade/direção e usa catálogo por ID'
     'diamond',
     'rectangle',
   ]);
-  expect(result[0]?.data).toMatchObject({
+  expect(dataAt(result, 0)).toMatchObject({
     id: '0',
     label: 'Ponto 0',
     size: 30,
     color: '#697c81',
   });
-  expect(result[3]?.data.size).toBe(68);
-  expect(result[1]?.data.size).toBeGreaterThan(30);
-  expect(result[2]?.data.size).toBeGreaterThan(result[1]?.data.size);
-  expect(result[4]?.data).toMatchObject({
+  expect(dataAt(result, 3).size).toBe(68);
+  expect(dataAt(result, 1).size).toBeGreaterThan(30);
+  expect(dataAt(result, 2).size).toBeGreaterThan(dataAt(result, 1).size);
+  expect(dataAt(result, 4)).toMatchObject({
     id: 'e1',
     source: '0',
     target: '1',
@@ -322,15 +322,15 @@ it('mapeia todos os tipos, preserva identidade/direção e usa catálogo por ID'
     line: 'solid',
     contested: false,
   });
-  expect(result[5]?.data).toMatchObject({
+  expect(dataAt(result, 5)).toMatchObject({
     id: 'e2',
     label: 'paralelo a',
     arrow: 'none',
     line: 'dashed',
     contested: true,
   });
-  expect(result[5]?.data.width).toBeGreaterThan(result[4]?.data.width);
-  expect(result[6]?.data).toMatchObject({
+  expect(dataAt(result, 5).width).toBeGreaterThan(dataAt(result, 4).width);
+  expect(dataAt(result, 6)).toMatchObject({
     source: '1',
     target: '0',
     label: 'not-in-catalog',
@@ -350,3 +350,9 @@ it('cores de contexto são estáveis com ordem diferente dos pontos', () => {
   expect(first[0]?.data.color).not.toBe(first[1]?.data.color);
   expect(first[0]?.data.color).not.toBe('#697c81');
 });
+
+function dataAt(result: ReturnType<typeof elements>, index: number) {
+  const item = result[index];
+  if (!item) throw new Error('Elemento esperado ausente.');
+  return item.data;
+}

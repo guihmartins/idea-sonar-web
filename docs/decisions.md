@@ -76,3 +76,14 @@
 - Definições preservadas para possível reativação explícita; comandos npm de testes, Stryker, build e Docker mantidos. Nenhuma nova execução de workflow foi solicitada nesta alteração.
 - A imagem enviada pelo usuário mostra uma falha de idea-sonar-api; o escopo solicitado foi idea-sonar-web. Nenhuma configuração/arquivo do backend foi alterado.
 - Validação limitada à ausência de YAMLs no diretório ativo, formatação e diff, pois o código do produto não mudou.
+
+## 2026-10-25 — ESLint com complexidade 10 e mutação somente manual
+
+- Correção do usuário: manter desativado o CI automático, mas deixar Mutation tests para execução manual. Restaurada somente a definição mutation.yml em .github/workflows, com workflow_dispatch, sem push/pull_request. ci.yml permanece arquivado. Não executamos/disparamos Stryker nesta alteração.
+- ESLint 10.13.0, @eslint/js 10.0.1, typescript-eslint 8.72.0 e globals 17.13.0 fixados após validar engines/peers com Node 24.19.0 e TypeScript 5.9.3. Configuração flat, recomendações JS/TS e complexity como error, max 10, variante classic; sem relaxamentos por arquivo/componente/teste. Apenas artefatos e gerados ignorados.
+- npm run lint e lint:fix falham com warnings; npm run build inclui lint. Teste com ESLint real comprova que 10 passa e 11 falha com severity 2.
+- Refatoradas 17 funções acima do limite, extraindo transporte/políticas HTTP, validação OIDC, colapso/mesclagem do ledger, restauração de views, payloads do editor, controller/componentes de tela, fixtures e feedback de erros. Entrada global de CloudFront declarada como script/exported, sem desabilitar complexidade.
+- Regressões adicionais preservam páginas já restauradas quando a próxima falha, impedem loop por cursor repetido e rejeitam respostas após cancelamento. Os testes existentes continuam verificando corpo/headers, idempotência, timeouts, conflitos e visibilidade compartilhada.
+- O relatório de mutação de 91,34% permanece histórico, anterior a esta refatoração, e não representa uma nova execução. O usuário fará a próxima rodada manualmente. Modo sem token e escopo exclusivo do frontend preservados.
+
+- Validação final: lint sem erros/warnings, TypeScript estrito, 141 testes unitários/de integração, 16 E2E desktop/celular (incluindo acessibilidade e fluxos completos) e build aprovados. Auditoria via ESLint encontrou 432 funções em src, máximo 10 e zero acima do limite. Nenhuma execução do Stryker nesta alteração.

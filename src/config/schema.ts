@@ -42,6 +42,10 @@ function publicUrl(
       `${key}: HTTPS obrigatório; HTTP somente em localhost/127.0.0.1 no desenvolvimento.`,
     );
   }
+  validateUrlSyntax(url, value, key);
+  return url;
+}
+function validateUrlSyntax(url: URL, value: string, key: string) {
   // Verifica também delimitadores vazios e sintaxe antes da normalização de URL.
   if (
     url.username ||
@@ -53,7 +57,6 @@ function publicUrl(
       `${key}: não use credenciais, query, fragmento ou espaços.`,
     );
   }
-  return url;
 }
 
 export function parseEnvironment(
@@ -82,6 +85,9 @@ export function parseEnvironment(
     authMode,
   } as const;
   if (authMode === 'none') return base;
+  return { ...base, oidc: parseOidc(input, development) };
+}
+function parseOidc(input: EnvironmentInput, development: boolean) {
   const issuer = publicUrl(input, 'VITE_OIDC_ISSUER', development);
   const clientId = required(input, 'VITE_OIDC_CLIENT_ID');
   const audience = required(input, 'VITE_OIDC_AUDIENCE');
@@ -90,8 +96,5 @@ export function parseEnvironment(
       'VITE_OIDC_CLIENT_ID e VITE_OIDC_AUDIENCE: não use espaços.',
     );
   }
-  return {
-    ...base,
-    oidc: { issuer: issuer.href, clientId, audience },
-  };
+  return { issuer: issuer.href, clientId, audience };
 }

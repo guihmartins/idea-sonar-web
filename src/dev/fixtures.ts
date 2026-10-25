@@ -244,6 +244,9 @@ export function createFixtureServices(): Services & {
       !node.contexts.includes(params.get('context') ?? '')
     )
       return false;
+    return matchesPeriod(node, params);
+  }
+  function matchesPeriod(node: Node, params: URLSearchParams): boolean {
     const periods = (db.contexts as Context[])
       .filter((context) => node.contexts.includes(context.id))
       .map((context) => context.period);
@@ -260,6 +263,125 @@ export function createFixtureServices(): Services & {
         (to === null || period.start === null || period.start <= Number(to)),
     );
   }
+
+  function pendingResult(id: string, url: URL, method: string) {
+    if (method !== 'POST') return page(pending, url.searchParams.get('cursor'));
+    const index = pending.findIndex((p) => p.id === id);
+    if (index < 0) throw new ApiError(404, 'Pendência indisponível.');
+    pending.splice(index, 1);
+    return {};
+  }
+  function importResult(id: string, url: URL, operation: string) {
+    const item = imports.find((i) => i.id === id);
+    if (operation === 'undo' && item) {
+      item.undone = true;
+      return {
+        message: 'Simulação fictícia de desfazer; conflitos preservados.',
+        conflicts: item.conflicts,
+      };
+    }
+    return id ? item : page(imports, url.searchParams.get('cursor'));
+  }
+  function historyResult() {
+    return page(
+      [
+        {
+          id: 'synthetic-history',
+          at: '2026-10-24T12:00:00Z',
+          action: 'created',
+          description: 'Histórico inteiramente fictício.',
+        },
+      ],
+      null,
+    );
+  }
+  function neighborResult(id: string, url: URL) {
+    const all = (db.relations as Relation[]).filter((r) => {
+      if (r.sourceId !== id && r.targetId !== id) return false;
+      const neighbor = (db.nodes as Node[]).find(
+        (node) => node.id === (r.sourceId === id ? r.targetId : r.sourceId),
+      );
+      return !!neighbor && matches(neighbor, url.searchParams);
+    });
+    const cursor = Number(url.searchParams.get('cursor') ?? 0);
+    const selected = all.slice(cursor, cursor + 2);
+    const endpoints = new Set(
+      selected.flatMap((r) => [r.sourceId, r.targetId]),
+    );
+    return {
+      nodes: (db.nodes as Node[]).filter((n) => endpoints.has(n.id)),
+      relations: selected,
+      nextCursor: cursor + 2 < all.length ? String(cursor + 2) : null,
+      truncated: false,
+    };
+  }
+  function readCollection(
+    type: string,
+    id: string,
+    url: URL,
+    collection: Entity[],
+  ) {
+    if (id) return collection.find((e) => e.id === id);
+    let items = collection;
+    if (type === 'nodes') {
+      const q = (url.searchParams.get('q') ?? '').toLocaleLowerCase('pt-BR');
+      items = (items as Node[]).filter(
+        (node) =>
+          node.label.toLocaleLowerCase('pt-BR').includes(q) &&
+          matches(node, url.searchParams),
+      );
+    }
+    return page(items, url.searchParams.get('cursor'));
+  }
+  function writeCollection(
+    id: string,
+    options: RequestOptions,
+    collection: Entity[],
+  ) {
+    const body = options.body as Record<string, unknown>;
+    if (options.method === 'PATCH') {
+      const index = collection.findIndex((e) => e.id === id);
+      const current = collection[index];
+      if (!current) throw new ApiError(404, 'Registro não encontrado.');
+      if (current.version !== options.version)
+        throw new ApiError(409, 'Versão mudou; recarregue.');
+      const updated = {
+        ...current,
+        ...body,
+        id,
+        version: `"${Number(current.version.replaceAll('"', '')) + 1}"`,
+      } as Entity;
+      collection[index] = updated;
+      return updated;
+    }
+    const created = { ...base, ...body, id: crypto.randomUUID() } as Entity;
+    collection.push(created);
+    return created;
+  }
+  function routeResult(
+    type: string,
+    id: string,
+    operation: string,
+    url: URL,
+    options: RequestOptions,
+  ) {
+    const method = options.method ?? 'GET';
+    const routes: Record<string, () => unknown> = {
+      me: () => ({ id: 'fixture-user', name: 'Pessoa fictícia' }),
+      catalog: () => catalog,
+      export: () => ({ fictitious: true, ...db }),
+      pending: () => pendingResult(id, url, method),
+      imports: () => importResult(id, url, operation),
+    };
+    if (routes[type]) return routes[type]();
+    if (operation === 'history') return historyResult();
+    if (operation === 'neighbors') return neighborResult(id, url);
+    const collection = db[type];
+    if (!collection) return undefined;
+    return method === 'GET'
+      ? readCollection(type, id, url, collection)
+      : writeCollection(id, options, collection);
+  }
   async function send(
     path: string,
     options: RequestOptions = {},
@@ -267,117 +389,13 @@ export function createFixtureServices(): Services & {
     await new Promise((resolve) => setTimeout(resolve, 40));
     options.signal?.throwIfAborted();
     if (!logged) throw new ApiError(401, 'Entre na demonstração.');
-    const url = new URL(path, 'https://fixture.invalid');
-    const parts = url.pathname.split('/').filter(Boolean);
-    const [type = '', id = '', operation = ''] = parts;
-    const method = options.method ?? 'GET';
-    const actionKey = `${path}:${options.idempotencyKey ?? ''}`;
+    const { url, type, id, operation, method, actionKey } = fixtureRequest(
+      path,
+      options,
+    );
     if (method === 'POST' && actions.has(actionKey))
       return structuredClone(actions.get(actionKey));
-    let result: unknown;
-    if (type === 'me') result = { id: 'fixture-user', name: 'Pessoa fictícia' };
-    else if (type === 'catalog') result = catalog;
-    else if (type === 'export') result = { fictitious: true, ...db };
-    else if (type === 'pending') {
-      if (method === 'POST') {
-        const index = pending.findIndex((p) => p.id === id);
-        if (index < 0) throw new ApiError(404, 'Pendência indisponível.');
-        pending.splice(index, 1);
-        result = {};
-      } else result = page(pending, url.searchParams.get('cursor'));
-    } else if (type === 'imports') {
-      const item = imports.find((i) => i.id === id);
-      if (operation === 'undo' && item) {
-        item.undone = true;
-        result = {
-          message: 'Simulação fictícia de desfazer; conflitos preservados.',
-          conflicts: item.conflicts,
-        };
-      } else result = id ? item : page(imports, url.searchParams.get('cursor'));
-    } else if (operation === 'history')
-      result = page(
-        [
-          {
-            id: 'synthetic-history',
-            at: '2026-10-24T12:00:00Z',
-            action: 'created',
-            description: 'Histórico inteiramente fictício.',
-          },
-        ],
-        null,
-      );
-    else if (operation === 'neighbors') {
-      const all = (db.relations as Relation[]).filter((r) => {
-        if (r.sourceId !== id && r.targetId !== id) return false;
-        const neighbor = (db.nodes as Node[]).find(
-          (node) => node.id === (r.sourceId === id ? r.targetId : r.sourceId),
-        );
-        return !!neighbor && matches(neighbor, url.searchParams);
-      });
-      const cursor = Number(url.searchParams.get('cursor') ?? 0);
-      const selected = all.slice(cursor, cursor + 2);
-      const endpoints = new Set(
-        selected.flatMap((r) => [r.sourceId, r.targetId]),
-      );
-      result = {
-        nodes: (db.nodes as Node[]).filter((n) => endpoints.has(n.id)),
-        relations: selected,
-        nextCursor: cursor + 2 < all.length ? String(cursor + 2) : null,
-        truncated: false,
-      };
-    } else if (db[type]) {
-      const collection = db[type];
-      if (method === 'GET') {
-        let items = collection;
-        if (type === 'nodes') {
-          const q = (url.searchParams.get('q') ?? '').toLocaleLowerCase(
-            'pt-BR',
-          );
-          items = items.filter((n) =>
-            n.label.toLocaleLowerCase('pt-BR').includes(q),
-          );
-          items = (items as Node[]).filter((node) =>
-            matches(node, url.searchParams),
-          );
-          const kind = url.searchParams.get('kind');
-          if (kind) items = items.filter((n) => 'kind' in n && n.kind === kind);
-          items = items.filter(
-            (n) =>
-              n.status !== 'archived' &&
-              (url.searchParams.get('pending') === 'true' ||
-                n.status !== 'pending'),
-          );
-        }
-        result = id
-          ? collection.find((e) => e.id === id)
-          : page(items, url.searchParams.get('cursor'));
-      } else {
-        const body = options.body as Record<string, unknown>;
-        if (method === 'PATCH') {
-          const index = collection.findIndex((e) => e.id === id);
-          const current = collection[index];
-          if (!current) throw new ApiError(404, 'Registro não encontrado.');
-          if (current.version !== options.version)
-            throw new ApiError(409, 'Versão mudou; recarregue.');
-          const updated = {
-            ...current,
-            ...body,
-            id,
-            version: `"${Number(current.version.replaceAll('"', '')) + 1}"`,
-          } as Entity;
-          collection[index] = updated;
-          result = updated;
-        } else {
-          const created = {
-            ...base,
-            ...body,
-            id: crypto.randomUUID(),
-          } as Entity;
-          collection.push(created);
-          result = created;
-        }
-      }
-    }
+    const result = routeResult(type, id, operation, url, options);
     if (result === undefined)
       throw new ApiError(404, 'Registro fictício não encontrado.');
     if (method === 'POST') actions.set(actionKey, structuredClone(result));
@@ -398,4 +416,15 @@ export function createFixtureServices(): Services & {
       },
     },
   };
+}
+
+function fixtureRequest(path: string, options: RequestOptions) {
+  const url = new URL(path, 'https://fixture.invalid');
+  const [type = '', id = '', operation = ''] = url.pathname
+    .split('/')
+    .filter(Boolean);
+  const method = options.method ?? 'GET';
+  const actionKey = `${path}:${options.idempotencyKey ?? ''}`;
+
+  return { url, type, id, operation, method, actionKey };
 }

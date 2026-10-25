@@ -45,27 +45,20 @@ export function reduceLedger(state: Ledger, action: Action): Ledger {
       expansions: {},
       generation: state.generation + 1,
     };
-  if (action.type === 'collapse') {
-    const expansions = { ...state.expansions };
-    delete expansions[action.id];
-    const provisional = {
-      ...state,
-      expansions,
-      generation: state.generation + 1,
-    };
-    const retained = new Set(visible(provisional).nodes.map((n) => n.id));
-    return {
-      ...provisional,
-      expansions: Object.fromEntries(
-        Object.entries(expansions).filter(([id]) => retained.has(id)),
-      ),
-    };
-  }
+  if (action.type === 'collapse') return collapse(state, action.id);
+
   if (
     action.generation !== state.generation ||
     !visible(state).nodes.some((n) => n.id === action.id)
   )
     return state;
+  return mergePage(state, action);
+}
+
+function mergePage(
+  state: Ledger,
+  action: Extract<Action, { type: 'page' }>,
+): Ledger {
   const previous = state.expansions[action.id];
   const merge = <T extends { id: string }>(a: T[], b: T[]) => [
     ...new Map([...a, ...b].map((x) => [x.id, x])).values(),
@@ -81,4 +74,20 @@ export function reduceLedger(state: Ledger, action: Action): Ledger {
   };
   // A UI verifica o limite antes do dispatch; a lógica também impede ultrapassagem.
   return visible(next).nodes.length > 500 ? state : next;
+}
+function collapse(state: Ledger, id: string): Ledger {
+  const expansions = { ...state.expansions };
+  delete expansions[id];
+  const provisional = {
+    ...state,
+    expansions,
+    generation: state.generation + 1,
+  };
+  const retained = new Set(visible(provisional).nodes.map((n) => n.id));
+  return {
+    ...provisional,
+    expansions: Object.fromEntries(
+      Object.entries(expansions).filter(([id]) => retained.has(id)),
+    ),
+  };
 }

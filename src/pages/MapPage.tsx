@@ -19,7 +19,7 @@ const GraphCanvas = lazy(() =>
 );
 import { emptyLedger, reduceLedger, visible } from '../graph/visibility/ledger';
 import type { Ledger } from '../graph/visibility/ledger';
-import { defaultFilters, viewSchema } from '../api/domain';
+import { defaultFilters } from '../api/domain';
 import type {
   Filters,
   Node,
@@ -29,9 +29,10 @@ import type {
   Context,
 } from '../api/domain';
 import type { Positions, Viewport } from '../graph/layout/positions';
+import { restoreView } from '../graph/restore';
 import { formatPeriod } from '../components/period';
 const initialViewport: Viewport = { zoom: 1, pan: { x: 0, y: 0 } };
-export function MapPage() {
+function useMapController() {
   const { api } = useServices();
   const [params] = useSearchParams();
   const viewId = params.get('view');
@@ -117,62 +118,18 @@ export function MapPage() {
     setSelection({ id: '', edge: false });
     setMessage('Restaurando view com dados atuais…');
     void (async () => {
-      const view = viewSchema.parse(
-        await api.detail('views', viewId, controller.signal),
+      const {
+        view,
+        root,
+        ledger: restored,
+        partial,
+      } = await restoreView(
+        api,
+        viewId,
+        controller.signal,
+        () => latest.current.generation,
       );
       setFilters(view.filters);
-      const root = await api.node(view.root, controller.signal);
-      if (root.status === 'archived')
-        throw new Error(
-          'A raiz desta view foi arquivada. Escolha outro ponto para iniciar um recorte.',
-        );
-      let restored: Ledger = {
-        roots: [root],
-        expansions: {},
-        generation: latest.current.generation + 1,
-      };
-      const remaining = new Set(view.expandedNodes);
-      const missing: string[] = [];
-      let changed = true;
-      while (changed && remaining.size) {
-        changed = false;
-        for (const id of [...remaining]) {
-          if (!visible(restored).nodes.some((n) => n.id === id)) continue;
-          remaining.delete(id);
-          changed = true;
-          try {
-            let cursor: string | null = null;
-            const seen = new Set<string>();
-            do {
-              const page = await api.neighbors(
-                id,
-                view.filters,
-                cursor,
-                controller.signal,
-              );
-              const candidate = reduceLedger(restored, {
-                type: 'page',
-                id,
-                page,
-                generation: restored.generation,
-              });
-              if (candidate === restored) {
-                missing.push('limite de 500 pontos');
-                break;
-              }
-              restored = candidate;
-              cursor = page.nextCursor;
-              if (cursor && seen.has(cursor))
-                throw new Error('Cursor repetido.');
-              if (cursor) seen.add(cursor);
-            } while (cursor);
-          } catch (e) {
-            if (controller.signal.aborted) throw e;
-            missing.push(id);
-          }
-        }
-      }
-      controller.signal.throwIfAborted();
       dispatch({ type: 'root', node: root });
       // Geração do reducer após root corresponde à geração capturada acima.
       for (const [id, page] of Object.entries(restored.expansions))
@@ -183,7 +140,7 @@ export function MapPage() {
       setFocusHistory([root.id]);
       setFocusIndex(0);
       setMessage(
-        missing.length || remaining.size
+        partial
           ? 'View restaurada parcialmente: há registros ausentes, arquivados ou acima do limite.'
           : 'View restaurada com dados atuais.',
       );
@@ -235,7 +192,7 @@ export function MapPage() {
       const page = await api.neighbors(
         id,
         filters,
-        ledger.expansions[id]?.nextCursor ?? null,
+        expansionCursor(ledger, id),
         controller.signal,
       );
       if (generation !== latest.current.generation || controller.signal.aborted)
@@ -314,6 +271,59 @@ export function MapPage() {
       setSaving(false);
     }
   }
+
+  return {
+    catalog,
+    contexts,
+    results,
+    term,
+    setTerm,
+    search,
+    setSearch,
+    filters,
+    changeFilters,
+    chooseRoot,
+    error,
+    message,
+    list,
+    setList,
+    applyPositions,
+    positionsRef,
+    applyViewport,
+    viewportRef,
+    focusIndex,
+    focusHistory,
+    jumpFocus,
+    data,
+    fitRevision,
+    setFitRevision,
+    selection,
+    setSelection,
+    setPanelOpen,
+    positions,
+    viewport,
+    snapshot,
+    focusRevision,
+    panelOpen,
+    ledger,
+    busy,
+    expand,
+    cancel,
+    dispatch,
+    setMessage,
+    setFocusHistory,
+    setFocusIndex,
+    setSaveKey,
+    center,
+    viewName,
+    setViewName,
+    saveView,
+    saving,
+  };
+}
+type MapModel = ReturnType<typeof useMapController>;
+export function MapPage() {
+  const model = useMapController();
   return (
     <section className="map-page">
       <div className="page-heading">
@@ -329,388 +339,45 @@ export function MapPage() {
         className="search-bar"
         onSubmit={(e) => {
           e.preventDefault();
-          setTerm(search.trim());
+          model.setTerm(model.search.trim());
         }}
       >
         <label>
           Buscar ponto
           <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={model.search}
+            onChange={(e) => model.setSearch(e.target.value)}
             placeholder="Autor, tradição, conceito ou obra"
           />
         </label>
         <button>Buscar</button>
       </form>
-      <details className="filters">
-        <summary>Filtros do mapa</summary>
-        <div className="form-grid">
-          <label>
-            Tipo
-            <select
-              value={filters.kind}
-              onChange={(e) =>
-                changeFilters({ ...filters, kind: e.target.value })
-              }
-            >
-              <option value="">Todos</option>
-              {catalog.data?.kinds.map((k) => (
-                <option key={k.id} value={k.id}>
-                  {k.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Contexto
-            <select
-              value={filters.context}
-              onChange={(e) =>
-                changeFilters({ ...filters, context: e.target.value })
-              }
-            >
-              <option value="">Todos</option>
-              {contexts.data?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Ano inicial (astronômico)
-            <input
-              type="number"
-              value={filters.from ?? ''}
-              onChange={(e) =>
-                changeFilters({
-                  ...filters,
-                  from: e.target.value === '' ? null : Number(e.target.value),
-                })
-              }
-            />
-          </label>
-          <label>
-            Ano final (astronômico)
-            <input
-              type="number"
-              value={filters.to ?? ''}
-              onChange={(e) =>
-                changeFilters({
-                  ...filters,
-                  to: e.target.value === '' ? null : Number(e.target.value),
-                })
-              }
-            />
-          </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={filters.unknown}
-              onChange={(e) =>
-                changeFilters({ ...filters, unknown: e.target.checked })
-              }
-            />
-            Incluir período desconhecido
-          </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={filters.pending}
-              onChange={(e) =>
-                changeFilters({ ...filters, pending: e.target.checked })
-              }
-            />
-            Mostrar pendentes
-          </label>
-        </div>
-        <p>Ano 0 = 1 a.C.; −1 = 2 a.C. Contexto não prova influência.</p>
-      </details>
-      {contexts.error && (
-        <Failure error={contexts.error} retry={() => void contexts.refetch()} />
+      <FilterControls model={model} />
+      {model.contexts.error && (
+        <Failure
+          error={model.contexts.error}
+          retry={() => void model.contexts.refetch()}
+        />
       )}
-      {term && (
-        <div className="search-results" aria-label="Resultados da busca">
-          {results.isPending && <p role="status">Buscando…</p>}
-          {results.error && (
-            <Failure
-              error={results.error}
-              retry={() => void results.refetch()}
-            />
-          )}
-          {results.data?.pages
-            .flatMap((p) => p.items)
-            .map((n) => (
-              <button
-                className="result"
-                key={n.id}
-                onClick={() => chooseRoot(n)}
-              >
-                <strong>{n.label}</strong>
-                <small>
-                  {catalog.data?.kinds.find((k) => k.id === n.kind)?.label ??
-                    n.kind}{' '}
-                  · {n.description}
-                </small>
-                <small>ID: {n.id}</small>
-              </button>
-            ))}
-          {results.data?.pages[0]?.items.length === 0 && (
-            <p>Nenhum ponto encontrado.</p>
-          )}
-          {results.hasNextPage && (
-            <button
-              disabled={results.isFetchingNextPage}
-              onClick={() => void results.fetchNextPage()}
-            >
-              Mais resultados
-            </button>
-          )}
-        </div>
-      )}
-      {error !== null && <Failure error={error} />}
-      {message && (
+      <SearchResults model={model} />
+      {model.error !== null && <Failure error={model.error} />}
+      {model.message && (
         <p role="status" className="status">
-          {message}
+          {model.message}
         </p>
       )}
-      {catalog.isPending && <p role="status">Carregando catálogo…</p>}
-      {catalog.error && (
-        <Failure error={catalog.error} retry={() => void catalog.refetch()} />
+      {model.catalog.isPending && <p role="status">Carregando catálogo…</p>}
+      {model.catalog.error && (
+        <Failure
+          error={model.catalog.error}
+          retry={() => void model.catalog.refetch()}
+        />
       )}
-      {catalog.data && (
-        <>
-          <div className="toolbar">
-            <button
-              onClick={() => {
-                applyPositions(positionsRef.current);
-                applyViewport(viewportRef.current);
-                setList((v) => !v);
-              }}
-              aria-pressed={list}
-            >
-              {list ? 'Mostrar grafo' : 'Modo lista'}
-            </button>
-            <button
-              disabled={focusIndex <= 0}
-              onClick={() => jumpFocus(focusIndex - 1)}
-            >
-              Voltar foco
-            </button>
-            <button
-              disabled={focusIndex >= focusHistory.length - 1}
-              onClick={() => jumpFocus(focusIndex + 1)}
-            >
-              Avançar foco
-            </button>
-            <button
-              disabled={list || !data.nodes.length}
-              onClick={() => setFitRevision((value) => value + 1)}
-            >
-              Ajustar mapa à tela
-            </button>
-            <span>
-              {data.nodes.length}/500 pontos · {data.relations.length} relações
-            </span>
-          </div>
-          <div className="map-workspace">
-            <div className="map-surface">
-              {data.nodes.length === 0 ? (
-                <div className="empty">
-                  <h2>Uma ideia é o começo</h2>
-                  <p>
-                    Busque e selecione um ponto para explorar suas conexões.
-                  </p>
-                </div>
-              ) : list ? (
-                <div className="graph-list">
-                  <h2>Pontos</h2>
-                  {data.nodes.map((n) => (
-                    <button
-                      key={n.id}
-                      onClick={() => {
-                        setSelection({ id: n.id, edge: false });
-                        setPanelOpen(true);
-                      }}
-                    >
-                      {n.label}
-                    </button>
-                  ))}
-                  <h2>Relações</h2>
-                  {data.relations.length === 0 && (
-                    <p>Expanda um ponto para encontrar relações.</p>
-                  )}
-                  {data.relations.map((r) => (
-                    <button
-                      key={r.id}
-                      onClick={() => {
-                        setSelection({ id: r.id, edge: true });
-                        setPanelOpen(true);
-                      }}
-                    >
-                      {data.nodes.find((n) => n.id === r.sourceId)?.label} —{' '}
-                      {catalog.data.predicates.find((p) => p.id === r.type)
-                        ?.label ?? r.type}{' '}
-                      — {data.nodes.find((n) => n.id === r.targetId)?.label} (
-                      {evidenceLabels[r.evidenceStatus]})
-                      {r.contested ? ' · Contestada' : ''}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <Suspense fallback={<p role="status">Preparando mapa…</p>}>
-                  <GraphCanvas
-                    nodes={data.nodes}
-                    relations={data.relations}
-                    catalog={catalog.data}
-                    selected={selection.id}
-                    onSelect={(id, edge) => {
-                      setSelection({ id, edge });
-                      setPanelOpen(true);
-                    }}
-                    positions={positions}
-                    viewport={viewport}
-                    onSnapshot={snapshot}
-                    focus={focusHistory[focusIndex] ?? ''}
-                    focusRevision={focusRevision}
-                    fitRevision={fitRevision}
-                  />
-                </Suspense>
-              )}
-            </div>
-            <aside className="details-panel" aria-label="Detalhes e evidências">
-              <button
-                className="subtle"
-                aria-expanded={panelOpen}
-                aria-controls="panel-content"
-                onClick={() => setPanelOpen((value) => !value)}
-              >
-                {panelOpen ? 'Recolher painel' : 'Abrir painel'}
-              </button>
-              <div id="panel-content" hidden={!panelOpen}>
-                {!selection.id ? (
-                  <p>Selecione um ponto ou fio para ler os detalhes.</p>
-                ) : selection.edge ? (
-                  <RelationPanel id={selection.id} catalog={catalog.data} />
-                ) : (
-                  <NodePanel
-                    id={selection.id}
-                    catalog={catalog.data}
-                    contexts={contexts.data ?? []}
-                  />
-                )}
-                {selection.id && !selection.edge && (
-                  <div className="actions">
-                    <button
-                      disabled={
-                        busy.includes(selection.id) ||
-                        (!!ledger.expansions[selection.id] &&
-                          ledger.expansions[selection.id]?.nextCursor === null)
-                      }
-                      onClick={() => void expand(selection.id)}
-                    >
-                      {busy.includes(selection.id)
-                        ? 'Carregando…'
-                        : ledger.expansions[selection.id]
-                          ? 'Mais conexões'
-                          : 'Expandir conexões'}
-                    </button>
-                    <button
-                      disabled={!ledger.expansions[selection.id]}
-                      onClick={() => {
-                        cancel();
-                        const next = reduceLedger(ledger, {
-                          type: 'collapse',
-                          id: selection.id,
-                        });
-                        dispatch({ type: 'collapse', id: selection.id });
-                        const retained = new Set(
-                          visible(next).nodes.map((node) => node.id),
-                        );
-                        const history = focusHistory.filter((id) =>
-                          retained.has(id),
-                        );
-                        setFocusHistory(history);
-                        setFocusIndex(history.length - 1);
-                        setSaveKey(crypto.randomUUID());
-                        setMessage(
-                          'Expansão recolhida. Pontos compartilhados preservados.',
-                        );
-                      }}
-                    >
-                      Recolher expansão
-                    </button>
-                    <button onClick={() => center(selection.id)}>
-                      Centralizar
-                    </button>
-                  </div>
-                )}
-              </div>
-            </aside>
-          </div>
-          <details className="legend">
-            <summary>Como ler o mapa</summary>
-            <p>
-              ○ Pessoa · ⬡ Tradição · ◇ Conceito · ▭ Obra. Tamanho limitado pelo
-              total de conexões informado pela API.
-            </p>
-            <p>
-              Linha contínua: documentada. Tracejada: interpretação atribuída.
-              Pontilhada: inferência. Espessura: intensidade (1 pontual, 2
-              relevante, 3 central; sem avaliação = neutra).
-            </p>
-            <p>
-              Setas indicam direção; relações simétricas não têm seta. A
-              disposição é visual, sem escala de distância histórica. Arraste
-              para fixar posições. Rosa indica contestação, também identificada
-              no painel.
-            </p>
-            <ul>
-              {[...new Set(data.nodes.flatMap((n) => n.contexts))]
-                .sort()
-                .map((id, i) => (
-                  <li key={id}>
-                    <span
-                      className={`context-dot context-${i % 4}`}
-                      aria-hidden="true"
-                    />
-                    {contexts.data?.find((c) => c.id === id)?.label ?? id}
-                  </li>
-                ))}
-              <li>
-                Sem contexto: neutro. Vários contextos aparecem no painel; a cor
-                usa o primeiro contexto.
-              </li>
-            </ul>
-          </details>
-          <form
-            className="save-view"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void saveView();
-            }}
-          >
-            <label>
-              Nome da view
-              <input
-                value={viewName}
-                onChange={(e) => {
-                  setViewName(e.target.value);
-                  setSaveKey(crypto.randomUUID());
-                }}
-                required
-                maxLength={120}
-              />
-            </label>
-            <button disabled={!ledger.roots.length || saving}>
-              Salvar view
-            </button>
-          </form>
-        </>
-      )}
+      <ReadyMap model={model} />
     </section>
   );
 }
+
 export const evidenceLabels = {
   documented: 'Documentada',
   attributed_interpretation: 'Interpretação atribuída',
@@ -780,17 +447,7 @@ function RelationPanel({ id, catalog }: { id: string; catalog: Catalog }) {
       <p>{r.justification}</p>
       <p>{evidenceLabels[r.evidenceStatus]}</p>
       {r.contested && <strong className="contested">Contestada</strong>}
-      <p>Estado editorial: {editorialLabels[r.status]}</p>
-      <p>
-        Intensidade: {r.intensity ?? 'Não avaliada'} · {r.intensityReason}
-      </p>
-      <p>Atribuição: {r.attribution || 'Não informada'}</p>
-      <p>
-        {predicate?.symmetric
-          ? 'Relação simétrica'
-          : `Direção: ${r.sourceId} → ${r.targetId}. ${predicate?.inverse ?? ''}`}
-      </p>
-      {r.context && <ContextEvidence id={r.context} />}
+      <RelationMetadata r={r} predicate={predicate} />
       <h3>Evidências</h3>
       {r.evidence.length === 0 && (
         <p>
@@ -853,5 +510,435 @@ function ContextEvidence({ id }: { id: string }) {
       Contexto: {context.label} · {context.region} ·{' '}
       {formatPeriod(context.period)}
     </p>
+  );
+}
+
+function FilterControls({ model }: { model: MapModel }) {
+  return (
+    <details className="filters">
+      <summary>Filtros do mapa</summary>
+      <div className="form-grid">
+        <label>
+          Tipo
+          <select
+            value={model.filters.kind}
+            onChange={(e) =>
+              model.changeFilters({ ...model.filters, kind: e.target.value })
+            }
+          >
+            <option value="">Todos</option>
+            {model.catalog.data?.kinds.map((k) => (
+              <option key={k.id} value={k.id}>
+                {k.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Contexto
+          <select
+            value={model.filters.context}
+            onChange={(e) =>
+              model.changeFilters({ ...model.filters, context: e.target.value })
+            }
+          >
+            <option value="">Todos</option>
+            {model.contexts.data?.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Ano inicial (astronômico)
+          <input
+            type="number"
+            value={model.filters.from ?? ''}
+            onChange={(e) =>
+              model.changeFilters({
+                ...model.filters,
+                from: e.target.value === '' ? null : Number(e.target.value),
+              })
+            }
+          />
+        </label>
+        <label>
+          Ano final (astronômico)
+          <input
+            type="number"
+            value={model.filters.to ?? ''}
+            onChange={(e) =>
+              model.changeFilters({
+                ...model.filters,
+                to: e.target.value === '' ? null : Number(e.target.value),
+              })
+            }
+          />
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={model.filters.unknown}
+            onChange={(e) =>
+              model.changeFilters({
+                ...model.filters,
+                unknown: e.target.checked,
+              })
+            }
+          />
+          Incluir período desconhecido
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={model.filters.pending}
+            onChange={(e) =>
+              model.changeFilters({
+                ...model.filters,
+                pending: e.target.checked,
+              })
+            }
+          />
+          Mostrar pendentes
+        </label>
+      </div>
+      <p>Ano 0 = 1 a.C.; −1 = 2 a.C. Contexto não prova influência.</p>
+    </details>
+  );
+}
+
+function SearchResults({ model }: { model: MapModel }) {
+  if (!model.term) return null;
+  return (
+    <div className="search-results" aria-label="Resultados da busca">
+      {model.results.isPending && <p role="status">Buscando…</p>}
+      {model.results.error && (
+        <Failure
+          error={model.results.error}
+          retry={() => void model.results.refetch()}
+        />
+      )}
+      {model.results.data?.pages
+        .flatMap((p) => p.items)
+        .map((n) => (
+          <button
+            className="result"
+            key={n.id}
+            onClick={() => model.chooseRoot(n)}
+          >
+            <strong>{n.label}</strong>
+            <small>
+              {model.catalog.data?.kinds.find((k) => k.id === n.kind)?.label ??
+                n.kind}{' '}
+              · {n.description}
+            </small>
+            <small>ID: {n.id}</small>
+          </button>
+        ))}
+      {model.results.data?.pages[0]?.items.length === 0 && (
+        <p>Nenhum ponto encontrado.</p>
+      )}
+      {model.results.hasNextPage && (
+        <button
+          disabled={model.results.isFetchingNextPage}
+          onClick={() => void model.results.fetchNextPage()}
+        >
+          Mais resultados
+        </button>
+      )}
+    </div>
+  );
+}
+
+function MapToolbar({ model }: { model: MapModel }) {
+  return (
+    <div className="toolbar">
+      <button
+        onClick={() => {
+          model.applyPositions(model.positionsRef.current);
+          model.applyViewport(model.viewportRef.current);
+          model.setList((v) => !v);
+        }}
+        aria-pressed={model.list}
+      >
+        {model.list ? 'Mostrar grafo' : 'Modo lista'}
+      </button>
+      <button
+        disabled={model.focusIndex <= 0}
+        onClick={() => model.jumpFocus(model.focusIndex - 1)}
+      >
+        Voltar foco
+      </button>
+      <button
+        disabled={model.focusIndex >= model.focusHistory.length - 1}
+        onClick={() => model.jumpFocus(model.focusIndex + 1)}
+      >
+        Avançar foco
+      </button>
+      <button
+        disabled={model.list || !model.data.nodes.length}
+        onClick={() => model.setFitRevision((value) => value + 1)}
+      >
+        Ajustar mapa à tela
+      </button>
+      <span>
+        {model.data.nodes.length}/500 pontos · {model.data.relations.length}{' '}
+        relações
+      </span>
+    </div>
+  );
+}
+
+function MapDisplay({ model, catalog }: { model: MapModel; catalog: Catalog }) {
+  return (
+    <div className="map-surface">
+      {model.data.nodes.length === 0 ? (
+        <div className="empty">
+          <h2>Uma ideia é o começo</h2>
+          <p>Busque e selecione um ponto para explorar suas conexões.</p>
+        </div>
+      ) : model.list ? (
+        <div className="graph-list">
+          <h2>Pontos</h2>
+          {model.data.nodes.map((n) => (
+            <button
+              key={n.id}
+              onClick={() => {
+                model.setSelection({ id: n.id, edge: false });
+                model.setPanelOpen(true);
+              }}
+            >
+              {n.label}
+            </button>
+          ))}
+          <h2>Relações</h2>
+          {model.data.relations.length === 0 && (
+            <p>Expanda um ponto para encontrar relações.</p>
+          )}
+          {model.data.relations.map((r) => (
+            <button
+              key={r.id}
+              onClick={() => {
+                model.setSelection({ id: r.id, edge: true });
+                model.setPanelOpen(true);
+              }}
+            >
+              {model.data.nodes.find((n) => n.id === r.sourceId)?.label} —{' '}
+              {catalog.predicates.find((p) => p.id === r.type)?.label ?? r.type}{' '}
+              — {model.data.nodes.find((n) => n.id === r.targetId)?.label} (
+              {evidenceLabels[r.evidenceStatus]})
+              {r.contested ? ' · Contestada' : ''}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <Suspense fallback={<p role="status">Preparando mapa…</p>}>
+          <GraphCanvas
+            nodes={model.data.nodes}
+            relations={model.data.relations}
+            catalog={catalog}
+            selected={model.selection.id}
+            onSelect={(id, edge) => {
+              model.setSelection({ id, edge });
+              model.setPanelOpen(true);
+            }}
+            positions={model.positions}
+            viewport={model.viewport}
+            onSnapshot={model.snapshot}
+            focus={model.focusHistory[model.focusIndex] ?? ''}
+            focusRevision={model.focusRevision}
+            fitRevision={model.fitRevision}
+          />
+        </Suspense>
+      )}
+    </div>
+  );
+}
+
+function MapDetails({ model, catalog }: { model: MapModel; catalog: Catalog }) {
+  return (
+    <aside className="details-panel" aria-label="Detalhes e evidências">
+      <button
+        className="subtle"
+        aria-expanded={model.panelOpen}
+        aria-controls="panel-content"
+        onClick={() => model.setPanelOpen((value) => !value)}
+      >
+        {model.panelOpen ? 'Recolher painel' : 'Abrir painel'}
+      </button>
+      <div id="panel-content" hidden={!model.panelOpen}>
+        {!model.selection.id ? (
+          <p>Selecione um ponto ou fio para ler os detalhes.</p>
+        ) : model.selection.edge ? (
+          <RelationPanel id={model.selection.id} catalog={catalog} />
+        ) : (
+          <NodePanel
+            id={model.selection.id}
+            catalog={catalog}
+            contexts={model.contexts.data ?? []}
+          />
+        )}
+        {model.selection.id && !model.selection.edge && (
+          <NodeActions model={model} />
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function MapLegend({ model }: { model: MapModel }) {
+  return (
+    <details className="legend">
+      <summary>Como ler o mapa</summary>
+      <p>
+        ○ Pessoa · ⬡ Tradição · ◇ Conceito · ▭ Obra. Tamanho limitado pelo total
+        de conexões informado pela API.
+      </p>
+      <p>
+        Linha contínua: documentada. Tracejada: interpretação atribuída.
+        Pontilhada: inferência. Espessura: intensidade (1 pontual, 2 relevante,
+        3 central; sem avaliação = neutra).
+      </p>
+      <p>
+        Setas indicam direção; relações simétricas não têm seta. A disposição é
+        visual, sem escala de distância histórica. Arraste para fixar posições.
+        Rosa indica contestação, também identificada no painel.
+      </p>
+      <ul>
+        {[...new Set(model.data.nodes.flatMap((n) => n.contexts))]
+          .sort()
+          .map((id, i) => (
+            <li key={id}>
+              <span
+                className={`context-dot context-${i % 4}`}
+                aria-hidden="true"
+              />
+              {model.contexts.data?.find((c) => c.id === id)?.label ?? id}
+            </li>
+          ))}
+        <li>
+          Sem contexto: neutro. Vários contextos aparecem no painel; a cor usa o
+          primeiro contexto.
+        </li>
+      </ul>
+    </details>
+  );
+}
+
+function SaveView({ model }: { model: MapModel }) {
+  return (
+    <form
+      className="save-view"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void model.saveView();
+      }}
+    >
+      <label>
+        Nome da view
+        <input
+          value={model.viewName}
+          onChange={(e) => {
+            model.setViewName(e.target.value);
+            model.setSaveKey(crypto.randomUUID());
+          }}
+          required
+          maxLength={120}
+        />
+      </label>
+      <button disabled={!model.ledger.roots.length || model.saving}>
+        Salvar view
+      </button>
+    </form>
+  );
+}
+
+function ReadyMap({ model }: { model: MapModel }) {
+  const catalog = model.catalog.data;
+  if (!catalog) return null;
+  return (
+    <>
+      <MapToolbar model={model} />
+      <div className="map-workspace">
+        <MapDisplay model={model} catalog={catalog} />
+        <MapDetails model={model} catalog={catalog} />
+      </div>
+      <MapLegend model={model} />
+      <SaveView model={model} />
+    </>
+  );
+}
+
+function NodeActions({ model }: { model: MapModel }) {
+  return (
+    <div className="actions">
+      <button
+        disabled={
+          model.busy.includes(model.selection.id) ||
+          (!!model.ledger.expansions[model.selection.id] &&
+            model.ledger.expansions[model.selection.id]?.nextCursor === null)
+        }
+        onClick={() => void model.expand(model.selection.id)}
+      >
+        {model.busy.includes(model.selection.id)
+          ? 'Carregando…'
+          : model.ledger.expansions[model.selection.id]
+            ? 'Mais conexões'
+            : 'Expandir conexões'}
+      </button>
+      <button
+        disabled={!model.ledger.expansions[model.selection.id]}
+        onClick={() => {
+          model.cancel();
+          const next = reduceLedger(model.ledger, {
+            type: 'collapse',
+            id: model.selection.id,
+          });
+          model.dispatch({ type: 'collapse', id: model.selection.id });
+          const retained = new Set(visible(next).nodes.map((node) => node.id));
+          const history = model.focusHistory.filter((id) => retained.has(id));
+          model.setFocusHistory(history);
+          model.setFocusIndex(history.length - 1);
+          model.setSaveKey(crypto.randomUUID());
+          model.setMessage(
+            'Expansão recolhida. Pontos compartilhados preservados.',
+          );
+        }}
+      >
+        Recolher expansão
+      </button>
+      <button onClick={() => model.center(model.selection.id)}>
+        Centralizar
+      </button>
+    </div>
+  );
+}
+function expansionCursor(ledger: Ledger, id: string) {
+  return ledger.expansions[id]?.nextCursor ?? null;
+}
+
+function RelationMetadata({
+  r,
+  predicate,
+}: {
+  r: Relation;
+  predicate: Catalog['predicates'][number] | undefined;
+}) {
+  return (
+    <>
+      {' '}
+      <p>Estado editorial: {editorialLabels[r.status]}</p>
+      <p>
+        Intensidade: {r.intensity ?? 'Não avaliada'} · {r.intensityReason}
+      </p>
+      <p>Atribuição: {r.attribution || 'Não informada'}</p>
+      <p>
+        {predicate?.symmetric
+          ? 'Relação simétrica'
+          : `Direção: ${r.sourceId} → ${r.targetId}. ${predicate?.inverse ?? ''}`}
+      </p>
+      {r.context && <ContextEvidence id={r.context} />}
+    </>
   );
 }

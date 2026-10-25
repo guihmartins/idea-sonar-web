@@ -321,7 +321,7 @@ export function PendingPage() {
 export function HistoryPage() {
   const { type, id = '' } = useParams();
   const { api } = useServices();
-  const valid = type === 'nodes' || type === 'relations';
+  const valid = isHistoryType(type);
   const query = useInfiniteQuery({
     queryKey: ['history', type, id],
     initialPageParam: null as string | null,
@@ -436,4 +436,8 @@ function CandidateOption({ id }: { id: string }) {
         : `${id}${query.error ? ' (detalhes indisponíveis)' : ' (carregando)'}`}
     </option>
   );
+}
+
+function isHistoryType(type: string | undefined) {
+  return type === 'nodes' || type === 'relations';
 }
