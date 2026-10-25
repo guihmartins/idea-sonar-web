@@ -73,7 +73,7 @@ O JSON preserva IDs, localizações, substituições e testes associados para re
 - HTML navegável: `reports/mutation/index.html`.
 - Dados por mutante/teste: `reports/mutation/mutation.json`.
 - HTML/JSON e `.stryker-tmp` são ignorados no Git, no contexto Docker e no formatter.
-- Após merge do workflow na branch padrão, o workflow manual **Mutation tests** (`.github/workflows/mutation.yml`) executa Stryker e publica os relatórios como artifact por 14 dias, inclusive se o gate falhar.
-- Gate configurado em 80% no escopo acima; nota inferior faz `npm run test:mutation` falhar. O workflow normal continua verificando testes de integração, build, E2E e container separadamente.
+- Workflow **Mutation tests** desativado por solicitação de 25/10/2026; definição preservada em `.github/workflows-disabled/mutation.yml`. Não há execução manual/automática ou publicação de artifacts enquanto desativado. Os relatórios continuam disponíveis pelo comando local.
+- Gate configurado em 80% no escopo acima; nota inferior faz `npm run test:mutation` falhar. O workflow de verificação também está desativado; testes de integração, build, E2E e container continuam disponíveis por comandos locais.
 
 Sobrevivência não prova que o código tem um bug: pode indicar falta de teste ou uma alteração equivalente sob os dados/contrato válidos. A análise deve olhar o efeito de cada mutante. Uma nota alta tampouco substitui revisão ou testes com API real.

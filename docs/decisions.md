@@ -69,3 +69,10 @@
 - Gate de 80% e workflow manual dedicado com artifact HTML/JSON; não adicionamos vários minutos a cada push do pipeline principal. Relatórios/sandboxes não entram no Git nem na imagem Docker. A escolha atual de acesso sem token não foi alterada.
 
 - Rodada final: 91,34% (327/358 válidos), 521 gerados: 320 mortos, 7 timeouts, 30 sobreviventes, 1 sem cobertura e 163 erros de compilação. 125 testes unitários usados pelo runner. Ledger e períodos chegaram a 100%; elementos ficaram em 75,86%, com lacunas visuais documentadas. Sem exclusão de operadores ou mutantes. Os módulos de produção permaneceram intactos.
+
+## 2026-10-25 — Workflows do frontend desativados
+
+- Pedido explícito do usuário: desativar os workflows no frontend. Arquivados ci.yml e mutation.yml em `.github/workflows-disabled/`, fora do diretório reconhecido pelo GitHub Actions. Nenhuma definição executável permanece em `.github/workflows/`.
+- Definições preservadas para possível reativação explícita; comandos npm de testes, Stryker, build e Docker mantidos. Nenhuma nova execução de workflow foi solicitada nesta alteração.
+- A imagem enviada pelo usuário mostra uma falha de idea-sonar-api; o escopo solicitado foi idea-sonar-web. Nenhuma configuração/arquivo do backend foi alterado.
+- Validação limitada à ausência de YAMLs no diretório ativo, formatação e diff, pois o código do produto não mudou.

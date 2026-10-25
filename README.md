@@ -63,7 +63,11 @@ npm run contracts:generate
 npm run contracts:check
 ```
 
-O comando importa um snapshot local revisado, registra origem/commit/`info.version`/SHA-256 e gera tipos/cliente com openapi-typescript/openapi-fetch. Build/CI checam checksum e regeneração; não baixam `latest`. Enquanto pendente, o comando informa a dependência e não inventa arquivos. `REQUIRE_API_CONTRACT=true npm run build` bloqueia uma release que exija contrato integrado. Depois da publicação ainda será necessário reconciliar o adapter e executar smoke real. Veja [api-contract.md](docs/api-contract.md).
+O comando importa um snapshot local revisado, registra origem/commit/`info.version`/SHA-256 e gera tipos/cliente com openapi-typescript/openapi-fetch. O build verifica checksum e regeneração; não baixam `latest`. Enquanto pendente, o comando informa a dependência e não inventa arquivos. `REQUIRE_API_CONTRACT=true npm run build` bloqueia uma release que exija contrato integrado. Depois da publicação ainda será necessário reconciliar o adapter e executar smoke real. Veja [api-contract.md](docs/api-contract.md).
+
+## Workflows desativados
+
+Por solicitação do usuário em 25/10/2026, todos os workflows do frontend foram movidos de `.github/workflows/` para `.github/workflows-disabled/`. O GitHub Actions não executa esses arquivos, nem por push/PR nem manualmente. Os comandos locais de teste, Stryker, build e Docker continuam disponíveis. Para reativar, mover os arquivos de volta em uma alteração explícita.
 
 ## Verificar
 
@@ -78,7 +82,7 @@ npm run preview           # inspeção local do dist; não usar em produção
 npm run format:check
 ```
 
-Testes cobrem transporte, sessão SDK, ledger, semântica visual, anos astronômicos, configuração, geração/checksum, navegação e fluxos. Axe verifica WCAG A/AA nas telas principais; validação manual continua necessária para leitores de tela e cenários de dados reais. CI também constrói e faz smoke da imagem estática.
+Testes cobrem transporte, sessão SDK, ledger, semântica visual, anos astronômicos, configuração, geração/checksum, navegação e fluxos. Axe verifica WCAG A/AA nas telas principais; validação manual continua necessária para leitores de tela e cenários de dados reais. O build e o smoke da imagem estática podem ser executados localmente.
 
 ## Testes de mutação (Stryker)
 
@@ -89,7 +93,7 @@ npm run test:mutation           # mutação real com Vitest + checker TypeScript
 
 Configuração em `stryker.config.mjs`, com versões exatas e dois processos concorrentes. Escopo: parser de ambiente, transporte HTTP, adapter Auth0, ledger de visibilidade, adaptação de elementos do grafo e conversão/exibição de períodos históricos. Não inclui telas React, estilos, gerados, fixtures, testes de navegador ou scripts de build; a nota não representa todo o frontend.
 
-Relatórios gerados em `reports/mutation/index.html` e `reports/mutation/mutation.json` (ignorados no Git/Docker). Resultados e análise ficam em [docs/mutation-testing.md](docs/mutation-testing.md). Workflow manual **Mutation tests** publica HTML/JSON como artifact sem onerar cada push. Mutantes estáticos e operadores padrão permanecem habilitados; não são suprimidos para elevar a nota.
+Relatórios gerados em `reports/mutation/index.html` e `reports/mutation/mutation.json` (ignorados no Git/Docker). Resultados e análise ficam em [docs/mutation-testing.md](docs/mutation-testing.md). A definição **Mutation tests** está arquivada em `.github/workflows-disabled/`; enquanto desativada, os relatórios são gerados localmente. Mutantes estáticos e operadores padrão permanecem habilitados; não são suprimidos para elevar a nota.
 
 ## Docker
 
