@@ -173,7 +173,9 @@ const catalog: Catalog = {
     targetKinds: kinds.map((k) => k.id),
   })),
 };
-export function createFixtureServices(): Services {
+export function createFixtureServices(): Services & {
+  session: NonNullable<Services['session']>;
+} {
   if (import.meta.env.PROD) throw new Error('Fixtures proibidas em produção.');
   let logged = false;
   const db: Record<string, Entity[]> = structuredClone({

@@ -3,7 +3,8 @@ export type EnvironmentInput = Readonly<Record<string, unknown>>;
 export interface AppConfig {
   readonly apiBaseUrl: string;
   readonly apiV1Url: string;
-  readonly oidc: {
+  readonly authMode: 'none' | 'oidc';
+  readonly oidc?: {
     readonly issuer: string;
     readonly clientId: string;
     readonly audience: string;
@@ -72,6 +73,15 @@ export function parseEnvironment(
       'VITE_API_BASE_URL: use somente a origem, sem caminho ou /api/v1.',
     );
   }
+  const authMode = input['VITE_AUTH_MODE'] ?? 'none';
+  if (authMode !== 'none' && authMode !== 'oidc')
+    throw new Error('VITE_AUTH_MODE: use none ou oidc.');
+  const base = {
+    apiBaseUrl: api.origin,
+    apiV1Url: `${api.origin}/api/v1`,
+    authMode,
+  } as const;
+  if (authMode === 'none') return base;
   const issuer = publicUrl(input, 'VITE_OIDC_ISSUER', development);
   const clientId = required(input, 'VITE_OIDC_CLIENT_ID');
   const audience = required(input, 'VITE_OIDC_AUDIENCE');
@@ -81,8 +91,7 @@ export function parseEnvironment(
     );
   }
   return {
-    apiBaseUrl: api.origin,
-    apiV1Url: `${api.origin}/api/v1`,
+    ...base,
     oidc: { issuer: issuer.href, clientId, audience },
   };
 }

@@ -29,7 +29,7 @@ export function Failure({
       {error instanceof ApiError && error.requestId && (
         <p>Identificador: {error.requestId}</p>
       )}
-      {error instanceof ApiError && error.status === 401 ? (
+      {error instanceof ApiError && error.status === 401 && session ? (
         <button onClick={() => void session.login()}>Entrar novamente</button>
       ) : (
         retry && <button onClick={retry}>Tentar novamente</button>

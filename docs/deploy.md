@@ -1,8 +1,10 @@
 # Deploy estático independente
 
+Modo temporário sem token: `VITE_AUTH_MODE=none` (default), somente VITE_API_BASE_URL obrigatória. Docker/Compose repassam o modo no build; OIDC fica opcional. Para ativar login, usar mode oidc, preencher as variáveis OIDC e reconstruir a imagem. A API deve estar configurada externamente para aceitar o acesso desejado; o frontend não altera essa autorização.
+
 ## Docker
 
-`infra/docker/Dockerfile`: Node 24.19.0 + npm 11.9.0 fixados, npm ci, verificação local de contrato e build com env pública. Runtime `nginxinc/nginx-unprivileged:1.29.1-alpine`, usuário 101:101, somente dist e configuração de servidor estático. Sem backend, banco, servidor MCP ou Vite em runtime. Compose passa os quatro valores via `build.args`, usa filesystem read-only, tmpfs /tmp e remove capabilities.
+`infra/docker/Dockerfile`: Node 24.19.0 + npm 11.9.0 fixados, npm ci, verificação local de contrato e build com env pública. Runtime `nginxinc/nginx-unprivileged:1.29.1-alpine`, usuário 101:101, somente dist e configuração de servidor estático. Sem backend, banco, servidor MCP ou Vite em runtime. Compose passa os valores públicos via `build.args`, usa filesystem read-only, tmpfs /tmp e remove capabilities.
 
 ```sh
 docker compose up --build -d

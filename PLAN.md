@@ -2,6 +2,8 @@
 
 Versão 2.0 · 24/10/2026 · Repositório: guihmartins/idea-sonar-web
 
+> Atualização do usuário em 25/10/2026: deixar sem token por enquanto. O padrão temporário é VITE_AUTH_MODE=none, sem login, /me ou Authorization. OIDC permanece opcional via mode oidc. Esta orientação posterior substitui a exigência de autenticação abaixo enquanto vigente; detalhes em docs/decisions.md.
+
 ## 1. Instruções para o Codex e escopo
 
 Implemente SOMENTE o frontend web neste repositório. Backend independente está em guihmartins/idea-sonar-api. Este plano substitui a proposta anterior de monorepo. Não criar servidor Hono, MCP, PostgreSQL, Drizzle, migrations, sistema próprio de senhas ou endpoints de negócio aqui. Não acessar banco pelo navegador.

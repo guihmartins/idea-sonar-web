@@ -2,6 +2,8 @@ import { Auth0Client } from '@auth0/auth0-spa-js';
 import type { AppConfig } from '../config/schema';
 import type { Session } from './session';
 export function createSession(config: AppConfig): Session {
+  if (config.authMode !== 'oidc' || !config.oidc)
+    throw new Error('OIDC não configurado.');
   const client = new Auth0Client({
     domain: config.oidc.issuer,
     clientId: config.oidc.clientId,

@@ -49,3 +49,13 @@
 - Build elimina fixtures e verifica isso automaticamente. Auth0 e Cytoscape são chunks carregados sob demanda; nenhum chunk acima do limite padrão de aviso do Vite. A pipeline normal não acessa o repositório backend.
 - Imagem Docker construída e smoke aprovado com filesystem read-only, tmpfs, sem capabilities, usuário não root e sem backend. Deep links conhecidos 200; assets/rotas inexistentes 404. Rewrite CloudFront verificado localmente para preservar assets e caminhos desconhecidos.
 - Nova consulta final da API confirmou a mesma árvore de main contendo somente PLAN.md. Integração real continua pendente de snapshot oficial, alinhamento do adapter e provedor/CORS/callbacks/scopes. Não houve provisionamento AWS ou alteração na API.
+
+## 2026-10-25 — Acesso temporário sem token
+
+- Pedido do usuário: “Deixa sem token por enquanto”. Esta decisão substitui temporariamente a exigência inicial de login do PLAN, sem remover a implementação OIDC.
+- VITE_AUTH_MODE aceita none/oidc e assume none quando ausente. Só VITE_API_BASE_URL é obrigatória em none. OIDC continua validado e exigido quando explicitamente selecionado; valores de modo desconhecidos falham.
+- Sem sessão: telas abrem direto, sem /me, SDK, login/logout ou usuário fictício; transporte omite Authorization e cookies e não renova 401. Erro 401 informa a exigência da API, sem oferecer login. API externa e sua autorização não são alteradas.
+- Mutações conservam idempotência/If-Match e erros de rede/conflito. Fixtures continuam exclusivamente dev/test, sem fallback de produção. Docker/Compose passam o modo no build e não exigem configuração OIDC em none.
+- Reativação exige novo build com VITE_AUTH_MODE=oidc e configuração do provedor. Não há troca de modo em runtime.
+
+- Validação desta alteração: 62 testes unitários/de integração, 4 E2E de produção sem token e 12 E2E dev/test aprovados. Build executado somente com VITE_API_BASE_URL; imagem construída sem args OIDC e smoke estático aprovado. E2E verifica ausência de Authorization, /me, tráfego OIDC e login/renovação em 401, além de descartar callbacks antigos no modo none.

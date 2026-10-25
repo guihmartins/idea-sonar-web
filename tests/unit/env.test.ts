@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseEnvironment } from '../../src/config/schema';
 
 const valid = {
+  VITE_AUTH_MODE: 'oidc',
   VITE_API_BASE_URL: 'https://api.example.com',
   VITE_OIDC_ISSUER: 'https://identity.example.com/',
   VITE_OIDC_CLIENT_ID: 'test-public-spa',
@@ -9,6 +10,20 @@ const valid = {
 };
 
 describe('configuração pública', () => {
+  it('por padrão requer só API e desativa OIDC', () => {
+    expect(
+      parseEnvironment({ VITE_API_BASE_URL: 'https://api.example.com' }, false),
+    ).toEqual({
+      apiBaseUrl: 'https://api.example.com',
+      apiV1Url: 'https://api.example.com/api/v1',
+      authMode: 'none',
+    });
+  });
+  it('rejeita modo de autenticação desconhecido', () => {
+    expect(() =>
+      parseEnvironment({ ...valid, VITE_AUTH_MODE: 'disabled-typo' }, false),
+    ).toThrow('VITE_AUTH_MODE');
+  });
   it('proíbe ativar fixtures em build', () => {
     expect(() =>
       parseEnvironment({ ...valid, VITE_ENABLE_FIXTURES: 'true' }, false),

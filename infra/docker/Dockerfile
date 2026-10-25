@@ -8,11 +8,13 @@ COPY package.json package-lock.json .npmrc ./
 RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca npm ci; else npm ci; fi
 COPY . .
+ARG VITE_AUTH_MODE=none
 ARG VITE_API_BASE_URL
 ARG VITE_OIDC_ISSUER
 ARG VITE_OIDC_CLIENT_ID
 ARG VITE_OIDC_AUDIENCE
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL \
+ENV VITE_AUTH_MODE=$VITE_AUTH_MODE \
+    VITE_API_BASE_URL=$VITE_API_BASE_URL \
     VITE_OIDC_ISSUER=$VITE_OIDC_ISSUER \
     VITE_OIDC_CLIENT_ID=$VITE_OIDC_CLIENT_ID \
     VITE_OIDC_AUDIENCE=$VITE_OIDC_AUDIENCE

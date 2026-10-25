@@ -25,6 +25,42 @@ function setup(responses: Response[]) {
   };
 }
 describe('transporte autenticado', () => {
+  it('sem sessão não envia Authorization e não renova 401', async () => {
+    const fetcher = vi.fn<typeof fetch>(
+      async () => new Response('{}', { status: 401 }),
+    );
+    const send = createTransport(
+      'https://external.example.com/api/v1',
+      null,
+      fetcher,
+    );
+    await expect(send('/catalog')).rejects.toMatchObject({
+      status: 401,
+      message: 'A API exige autenticação. O frontend está no modo sem token.',
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(
+      new Headers(fetcher.mock.calls[0]?.[1]?.headers).has('Authorization'),
+    ).toBe(false);
+    expect(fetcher.mock.calls[0]?.[1]?.credentials).toBe('omit');
+  });
+  it('sem sessão permite mutação real com a mesma proteção de idempotência', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json({ id: 'created' }),
+    );
+    await createTransport(
+      'https://external.example.com/api/v1',
+      null,
+      fetcher,
+    )('/nodes', {
+      method: 'POST',
+      body: { label: 'Teste' },
+      idempotencyKey: 'action',
+    });
+    const headers = new Headers(fetcher.mock.calls[0]?.[1]?.headers);
+    expect(headers.has('Authorization')).toBe(false);
+    expect(headers.get('Idempotency-Key')).toBe('action');
+  });
   it('usa origem absoluta, access token, request ID e sem Content-Type no GET', async () => {
     const { send, fetcher } = setup([Response.json({ ok: true })]);
     await send('/me');

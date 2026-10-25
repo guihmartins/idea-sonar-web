@@ -32,6 +32,7 @@ import { createSession } from '../../src/auth/auth0';
 import { parseEnvironment } from '../../src/config/schema';
 const config = parseEnvironment(
   {
+    VITE_AUTH_MODE: 'oidc',
     VITE_API_BASE_URL: 'https://api.example.com',
     VITE_OIDC_ISSUER: 'https://identity.example.com/',
     VITE_OIDC_CLIENT_ID: 'public-spa',

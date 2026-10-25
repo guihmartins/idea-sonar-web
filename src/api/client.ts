@@ -23,7 +23,7 @@ export type Transport = (
 ) => Promise<unknown>;
 export function createTransport(
   base: string,
-  session: Session,
+  session: Session | null,
   fetcher: typeof fetch = fetch,
   timeout = 15000,
 ): Transport {
@@ -46,9 +46,9 @@ export function createTransport(
       : controller.signal;
     const timer = setTimeout(() => controller.abort(), timeout);
     let refreshed = false;
-    let token: string;
+    let token: string | undefined;
     try {
-      token = await session.token(false);
+      if (session) token = await session.token(false);
     } catch {
       clearTimeout(timer);
       throw new ApiError(401, 'Sua sessão expirou. Entre novamente.');
@@ -59,10 +59,10 @@ export function createTransport(
       while (true) {
         if (signal.aborted) throw signal.reason;
         const headers = new Headers({
-          Authorization: `Bearer ${token}`,
           'X-Request-Id': requestId,
           Accept: 'application/json',
         });
+        if (token) headers.set('Authorization', `Bearer ${token}`);
         if (options.body !== undefined)
           headers.set('Content-Type', 'application/json');
         if (options.idempotencyKey)
@@ -91,7 +91,7 @@ export function createTransport(
               : 'Falha de rede. Verifique a conexão e a configuração CORS da API.',
           );
         }
-        if (response.status === 401 && !refreshed) {
+        if (response.status === 401 && !refreshed && session) {
           refreshed = true;
           try {
             token = await session.token(true);
@@ -142,7 +142,9 @@ export function createTransport(
             response.status === 403
               ? 'Acesso negado para esta conta ou operação.'
               : response.status === 401
-                ? 'Sua sessão expirou. Entre novamente.'
+                ? session
+                  ? 'Sua sessão expirou. Entre novamente.'
+                  : 'A API exige autenticação. O frontend está no modo sem token.'
                 : response.status === 409 || response.status === 412
                   ? 'O registro mudou. Compare a versão atual antes de editar novamente.'
                   : response.status === 429

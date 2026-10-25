@@ -1,5 +1,13 @@
 # Autenticação
 
+## Modo atual (25/10/2026)
+
+Por pedido explícito do usuário: autenticação temporariamente desativada, `VITE_AUTH_MODE=none` por padrão (incluindo ausência da variável). Nenhuma sessão fictícia é criada. As telas abrem sem `/me`, SDK ou redirecionamento; requests reais omitem Authorization e cookies. 401 não renova nem oferece login neste modo: informa que a API exige autenticação. Nenhum fallback para fixtures; autorização no backend não foi alterada.
+
+Para reativar o fluxo abaixo, fazer novo build com `VITE_AUTH_MODE=oidc` e VITE_OIDC_ISSUER/CLIENT_ID/AUDIENCE válidos. Modo desconhecido falha no build; no modo oidc a validação e o guard continuam obrigatórios. Somente a URL da API é obrigatória em none.
+
+## Fluxo OIDC preservado (opcional)
+
 Adapter implementado com SDK oficial `@auth0/auth0-spa-js` 2.29.0. Auth0 é a escolha inicial do frontend; nenhuma conta/provedor foi criado ou configurado nesta sessão. Se a API escolher outro provedor, substituir `Session` por seu SDK oficial, mantendo o transporte e o ciclo de limpeza.
 
 - Authorization Code + PKCE realizado pelo SDK; SPA pública, sem client_secret.

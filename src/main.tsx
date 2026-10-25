@@ -17,6 +17,12 @@ async function bootstrap() {
   if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_FIXTURES === 'true') {
     const { createFixtureServices } = await import('./dev/fixtures');
     services = createFixtureServices();
+  } else if (env.authMode === 'none') {
+    services = {
+      session: null,
+      api: createApi(createTransport(env.apiV1Url, null)),
+      fictitious: false,
+    };
   } else {
     const { createSession } = await import('./auth/auth0');
     const session = createSession(env);

@@ -2,16 +2,22 @@
 
 Frontend independente React + TypeScript estrito + Vite + Cytoscape.js, interface PT-BR. Plano original: [PLAN.md](PLAN.md). Decisões e aceite: [docs/decisions.md](docs/decisions.md).
 
+## Modo atual: sem token
+
+Por solicitação de 25/10/2026, `VITE_AUTH_MODE=none` é o padrão temporário. O app abre direto, sem login, `/me`, SDK OIDC ou header Authorization. Somente `VITE_API_BASE_URL` é obrigatória no build. As chamadas continuam indo à API configurada, sem fallback para fixtures. Se a API exigir autenticação, o erro é exibido; este repositório não altera a autorização do backend.
+
+Para reativar: `VITE_AUTH_MODE=oidc`, configurar as três variáveis OIDC e reconstruir o bundle. O fluxo PKCE existente permanece disponível.
+
 ## Disponível
 
-- Login/callback/logout com SDK oficial Auth0 (Authorization Code + PKCE, access token em memória), autorização inicial `/me` e cache privado em memória.
+- Login/callback/logout opcionais (`VITE_AUTH_MODE=oidc`) com SDK oficial Auth0 (Authorization Code + PKCE, access token em memória), autorização inicial `/me` e cache privado em memória.
 - Cliente HTTP com renovação única no 401, 403 explícito, request ID, cancelamento/timeout, idempotência, If-Match e limites de retry.
 - Busca e grafo incremental: expansão/paginação, recolhimento seguro de nós compartilhados, filtros, histórico de foco, posições arrastadas, relações paralelas, modo lista e painel de evidências/fontes/contextos.
 - Cadastro/edição/arquivamento de pontos, relações, fontes e contextos; validação de evidência e período histórico; comparação em conflitos de edição.
 - Importações e confirmação de desfazer lote, pendências, histórico, salvar/restaurar views e exportação.
 - Docker estático não root, Compose somente web e runbook S3/CloudFront.
 
-**Integração real pendente:** a API ainda não publicou OpenAPI na `main` consultada em 24/10/2026 (contém apenas plano). O modelo de apresentação/adapter HTTP são **provisórios**, baseados no plano, e precisam ser reconciliados com o snapshot oficial. Nenhum contrato oficial foi inventado. Auth0 foi escolhido como adapter do provedor; conta, issuer, audience, scopes, callbacks e CORS precisam estar alinhados/configurados externamente. Não há smoke real de OAuth/API. Nenhuma alteração no repositório backend.
+**Integração real pendente:** a API ainda não publicou OpenAPI na `main` consultada em 24/10/2026 (contém apenas plano). O modelo de apresentação/adapter HTTP são **provisórios**, baseados no plano, e precisam ser reconciliados com o snapshot oficial. Nenhum contrato oficial foi inventado. Para uma futura reativação OIDC, Auth0 é o adapter escolhido e precisará de conta, issuer, audience, scopes e callbacks alinhados à API. No modo atual, basta a API permitir o acesso sem token e configurar CORS. Não há smoke real de OAuth/API. Nenhuma alteração no repositório backend.
 
 ## Executar
 
@@ -20,7 +26,7 @@ Node **24.19.0** (`nvm use`) e npm **11.9.0**. Se o Node instalado trouxer outro
 ```sh
 npm ci
 cp .env.example .env
-# Configure os quatro valores públicos para sua API/provedor.
+# Configure VITE_API_BASE_URL. Login está desativado por padrão.
 npm run dev
 ```
 
@@ -32,12 +38,14 @@ npm run dev:fixtures
 # Busque Jung e expanda Gnosticismo. Não são afirmações históricas.
 ```
 
-O adapter fictício só é importado por `import.meta.env.DEV` com flag explícita. Qualquer build com `VITE_ENABLE_FIXTURES=true` falha. Produção não contém fixtures nem possui fallback para elas. Não existe simulação de OAuth em produção. Os fluxos de teste da demonstração não substituem smoke OAuth/API.
+O adapter fictício só é importado por `import.meta.env.DEV` com flag explícita. Qualquer build com `VITE_ENABLE_FIXTURES=true` falha. Produção não contém fixtures nem possui fallback para elas. O modo sem token não simula usuário autenticado; ele dispensa a sessão. Não existe simulação de OAuth em produção. Os fluxos de teste da demonstração não substituem smoke OAuth/API.
 
 ## Configuração no build
 
 ```dotenv
 VITE_API_BASE_URL=https://api.example.com
+VITE_AUTH_MODE=none
+# OIDC abaixo só é obrigatório com VITE_AUTH_MODE=oidc:
 VITE_OIDC_ISSUER=https://identity.example.com/
 VITE_OIDC_CLIENT_ID=public-spa-client-id
 VITE_OIDC_AUDIENCE=https://api.example.com
@@ -64,7 +72,7 @@ npm run typecheck
 npm test
 npm run build
 npx playwright install chromium
-npm run test:e2e           # dist de produção: login obrigatório, sem fixtures
+npm run test:e2e           # dist de produção: sem token, sem fixtures
 npm run test:e2e:fixtures  # fluxos completos dev/test em desktop e celular
 npm run preview           # inspeção local do dist; não usar em produção
 npm run format:check

@@ -1,13 +1,13 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import type { Api } from '../api/adapter';
 import { ApiError } from '../api/client';
 import type { Session } from '../auth/session';
 export interface Services {
   api: Api;
-  session: Session;
+  session: Session | null;
   fictitious: boolean;
 }
 const Context = createContext<Services | null>(null);
@@ -26,7 +26,29 @@ export function ServicesProvider({
   return <Context.Provider value={services}>{children}</Context.Provider>;
 }
 export function SessionGate({ children }: { children: ReactNode }) {
-  const { session, api, fictitious } = useServices();
+  const location = useLocation();
+  const { session } = useServices();
+  if (!session)
+    return (
+      <>
+        <div className="session-bar">Acesso sem login (temporário)</div>
+        {location.pathname === '/callback' ? (
+          <Navigate to="/map" replace />
+        ) : (
+          children
+        )}
+      </>
+    );
+  return <AuthenticatedGate session={session}>{children}</AuthenticatedGate>;
+}
+function AuthenticatedGate({
+  children,
+  session,
+}: {
+  children: ReactNode;
+  session: Session;
+}) {
+  const { api, fictitious } = useServices();
   const cache = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();

@@ -18,6 +18,8 @@ Enquanto `pending`, check/build informam a pendência e permitem o desenvolvimen
 
 ## Transporte
 
+Atualização de 25/10/2026: sem sessão em VITE_AUTH_MODE=none (padrão), Authorization é omitido, /me é dispensado e 401 não tenta renovação. As demais regras de timeout, idempotência e conflito permanecem. O fluxo autenticado abaixo permanece em VITE_AUTH_MODE=oidc.
+
 URL absoluta configurada + `/api/v1`. Token só em Authorization para caminhos internos validados. GET sem Content-Type; request ID, AbortSignal e timeout. 401 renova uma vez; 403 não repete login. GET 429 permite uma repetição curta (até 2s) respeitando Retry-After; demais casos informam espera. Mutações não repetem em 429/falha de rede. POST exige chave estável por ação, conservada em retry. PATCH exige versão If-Match; 409/412 carrega dados atuais e preserva o rascunho para comparação explícita.
 
 API deve permitir origens específicas por CORS, Authorization/Content-Type/Idempotency-Key/If-Match/X-Request-Id e expor ETag/X-Request-Id/Retry-After. Falhas CORS são reportadas, sem desativar segurança do navegador. Links externos são HTTP(S), sem token, com noopener/noreferrer.
