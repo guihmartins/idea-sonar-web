@@ -59,3 +59,13 @@
 - Reativação exige novo build com VITE_AUTH_MODE=oidc e configuração do provedor. Não há troca de modo em runtime.
 
 - Validação desta alteração: 62 testes unitários/de integração, 4 E2E de produção sem token e 12 E2E dev/test aprovados. Build executado somente com VITE_API_BASE_URL; imagem construída sem args OIDC e smoke estático aprovado. E2E verifica ausência de Authorization, /me, tráfego OIDC e login/renovação em 401, além de descartar callbacks antigos no modo none.
+
+## 2026-10-25 — Testes de mutação com Stryker
+
+- Stryker core/runner Vitest/checker TypeScript 10.1.1 fixados após conferir engines e peers (Node >=22, Vitest >=2, TypeScript >=3.6). Compatíveis com Node 24.19.0, Vitest 5.0.5 e TypeScript 5.9.3 do projeto.
+- Escopo explícito em seis módulos de configuração, transporte, SDK, ledger, elementos e períodos; não é uma nota global da UI. Configuração Vitest de mutação isola testes unitários para não disparar builds/subprocessos/Playwright por mutante. Suíte normal preservada.
+- Checker TypeScript distingue mutantes que não compilam; cobertura perTest e operadores padrão, incluindo estáticos, sem supressões artificiais. Concorrência limitada a um checker e um runner para caber no executor.
+- Primeira rodada real: 521 mutantes, nota 61,45%, 50 testes; identificou falta de cobertura em períodos e representação do grafo e verificações insuficientes de HTTP. Reforçados testes de comportamento sem mudar os módulos de produção. Metodologia e resultado em docs/mutation-testing.md.
+- Gate de 80% e workflow manual dedicado com artifact HTML/JSON; não adicionamos vários minutos a cada push do pipeline principal. Relatórios/sandboxes não entram no Git nem na imagem Docker. A escolha atual de acesso sem token não foi alterada.
+
+- Rodada final: 91,34% (327/358 válidos), 521 gerados: 320 mortos, 7 timeouts, 30 sobreviventes, 1 sem cobertura e 163 erros de compilação. 125 testes unitários usados pelo runner. Ledger e períodos chegaram a 100%; elementos ficaram em 75,86%, com lacunas visuais documentadas. Sem exclusão de operadores ou mutantes. Os módulos de produção permaneceram intactos.

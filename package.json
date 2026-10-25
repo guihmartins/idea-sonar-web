@@ -22,8 +22,10 @@
     "dev:fixtures": "VITE_ENABLE_FIXTURES=true vite",
     "test:e2e:fixtures": "playwright test --config playwright.fixtures.config.ts",
     "test:container": "sh scripts/smoke-container.sh",
-    "format": "prettier --write src tests scripts *.ts *.json *.yml docs README.md .github",
-    "format:check": "prettier --check src tests scripts *.ts *.json *.yml docs README.md .github"
+    "format": "prettier --write src tests scripts *.ts *.mjs *.json *.yml docs README.md .github",
+    "format:check": "prettier --check src tests scripts *.ts *.mjs *.json *.yml docs README.md .github",
+    "test:mutation": "stryker run",
+    "test:mutation:baseline": "vitest run --config vitest.mutation.config.ts"
   },
   "dependencies": {
     "@auth0/auth0-spa-js": "2.29.0",
@@ -38,6 +40,9 @@
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
     "@playwright/test": "1.64.1",
+    "@stryker-mutator/core": "10.1.1",
+    "@stryker-mutator/typescript-checker": "10.1.1",
+    "@stryker-mutator/vitest-runner": "10.1.1",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 const sdk = vi.hoisted(() => ({
   init: vi.fn(),
+  authenticated: vi.fn(async () => true),
   token: vi.fn(async (_options: unknown) => 'access-token'),
   callback: vi.fn(async () => ({})),
   logout: vi.fn(async (_options: unknown) => {}),
@@ -12,7 +13,7 @@ vi.mock('@auth0/auth0-spa-js', () => ({
       sdk.init(options);
     }
     isAuthenticated() {
-      return Promise.resolve(true);
+      return sdk.authenticated();
     }
     getTokenSilently(options: unknown) {
       return sdk.token(options);
@@ -66,4 +67,43 @@ describe('SDK oficial de autenticação', () => {
       logoutParams: { returnTo: window.location.origin },
     });
   });
+});
+
+it('valida modo/configuração antes de inicializar SDK', () => {
+  expect(() =>
+    createSession(
+      parseEnvironment({ VITE_API_BASE_URL: 'https://api.example.com' }, false),
+    ),
+  ).toThrow('OIDC não configurado');
+  expect(() =>
+    createSession({
+      apiBaseUrl: config.apiBaseUrl,
+      apiV1Url: config.apiV1Url,
+      authMode: 'oidc',
+    }),
+  ).toThrow('OIDC não configurado');
+  expect(sdk.init).not.toHaveBeenCalled();
+});
+it('delega login e estado real da sessão, validando o access token retornado', async () => {
+  const session = createSession(config);
+  expect(sdk.init).toHaveBeenCalledWith({
+    domain: 'https://identity.example.com/',
+    clientId: 'public-spa',
+    cacheLocation: 'memory',
+    useRefreshTokens: false,
+    authorizationParams: {
+      redirect_uri: `${window.location.origin}/callback`,
+      audience: 'api-audience',
+      scope: 'openid profile idea-sonar:read idea-sonar:write idea-sonar:undo',
+    },
+  });
+  sdk.authenticated.mockResolvedValueOnce(false);
+  expect(await session.authenticated()).toBe(false);
+  expect(sdk.authenticated).toHaveBeenCalledTimes(1);
+  await session.login();
+  expect(sdk.login).toHaveBeenCalledTimes(1);
+  expect(await session.token()).toBe('access-token');
+  expect(sdk.token).toHaveBeenLastCalledWith({ cacheMode: 'on' });
+  sdk.token.mockResolvedValueOnce('');
+  await expect(session.token()).rejects.toThrow('Access token indisponível');
 });

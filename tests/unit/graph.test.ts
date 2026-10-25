@@ -140,3 +140,213 @@ it('converte explicitamente anos astronômicos', () => {
   expect(astronomicalYear('', 'ce')).toBeNull();
   expect(() => astronomicalYear('0', 'bce')).toThrow();
 });
+
+it('reset e troca de raiz descartam expansões e invalidam respostas anteriores', () => {
+  const root = reduceLedger(emptyLedger, { type: 'root', node: node('a') });
+  const expanded = reduceLedger(root, {
+    type: 'page',
+    id: 'a',
+    page: page(['a', 'b']),
+    generation: root.generation,
+  });
+  const reset = reduceLedger(expanded, { type: 'reset' });
+  expect(reset).toEqual({
+    roots: [],
+    expansions: {},
+    generation: expanded.generation + 1,
+  });
+  const changed = reduceLedger(expanded, { type: 'root', node: node('b') });
+  expect(changed).toEqual({
+    roots: [node('b')],
+    expansions: {},
+    generation: expanded.generation + 1,
+  });
+  expect(
+    reduceLedger(changed, {
+      type: 'page',
+      id: 'b',
+      page: page(['late']),
+      generation: root.generation,
+    }),
+  ).toBe(changed);
+  expect(
+    reduceLedger(changed, {
+      type: 'page',
+      id: 'missing-owner',
+      page: page(['orphan']),
+      generation: changed.generation,
+    }),
+  ).toBe(changed);
+});
+it('mantém exatamente 500 pontos e recusa a página inteira acima do limite', () => {
+  const root = reduceLedger(emptyLedger, { type: 'root', node: node('a') });
+  const full = reduceLedger(root, {
+    type: 'page',
+    id: 'a',
+    page: page(Array.from({ length: 499 }, (_, i) => String(i))),
+    generation: root.generation,
+  });
+  expect(visible(full).nodes).toHaveLength(500);
+  expect(
+    reduceLedger(full, {
+      type: 'page',
+      id: 'a',
+      page: page(['extra']),
+      generation: full.generation,
+    }),
+  ).toBe(full);
+  expect(visible(full).nodes.some((n) => n.id === 'extra')).toBe(false);
+});
+it('visibilidade independe da ordem de expansão e não mantém ciclos órfãos', () => {
+  const root = node('a');
+  const state = {
+    roots: [root],
+    generation: 7,
+    expansions: {
+      c: page(['c', 'b']),
+      b: page(['b', 'c'], [edge('bc', 'b', 'c')]),
+      a: page(['a', 'b'], [edge('ab', 'a', 'b')]),
+      unrelated: page(['unrelated', 'x']),
+    },
+  };
+  expect(new Set(visible(state).nodes.map((n) => n.id))).toEqual(
+    new Set(['a', 'b', 'c']),
+  );
+  const collapsed = reduceLedger(state, { type: 'collapse', id: 'a' });
+  expect(collapsed.generation).toBe(8);
+  expect(collapsed.expansions).toEqual({});
+  expect(visible(collapsed)).toEqual({ nodes: [root], relations: [] });
+  expect(state.expansions.a).toBeDefined();
+});
+it('atualiza dados e cursor entre páginas sem duplicar IDs nem aceitar endpoints ausentes', () => {
+  let state = reduceLedger(emptyLedger, { type: 'root', node: node('a') });
+  state = reduceLedger(state, {
+    type: 'page',
+    id: 'a',
+    page: { ...page(['b'], [edge('ab', 'a', 'b')]), nextCursor: 'page-2' },
+    generation: 1,
+  });
+  const updated = { ...node('b'), label: 'Atualizado' };
+  const updatedEdge = { ...edge('ab', 'a', 'b'), claim: 'Afirmação revisada' };
+  state = reduceLedger(state, {
+    type: 'page',
+    id: 'a',
+    page: {
+      nodes: [updated, node('c')],
+      relations: [
+        updatedEdge,
+        edge('missing-source', 'missing', 'c'),
+        edge('missing-target', 'c', 'missing'),
+      ],
+      nextCursor: null,
+      truncated: true,
+    },
+    generation: 1,
+  });
+  expect(visible(state).nodes).toEqual([node('a'), updated, node('c')]);
+  expect(visible(state).relations).toEqual([updatedEdge]);
+  expect(state.expansions.a?.nextCursor).toBeNull();
+  expect(state.expansions.a?.truncated).toBe(true);
+});
+it('mapeia todos os tipos, preserva identidade/direção e usa catálogo por ID', () => {
+  const catalog: Catalog = {
+    kinds: [],
+    predicates: [
+      {
+        id: 'studied',
+        label: 'estudou',
+        inverse: 'estudado por',
+        symmetric: false,
+        sourceKinds: [],
+        targetKinds: [],
+      },
+      {
+        id: 'parallel_to',
+        label: 'paralelo a',
+        inverse: 'paralelo a',
+        symmetric: true,
+        sourceKinds: [],
+        targetKinds: [],
+      },
+    ],
+  };
+  const input = (['person', 'tradition', 'concept', 'work'] as const).map(
+    (kind, i) => ({
+      ...node(String(i)),
+      kind,
+      label: `Ponto ${i}`,
+      degreeTotal: i === 3 ? 10000 : i,
+    }),
+  );
+  const relations = [
+    {
+      ...edge('e1', '0', '1'),
+      type: 'studied',
+      evidenceStatus: 'documented' as const,
+      intensity: 1,
+      contested: false,
+    },
+    {
+      ...edge('e2', '0', '1'),
+      evidenceStatus: 'attributed_interpretation' as const,
+      intensity: 3,
+    },
+    {
+      ...edge('e3', '1', '0'),
+      type: 'not-in-catalog',
+      evidenceStatus: 'inference' as const,
+    },
+  ];
+  const result = elements(input, relations, catalog);
+  expect(result.slice(0, 4).map((e) => e.data.shape)).toEqual([
+    'ellipse',
+    'hexagon',
+    'diamond',
+    'rectangle',
+  ]);
+  expect(result[0]?.data).toMatchObject({
+    id: '0',
+    label: 'Ponto 0',
+    size: 30,
+    color: '#697c81',
+  });
+  expect(result[3]?.data.size).toBe(68);
+  expect(result[1]?.data.size).toBeGreaterThan(30);
+  expect(result[2]?.data.size).toBeGreaterThan(result[1]?.data.size);
+  expect(result[4]?.data).toMatchObject({
+    id: 'e1',
+    source: '0',
+    target: '1',
+    label: 'estudou',
+    arrow: 'triangle',
+    line: 'solid',
+    contested: false,
+  });
+  expect(result[5]?.data).toMatchObject({
+    id: 'e2',
+    label: 'paralelo a',
+    arrow: 'none',
+    line: 'dashed',
+    contested: true,
+  });
+  expect(result[5]?.data.width).toBeGreaterThan(result[4]?.data.width);
+  expect(result[6]?.data).toMatchObject({
+    source: '1',
+    target: '0',
+    label: 'not-in-catalog',
+    arrow: 'triangle',
+    line: 'dotted',
+    width: 1,
+  });
+});
+it('cores de contexto são estáveis com ordem diferente dos pontos', () => {
+  const a = { ...node('a'), contexts: ['z'] };
+  const b = { ...node('b'), contexts: ['a'] };
+  const catalog: Catalog = { kinds: [], predicates: [] };
+  const first = elements([a, b], [], catalog);
+  const reversed = elements([b, a], [], catalog);
+  expect(first[0]?.data.color).toBe(reversed[1]?.data.color);
+  expect(first[1]?.data.color).toBe(reversed[0]?.data.color);
+  expect(first[0]?.data.color).not.toBe(first[1]?.data.color);
+  expect(first[0]?.data.color).not.toBe('#697c81');
+});

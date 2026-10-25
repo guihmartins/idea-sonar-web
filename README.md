@@ -80,6 +80,17 @@ npm run format:check
 
 Testes cobrem transporte, sessão SDK, ledger, semântica visual, anos astronômicos, configuração, geração/checksum, navegação e fluxos. Axe verifica WCAG A/AA nas telas principais; validação manual continua necessária para leitores de tela e cenários de dados reais. CI também constrói e faz smoke da imagem estática.
 
+## Testes de mutação (Stryker)
+
+```sh
+npm run test:mutation:baseline  # testes unitários usados pelo runner
+npm run test:mutation           # mutação real com Vitest + checker TypeScript
+```
+
+Configuração em `stryker.config.mjs`, com versões exatas e dois processos concorrentes. Escopo: parser de ambiente, transporte HTTP, adapter Auth0, ledger de visibilidade, adaptação de elementos do grafo e conversão/exibição de períodos históricos. Não inclui telas React, estilos, gerados, fixtures, testes de navegador ou scripts de build; a nota não representa todo o frontend.
+
+Relatórios gerados em `reports/mutation/index.html` e `reports/mutation/mutation.json` (ignorados no Git/Docker). Resultados e análise ficam em [docs/mutation-testing.md](docs/mutation-testing.md). Workflow manual **Mutation tests** publica HTML/JSON como artifact sem onerar cada push. Mutantes estáticos e operadores padrão permanecem habilitados; não são suprimidos para elevar a nota.
+
 ## Docker
 
 ```sh

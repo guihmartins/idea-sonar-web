@@ -99,3 +99,77 @@ describe('configuração pública', () => {
     ).toThrow('VITE_OIDC_ISSUER');
   });
 });
+
+describe('limites de configuração', () => {
+  it('normaliza issuer e preserva a configuração OIDC explícita', () => {
+    expect(parseEnvironment(valid, false)).toEqual({
+      apiBaseUrl: 'https://api.example.com',
+      apiV1Url: 'https://api.example.com/api/v1',
+      authMode: 'oidc',
+      oidc: {
+        issuer: 'https://identity.example.com/',
+        clientId: 'test-public-spa',
+        audience: 'https://api.example.com',
+      },
+    });
+  });
+  it('permite flag false no build e ignora provedor desativado', () => {
+    expect(
+      parseEnvironment(
+        {
+          VITE_API_BASE_URL: 'https://api.example.com',
+          VITE_AUTH_MODE: 'none',
+          VITE_ENABLE_FIXTURES: 'false',
+          VITE_OIDC_ISSUER: 'ignored-invalid-issuer',
+        },
+        false,
+      ).authMode,
+    ).toBe('none');
+  });
+  it('permite fixtures explícitas somente no desenvolvimento', () => {
+    expect(
+      parseEnvironment({ ...valid, VITE_ENABLE_FIXTURES: 'true' }, true)
+        .authMode,
+    ).toBe('oidc');
+  });
+  it.each([undefined, '', ' ', 123, ' client ', 'two clients'])(
+    'valida client ID público: %s',
+    (value) => {
+      expect(() =>
+        parseEnvironment({ ...valid, VITE_OIDC_CLIENT_ID: value }, false),
+      ).toThrow('VITE_OIDC_CLIENT_ID');
+    },
+  );
+  it.each([undefined, '', ' ', 123, ' audience ', 'two audiences'])(
+    'valida audience pública: %s',
+    (value) => {
+      expect(() =>
+        parseEnvironment({ ...valid, VITE_OIDC_AUDIENCE: value }, false),
+      ).toThrow('VITE_OIDC_AUDIENCE');
+    },
+  );
+  it.each([
+    'https://identity.example.com/?q=1',
+    'https://identity.example.com/?',
+    'https://identity.example.com/#',
+    'https://user:password@identity.example.com/',
+    'https://@identity.example.com/',
+    'identity.example.com',
+    'ftp://identity.example.com/',
+    'https://identity.example.com/ path',
+  ])(
+    'rejeita issuer inválido sem depender da validação da API: %s',
+    (issuer) => {
+      expect(() =>
+        parseEnvironment({ ...valid, VITE_OIDC_ISSUER: issuer }, false),
+      ).toThrow('VITE_OIDC_ISSUER');
+    },
+  );
+  it('HTTP local de issuer é permitido apenas no desenvolvimento', () => {
+    const input = { ...valid, VITE_OIDC_ISSUER: 'http://localhost:9000/' };
+    expect(parseEnvironment(input, true).oidc?.issuer).toBe(
+      'http://localhost:9000/',
+    );
+    expect(() => parseEnvironment(input, false)).toThrow('HTTPS');
+  });
+});
