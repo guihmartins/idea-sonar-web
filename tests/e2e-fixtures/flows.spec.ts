@@ -49,9 +49,12 @@ test('buscar, expandir, ler evidência, salvar/restaurar view e resolver pendên
     'View restaurada com dados atuais',
   );
   await page.getByRole('link', { name: 'Pendências', exact: true }).click();
-  await page
-    .getByRole('combobox', { name: 'Candidato', exact: true })
-    .selectOption({ index: 1 });
+  const candidate = page.getByRole('combobox', {
+    name: 'Candidato',
+    exact: true,
+  });
+  await expect(candidate.locator('option')).toHaveCount(2);
+  await candidate.selectOption({ index: 1 });
   await page
     .getByLabel('Justificativa da resolução')
     .fill('Candidato revisado no cenário fictício.');
@@ -85,9 +88,9 @@ test('cadastra, edita, consulta histórico e arquiva ponto', async ({
     page.getByRole('status').filter({ hasText: 'Registro salvo.' }),
   ).toHaveText('Registro salvo.');
   await page.getByRole('link', { name: 'Ver histórico' }).click();
-  await expect(
-    page.getByText('Histórico inteiramente fictício.'),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Criação' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Edição' })).toBeVisible();
+  await expect(page.getByText(/Versão 2 · campos: description/)).toBeVisible();
   await page.getByRole('link', { name: 'Voltar ao registro' }).click();
   await expect(page.getByLabel('Descrição', { exact: true })).toHaveValue(
     'Descrição revisada.',
@@ -104,10 +107,14 @@ test('consulta importação, confirma desfazer e encerra sessão', async ({
   await page.getByRole('link', { name: 'Importações', exact: true }).click();
   await page.getByRole('link', { name: 'Importação fictícia' }).click();
   await page.getByRole('button', { name: 'Desfazer importação' }).click();
+  await page
+    .getByLabel('Motivo para desfazer')
+    .fill('Lote fictício revertido no teste.');
   await page.getByRole('button', { name: 'Confirmar desfazer lote' }).click();
   await expect(page.getByRole('status')).toContainText(
-    'Simulação fictícia de desfazer',
+    'Importação desfeita pela API',
   );
+  await expect(page.getByText('Esta importação foi desfeita.')).toBeVisible();
   await page.getByRole('button', { name: 'Sair', exact: true }).click();
   await expect(
     page.getByRole('button', { name: 'Entrar na demonstração fictícia' }),
@@ -120,7 +127,7 @@ test('formulários de fonte, contexto histórico e relação validam evidências
 }) => {
   await page.getByRole('link', { name: 'Fontes', exact: true }).click();
   await page.getByRole('link', { name: 'Cadastrar', exact: true }).click();
-  await page.getByLabel('Nome', { exact: true }).fill('Fonte fictícia E2E');
+  await page.getByLabel('Título', { exact: true }).fill('Fonte fictícia E2E');
   await page.getByLabel('Autor da fonte').fill('Autoria sintética');
   await page
     .getByLabel('URL da fonte (HTTP/HTTPS)')
@@ -150,7 +157,6 @@ test('formulários de fonte, contexto histórico e relação validam evidências
   ).toHaveText('Registro salvo.');
   await page.getByRole('link', { name: 'Relações', exact: true }).click();
   await page.getByRole('link', { name: 'Cadastrar', exact: true }).click();
-  await page.getByLabel('Nome', { exact: true }).fill('Relação fictícia E2E');
   const origin = page.getByRole('group', {
     name: 'Ponto de origem',
     exact: true,
@@ -172,6 +178,9 @@ test('formulários de fonte, contexto histórico e relação validam evidências
     .getByLabel('Afirmação', { exact: true })
     .fill('Afirmação de teste, sem valor histórico.');
   await page
+    .getByLabel('Justificativa', { exact: true })
+    .fill('Justificativa sintética do teste.');
+  await page
     .getByRole('combobox', { name: 'Classificação da evidência' })
     .selectOption('documented');
   await page.getByRole('button', { name: 'Salvar registro' }).click();
@@ -182,6 +191,10 @@ test('formulários de fonte, contexto histórico e relação validam evidências
   await page
     .getByRole('combobox', { name: 'Fonte', exact: true })
     .selectOption({ label: 'Fonte fictícia E2E · Autoria sintética' });
+  await page.getByLabel('Localizador / página').fill('p. 1');
+  await page
+    .getByLabel('Explicação da evidência')
+    .fill('Evidência sintética que sustenta a afirmação.');
   await page.getByRole('button', { name: 'Salvar registro' }).click();
   await expect(
     page.getByRole('status').filter({ hasText: 'Registro salvo.' }),
@@ -228,15 +241,15 @@ test('preserva posição arrastada ao expandir e ao alternar modo lista', async 
   if (!path) throw new Error('Exportação ausente.');
   const exported: {
     views: Array<{
-      label: string;
+      name: string;
       positions: Record<string, { x: number; y: number }>;
     }>;
   } = JSON.parse(await readFile(path, 'utf8'));
   const before = exported.views.find(
-    (view) => view.label === 'Antes da expansão',
+    (view) => view.name === 'Antes da expansão',
   );
   const after = exported.views.find(
-    (view) => view.label === 'Depois da expansão',
+    (view) => view.name === 'Depois da expansão',
   );
   const root = '00000000-0000-4000-8000-000000000001';
   expect(before?.positions[root]).toBeDefined();

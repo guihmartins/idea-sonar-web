@@ -282,13 +282,13 @@ S3/CloudFront:
 
 - [x] Inspecionar repo, fixar versões e registrar decisões.
 - [x] Configuração de build e VITE_API_BASE_URL com validação.
-- [ ] Importar contrato oficial versionado e reconciliar cliente (pipeline de geração pronto; OpenAPI da API ainda indisponível).
+- [x] Importar contrato oficial versionado e reconciliar cliente (snapshot da API em `d011945`; modelo/adapter alinhados em 29/10/2026).
 - [x] Autenticação e requests HTTP.
 - [x] Busca, navegação, expansão/recolhimento e painel.
 - [x] Legenda, filtros, contextos e evidências.
 - [x] Formulários e conflitos de versão.
 - [x] Importações, pendências, histórico e views.
-- [ ] Smoke real quando API/provedor disponíveis (testes locais, E2E fictício, acessibilidade automatizada e Docker implementados).
+- [ ] Smoke real quando API/provedor disponíveis (smoke local contra a API real em modo sem token feito em 29/10/2026, em Docker e nativo; OAuth/provedor ainda pendentes).
 - [x] Docker independente e runbook S3/CloudFront.
 
 ## 13. Entregáveis e referências

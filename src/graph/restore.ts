@@ -1,5 +1,5 @@
 import type { Api } from '../api/adapter';
-import { viewSchema } from '../api/domain';
+import { fromStoredFilters, viewSchema } from '../api/domain';
 import type { Filters } from '../api/domain';
 import type { Ledger } from './visibility/ledger';
 import { reduceLedger, visible } from './visibility/ledger';
@@ -70,7 +70,9 @@ export async function restoreView(
   generation: () => number,
 ) {
   const view = viewSchema.parse(await api.detail('views', id, signal));
-  const root = await api.node(view.root, signal);
+  if (!view.rootNodeId)
+    throw new Error('Esta view não tem ponto raiz. Escolha um ponto no mapa.');
+  const root = await api.node(view.rootNodeId, signal);
   if (root.status === 'archived')
     throw new Error(
       'A raiz desta view foi arquivada. Escolha outro ponto para iniciar um recorte.',
@@ -80,13 +82,14 @@ export async function restoreView(
     expansions: {},
     generation: generation() + 1,
   };
+  const filters = fromStoredFilters(view.filters);
   const restored = await restoreExpansions(
     api,
     state,
     view.expandedNodes,
-    view.filters,
+    filters,
     signal,
   );
   signal.throwIfAborted();
-  return { view, root, ...restored };
+  return { view, filters, root, ...restored };
 }

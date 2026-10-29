@@ -7,7 +7,22 @@ import {
 import { Link, useParams } from 'react-router-dom';
 import { useServices } from '../app/services';
 import { Failure, editorialLabels } from '../components/Feedback';
-import type { EntityType } from '../api/domain';
+import type { CandidateType } from '../api/adapter';
+import type {
+  EntityType,
+  HistoryEntry,
+  ImportDetail,
+  PendingItem,
+} from '../api/domain';
+import {
+  entitySummary,
+  entityTitle,
+  historyLabels,
+  importStatusLabels,
+  originLabels,
+  pendingProposal,
+  pendingTitle,
+} from '../components/labels';
 export const typeLabels: Record<EntityType, string> = {
   nodes: 'Pontos',
   relations: 'Relações',
@@ -48,8 +63,8 @@ export function RecordsPage({ type }: { type: EntityType }) {
           .flatMap((p) => p.items)
           .map((item) => (
             <article key={item.id}>
-              <h2>{item.label}</h2>
-              <p>{item.description}</p>
+              <h2>{entityTitle(type, item)}</h2>
+              <p>{entitySummary(type, item)}</p>
               <p>Estado: {editorialLabels[item.status]}</p>
               {type === 'views' ? (
                 <Link to={`/map?view=${item.id}`}>Restaurar view</Link>
@@ -95,14 +110,12 @@ export function ImportsPage() {
           .map((i) => (
             <article key={i.id}>
               <h2>
-                <Link to={`/imports/${i.id}`}>{i.label}</Link>
+                <Link to={`/imports/${i.id}`}>{i.inputSummary}</Link>
               </h2>
               <p>
-                {new Date(i.at).toLocaleString('pt-BR')} · {i.created.length}{' '}
-                criados · {i.updated.length} atualizados · {i.reused.length}{' '}
-                reutilizados · {i.pending.length} pendentes
+                {new Date(i.createdAt).toLocaleString('pt-BR')} ·{' '}
+                {originLabels[i.origin]} · {importStatusLabels[i.status]}
               </p>
-              {i.undone && <p>Desfeito</p>}
             </article>
           ))}
       </div>
@@ -117,6 +130,12 @@ export function ImportsPage() {
     </section>
   );
 }
+const outcomeLabels = {
+  created: 'Criados',
+  updated: 'Atualizados',
+  reused: 'Reutilizados',
+  pending: 'Pendentes',
+} as const;
 export function ImportPage() {
   const { id = '' } = useParams();
   const { api } = useServices();
@@ -126,16 +145,17 @@ export function ImportPage() {
     queryFn: ({ signal }) => api.import(id, signal),
   });
   const [confirm, setConfirm] = useState(false);
-  const [key] = useState(() => crypto.randomUUID());
+  const [reason, setReason] = useState('');
+  const [key, setKey] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [result, setResult] = useState('');
-  async function undo() {
+  async function undo(version: number) {
     setBusy(true);
     setError(null);
     try {
-      const result = await api.undo(id, key);
-      setResult(`${result.message} ${result.conflicts.join('; ')}`);
+      await api.undo(id, version, reason.trim(), key);
+      setResult('Importação desfeita pela API.');
       setConfirm(false);
       await cache.invalidateQueries();
     } catch (e) {
@@ -144,6 +164,7 @@ export function ImportPage() {
       setBusy(false);
     }
   }
+  const batch = query.data;
   return (
     <section>
       <Link to="/imports">Voltar às importações</Link>
@@ -152,66 +173,103 @@ export function ImportPage() {
       {query.error && (
         <Failure error={query.error} retry={() => void query.refetch()} />
       )}
-      {query.data && (
-        <>
-          <h2>{query.data.label}</h2>
-          <p>{query.data.description}</p>
-          {(
-            ['created', 'updated', 'reused', 'pending', 'conflicts'] as const
-          ).map((field, index) => (
-            <div key={field}>
-              <h3>
-                {
-                  [
-                    'Criados',
-                    'Atualizados',
-                    'Reutilizados',
-                    'Pendentes',
-                    'Conflitos',
-                  ][index]
-                }
-              </h3>
-              {query.data[field].length ? (
-                <ul>
-                  {query.data[field].map((value, i) => (
-                    <li key={`${value}-${i}`}>{value}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p>Nenhum item.</p>
-              )}
-            </div>
-          ))}
-          {!query.data.undone && (
-            <button onClick={() => setConfirm(true)}>
-              Desfazer importação
-            </button>
-          )}
-          {query.data.undone && <p>Esta importação foi desfeita.</p>}
-        </>
+      {batch && (
+        <ImportBatchDetails batch={batch} onUndo={() => setConfirm(true)} />
       )}
-      {confirm && (
-        <div
+      {confirm && batch && (
+        <form
           className="confirmation"
           role="group"
           aria-label="Confirmar desfazer"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void undo(batch.version);
+          }}
         >
           <p>
-            A API avaliará quais alterações deste lote podem ser revertidas.
-            Registros editados depois podem gerar conflitos; consulte o
-            resultado antes de continuar.
+            A API reverte o lote inteiro ou nada. Registros editados depois ou
+            pendências já resolvidas impedem a reversão.
           </p>
-          <button disabled={busy} onClick={() => void undo()}>
-            Confirmar desfazer lote
-          </button>
-          <button disabled={busy} onClick={() => setConfirm(false)}>
+          <label>
+            Motivo para desfazer
+            <textarea
+              required
+              value={reason}
+              onChange={(e) => {
+                setReason(e.target.value);
+                setKey(crypto.randomUUID());
+              }}
+            />
+          </label>
+          <button disabled={busy}>Confirmar desfazer lote</button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setConfirm(false)}
+          >
             Cancelar
           </button>
-        </div>
+        </form>
       )}
       {error !== null && <Failure error={error} />}
       {result && <p role="status">{result}</p>}
     </section>
+  );
+}
+function ImportBatchDetails({
+  batch,
+  onUndo,
+}: {
+  batch: ImportDetail;
+  onUndo: () => void;
+}) {
+  return (
+    <>
+      <h2>{batch.inputSummary}</h2>
+      <p>
+        {new Date(batch.createdAt).toLocaleString('pt-BR')} ·{' '}
+        {originLabels[batch.origin]} · {importStatusLabels[batch.status]}
+      </p>
+      {(Object.keys(outcomeLabels) as (keyof typeof outcomeLabels)[]).map(
+        (outcome) => (
+          <ImportOutcome
+            key={outcome}
+            title={outcomeLabels[outcome]}
+            items={batch.result.items.filter((i) => i.outcome === outcome)}
+          />
+        ),
+      )}
+      {batch.status === 'undone' ? (
+        <p>Esta importação foi desfeita.</p>
+      ) : (
+        <button onClick={onUndo}>Desfazer importação</button>
+      )}
+    </>
+  );
+}
+function ImportOutcome({
+  title,
+  items,
+}: {
+  title: string;
+  items: { clientRef: string; entityType: string; reason: string | null }[];
+}) {
+  return (
+    <div>
+      <h3>{title}</h3>
+      {items.length ? (
+        <ul>
+          {items.map((item) => (
+            <li key={item.clientRef}>
+              {item.clientRef} ({item.entityType})
+              {item.reason ? ` — ${item.reason}` : ''}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p>Nenhum item.</p>
+      )}
+    </div>
   );
 }
 export function PendingPage() {
@@ -229,14 +287,19 @@ export function PendingPage() {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState<unknown>(null);
   const [message, setMessage] = useState('');
-  async function resolve(id: string) {
-    const key = keys.get(id) ?? crypto.randomUUID();
-    keys.set(id, key);
-    setBusy(id);
+  async function resolve(item: PendingItem) {
+    const key = keys.get(item.id) ?? crypto.randomUUID();
+    keys.set(item.id, key);
+    setBusy(item.id);
     setError(null);
     try {
-      await api.resolve(id, reason[id] ?? '', selected[id] ?? '', key);
-      keys.delete(id);
+      await api.resolve(
+        item,
+        selected[item.id] ?? '',
+        (reason[item.id] ?? '').trim(),
+        key,
+      );
+      keys.delete(item.id);
       setMessage('Pendência resolvida pela API.');
       await cache.invalidateQueries();
     } catch (e) {
@@ -249,8 +312,8 @@ export function PendingPage() {
     <section>
       <h1>Pendências</h1>
       <p>
-        Revise os motivos e candidatos antes de resolver. Nenhuma mesclagem é
-        automática.
+        Revise os motivos e escolha explicitamente o registro existente que
+        resolve cada pendência. Nenhuma mesclagem é automática.
       </p>
       {query.isPending && <p role="status">Carregando…</p>}
       {query.error && (
@@ -269,30 +332,22 @@ export function PendingPage() {
             className="card"
             onSubmit={(e) => {
               e.preventDefault();
-              void resolve(p.id);
+              void resolve(p);
             }}
           >
-            <h2>{p.label}</h2>
-            <p>{p.reason}</p>
-            {p.candidates.length > 0 && (
-              <label htmlFor={`candidate-${p.id}`}>
-                Candidato
-                <select
-                  id={`candidate-${p.id}`}
-                  required
-                  value={selected[p.id] ?? ''}
-                  onChange={(e) => {
-                    setSelected({ ...selected, [p.id]: e.target.value });
-                    keys.delete(p.id);
-                  }}
-                >
-                  <option value="">Selecione explicitamente</option>
-                  {p.candidates.map((id) => (
-                    <CandidateOption key={id} id={id} />
-                  ))}
-                </select>
-              </label>
-            )}
+            <h2>{pendingTitle(p)}</h2>
+            <p>{p.reason ?? 'Sem motivo informado.'}</p>
+            <p>
+              <Link to={`/imports/${p.batchId}`}>Ver importação de origem</Link>
+            </p>
+            <CandidateSelect
+              item={p}
+              value={selected[p.id] ?? ''}
+              onChange={(value) => {
+                setSelected({ ...selected, [p.id]: value });
+                keys.delete(p.id);
+              }}
+            />
             <label>
               Justificativa da resolução
               <textarea
@@ -352,20 +407,11 @@ export function HistoryPage() {
           .flatMap((p) => p.items)
           .map((h) => (
             <li className="card" key={h.id}>
-              <time dateTime={h.at}>
-                {new Date(h.at).toLocaleString('pt-BR')}
+              <time dateTime={h.createdAt}>
+                {new Date(h.createdAt).toLocaleString('pt-BR')}
               </time>
-              <h2>
-                {(
-                  {
-                    created: 'Criação',
-                    updated: 'Edição',
-                    archived: 'Arquivamento',
-                    restored: 'Restauração',
-                  } as Record<string, string>
-                )[h.action] ?? h.action}
-              </h2>
-              <p>{h.description}</p>
+              <h2>{historyLabels[h.operation] ?? h.operation}</h2>
+              <p>{historyDescription(h)}</p>
             </li>
           ))}
       </ol>
@@ -423,19 +469,80 @@ export function ExportPage() {
   );
 }
 
-function CandidateOption({ id }: { id: string }) {
+// Busca candidatos do mesmo tipo pelo nome proposto; relações exigem o ID.
+function CandidateSelect({
+  item,
+  value,
+  onChange,
+}: {
+  item: PendingItem;
+  value: string;
+  onChange: (value: string) => void;
+}) {
   const { api } = useServices();
+  const searchable = item.entityType !== 'relations';
+  const term = pendingTitle(item);
   const query = useQuery({
-    queryKey: ['node', id],
-    queryFn: ({ signal }) => api.node(id, signal),
+    queryKey: ['candidates', item.entityType, term],
+    queryFn: ({ signal }) =>
+      api.candidates(item.entityType as CandidateType, term, signal),
+    enabled: searchable,
   });
+  if (!searchable)
+    return (
+      <label>
+        ID da relação existente
+        <input
+          required
+          value={value}
+          onChange={(e) => onChange(e.target.value.trim())}
+        />
+      </label>
+    );
   return (
-    <option value={id}>
-      {query.data
-        ? `${query.data.label} · ${query.data.kind} · ${query.data.description} · ${id}`
-        : `${id}${query.error ? ' (detalhes indisponíveis)' : ' (carregando)'}`}
-    </option>
+    <>
+      {query.error && (
+        <Failure error={query.error} retry={() => void query.refetch()} />
+      )}
+      <label htmlFor={`candidate-${item.id}`}>
+        Candidato
+        <select
+          id={`candidate-${item.id}`}
+          required
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          <option value="">Selecione explicitamente</option>
+          {query.data?.items.map((entity) => (
+            <option key={entity.id} value={entity.id}>
+              {entityTitle(item.entityType, entity)} ·{' '}
+              {entitySummary(item.entityType, entity)} · {entity.id}
+            </option>
+          ))}
+        </select>
+      </label>
+      {query.data?.items.length === 0 && (
+        <p>
+          Nenhum candidato com nome semelhante. Proposta: {proposalText(item)}
+        </p>
+      )}
+    </>
   );
+}
+function proposalText(item: PendingItem) {
+  return JSON.stringify(pendingProposal(item));
+}
+// Campos alterados entre os snapshots de auditoria, sem metadados do servidor.
+function historyDescription(entry: HistoryEntry) {
+  const ignored = new Set(['version', 'updatedAt', 'createdAt']);
+  const before = entry.beforeData ?? {};
+  const after = entry.afterData ?? {};
+  const changed = Object.keys({ ...before, ...after }).filter(
+    (key) =>
+      !ignored.has(key) &&
+      JSON.stringify(before[key]) !== JSON.stringify(after[key]),
+  );
+  return `Versão ${entry.versionAfter}${changed.length ? ` · campos: ${changed.join(', ')}` : ''}`;
 }
 
 function isHistoryType(type: string | undefined) {

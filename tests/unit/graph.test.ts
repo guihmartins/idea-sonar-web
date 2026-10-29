@@ -12,37 +12,57 @@ import {
 } from '../../src/graph/visibility/ledger';
 import { elements } from '../../src/graph/adapter/elements';
 import { astronomicalYear, displayYear } from '../../src/components/period';
+const meta = {
+  version: 1,
+  createdAt: '2026-10-24T12:00:00.000Z',
+  updatedAt: '2026-10-24T12:00:00.000Z',
+  status: 'active' as const,
+};
 const node = (id: string): Node => ({
+  ...meta,
   id,
   label: id,
   description: '',
-  version: '1',
   kind: 'concept',
   aliases: [],
-  conceptScope: '',
+  conceptScope: 'broad',
   contexts: [],
   degreeTotal: 1,
-  status: 'active',
+  archivedAt: null,
 });
 const edge = (id: string, sourceId: string, targetId: string): Relation => ({
+  ...meta,
   id,
   sourceId,
   targetId,
-  label: id,
-  description: '',
-  version: '1',
-  status: 'active',
   type: 'parallel_to',
+  contextId: null,
   claim: '',
   justification: '',
-  context: '',
   evidenceStatus: 'inference',
   intensity: null,
-  intensityReason: '',
-  attribution: 'teste',
+  intensityReason: null,
+  attributionNodeId: null,
+  attributionText: null,
+  inferenceAuthor: 'teste',
   contested: true,
+  contestationNote: null,
   evidence: [],
+  archivedAt: null,
 });
+const catalogOf = (relationTypes: Catalog['relationTypes']): Catalog => ({
+  nodeKinds: [],
+  relationTypes,
+  evidenceStatuses: [],
+  editorialStatuses: [],
+  intensities: [],
+});
+const relationType = (
+  code: string,
+  label: string,
+  inverseLabel: string,
+  symmetric: boolean,
+) => ({ code, label, inverseLabel, symmetric, allowedEndpoints: [] });
 const page = (ids: string[], relations: Relation[] = []): NeighborPage => ({
   nodes: ids.map(node),
   relations,
@@ -106,19 +126,9 @@ describe('ledger de expansões', () => {
     ).toBe(state);
   });
   it('arestas simétricas sem seta, inferência pontilhada e intensidade nula neutra', () => {
-    const catalog: Catalog = {
-      kinds: [],
-      predicates: [
-        {
-          id: 'parallel_to',
-          label: 'Paralelo a',
-          inverse: '',
-          symmetric: true,
-          sourceKinds: [],
-          targetKinds: [],
-        },
-      ],
-    };
+    const catalog = catalogOf([
+      relationType('parallel_to', 'Paralelo a', '', true),
+    ]);
     const data = elements(
       [node('a'), node('b')],
       [edge('e', 'a', 'b')],
@@ -249,27 +259,10 @@ it('atualiza dados e cursor entre páginas sem duplicar IDs nem aceitar endpoint
   expect(state.expansions.a?.truncated).toBe(true);
 });
 it('mapeia todos os tipos, preserva identidade/direção e usa catálogo por ID', () => {
-  const catalog: Catalog = {
-    kinds: [],
-    predicates: [
-      {
-        id: 'studied',
-        label: 'estudou',
-        inverse: 'estudado por',
-        symmetric: false,
-        sourceKinds: [],
-        targetKinds: [],
-      },
-      {
-        id: 'parallel_to',
-        label: 'paralelo a',
-        inverse: 'paralelo a',
-        symmetric: true,
-        sourceKinds: [],
-        targetKinds: [],
-      },
-    ],
-  };
+  const catalog = catalogOf([
+    relationType('studied', 'estudou', 'estudado por', false),
+    relationType('parallel_to', 'paralelo a', 'paralelo a', true),
+  ]);
   const input = (['person', 'tradition', 'concept', 'work'] as const).map(
     (kind, i) => ({
       ...node(String(i)),
@@ -342,7 +335,7 @@ it('mapeia todos os tipos, preserva identidade/direção e usa catálogo por ID'
 it('cores de contexto são estáveis com ordem diferente dos pontos', () => {
   const a = { ...node('a'), contexts: ['z'] };
   const b = { ...node('b'), contexts: ['a'] };
-  const catalog: Catalog = { kinds: [], predicates: [] };
+  const catalog = catalogOf([]);
   const first = elements([a, b], [], catalog);
   const reversed = elements([b, a], [], catalog);
   expect(first[0]?.data.color).toBe(reversed[1]?.data.color);

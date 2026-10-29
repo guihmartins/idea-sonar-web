@@ -17,7 +17,7 @@ Para reativar: `VITE_AUTH_MODE=oidc`, configurar as três variáveis OIDC e reco
 - Importações e confirmação de desfazer lote, pendências, histórico, salvar/restaurar views e exportação.
 - Docker estático não root, Compose somente web e runbook S3/CloudFront.
 
-**Integração real pendente:** a API ainda não publicou OpenAPI na `main` consultada em 24/10/2026 (contém apenas plano). O modelo de apresentação/adapter HTTP são **provisórios**, baseados no plano, e precisam ser reconciliados com o snapshot oficial. Nenhum contrato oficial foi inventado. Para uma futura reativação OIDC, Auth0 é o adapter escolhido e precisará de conta, issuer, audience, scopes e callbacks alinhados à API. No modo atual, basta a API permitir o acesso sem token e configurar CORS. Não há smoke real de OAuth/API. Nenhuma alteração no repositório backend.
+**Integração com a API:** o snapshot OpenAPI de `guihmartins/idea-sonar-api` (commit `d011945`, `info.version` 1.0.0) está em `contracts/openapi.json`. `src/api/domain.ts` valida as respostas com Zod nos formatos da API e é conferido em compilação contra os tipos gerados; o adapter usa as rotas, filtros e corpos do contrato. Para uma futura reativação OIDC, Auth0 é o adapter escolhido e precisará de conta, issuer, audience, scopes e callbacks alinhados à API. No modo atual, basta a API permitir o acesso sem token e configurar CORS. Não há smoke real de OAuth/API. Nenhuma alteração no repositório backend.
 
 ## Executar
 
@@ -63,7 +63,7 @@ npm run contracts:generate
 npm run contracts:check
 ```
 
-O comando importa um snapshot local revisado, registra origem/commit/`info.version`/SHA-256 e gera tipos/cliente com openapi-typescript/openapi-fetch. O build verifica checksum e regeneração; não baixam `latest`. Enquanto pendente, o comando informa a dependência e não inventa arquivos. `REQUIRE_API_CONTRACT=true npm run build` bloqueia uma release que exija contrato integrado. Depois da publicação ainda será necessário reconciliar o adapter e executar smoke real. Veja [api-contract.md](docs/api-contract.md).
+O comando importa um snapshot local revisado, registra origem/commit/`info.version`/SHA-256 e gera tipos/cliente com openapi-typescript/openapi-fetch. O build verifica checksum e regeneração; não baixam `latest`. `REQUIRE_API_CONTRACT=true npm run build` bloqueia uma release sem contrato integrado. Ao atualizar o snapshot, ajuste `domain.ts`/`adapter.ts` até o typecheck (checagem `ContractCheck`) e os testes passarem. Veja [api-contract.md](docs/api-contract.md).
 
 ## Workflows
 
@@ -128,4 +128,4 @@ Proxy com CA própria: passe `--secret id=proxy_ca,src=/caminho/ca.pem`; a CA n�
 
 ## Organização
 
-`src/app` compõe providers/rotas; `src/auth` encapsula SDK; `src/api` separa transporte, adapter e modelo provisório; `src/graph` separa ledger, adaptação, layout e estilos; `src/pages` implementa telas; `src/dev` contém apenas fixtures isoladas. `contracts`, `docs`, `tests` e `infra` são independentes do backend.
+`src/app` compõe providers/rotas; `src/auth` encapsula SDK; `src/api` separa transporte, adapter, modelo validado e tipos gerados do contrato; `src/graph` separa ledger, adaptação, layout e estilos; `src/pages` implementa telas; `src/dev` contém apenas fixtures isoladas. `contracts`, `docs`, `tests` e `infra` são independentes do backend.

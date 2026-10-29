@@ -29,18 +29,23 @@ describe('períodos históricos', () => {
       );
     },
   );
+  const period = (
+    startYear: number | null,
+    endYear: number | null,
+    precision: 'unknown' | 'approximate' | 'range' | 'exact' = 'range',
+    periodLabel: string | null = null,
+  ) => ({ startYear, endYear, precision, periodLabel });
   it.each([
-    [{ start: null, end: null, approximate: false }, 'Período desconhecido'],
-    [{ start: null, end: null, approximate: true }, 'Período desconhecido'],
-    [{ start: 0, end: 1, approximate: false }, '1 a.C. — 1 d.C.'],
-    [
-      { start: -1, end: 100, approximate: true },
-      'Aproximadamente 2 a.C. — 100 d.C.',
-    ],
-    [{ start: null, end: 0, approximate: false }, '? — 1 a.C.'],
-    [{ start: 1, end: null, approximate: true }, 'Aproximadamente 1 d.C. — ?'],
+    [period(null, null, 'unknown'), 'Período desconhecido'],
+    [period(null, null, 'approximate'), 'Período desconhecido'],
+    [period(null, null, 'unknown', 'Antiguidade'), 'Antiguidade'],
+    [period(0, 1), '1 a.C. — 1 d.C.'],
+    [period(-1, 100, 'approximate'), 'Aproximadamente 2 a.C. — 100 d.C.'],
+    [period(null, 0), '? — 1 a.C.'],
+    [period(1, null, 'approximate'), 'Aproximadamente 1 d.C. — ?'],
+    [period(1, 2, 'exact', 'Fase inicial'), '1 d.C. — 2 d.C. (Fase inicial)'],
   ])(
-    'preserva intervalo, aproximação e extremos desconhecidos',
+    'preserva intervalo, aproximação, rótulo e extremos desconhecidos',
     (period, label) => {
       expect(formatPeriod(period)).toBe(label);
     },

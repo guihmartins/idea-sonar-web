@@ -94,3 +94,12 @@
 - `engines` relaxado para Node `>=24.19.0 <25` e npm `>=11.9.0` (igual à API); 24.19.0/11.9.0 seguem como referência em `.nvmrc`, Docker e CI.
 - Auth0: `domain` sem barra final; o SDK monta `${domain}/authorize` e o issuer esperado `${domain}/`.
 - nginx: headers de segurança repetidos nos `location` com `add_header` próprio (a herança do bloco `server` era descartada).
+
+## 2026-10-29 — Contrato da API integrado
+
+- Snapshot `contracts/openapi.json` importado da API (`contracts/source.json`), com tipos e cliente gerados em `src/api/generated/`.
+- `src/api/domain.ts` passou a validar os formatos reais (versão inteira, catálogo `nodeKinds`/`relationTypes`, campos de fonte/contexto/relação/evidência/view, lotes, pendências e histórico de auditoria). `ContractCheck` compara o modelo com os tipos gerados na compilação.
+- Adapter usa os filtros da API (`contextId`, `includePending`, `startYear`, `endYear`, `includeUnknownPeriod`), `If-Match` com a versão inteira e os corpos `{expectedVersion, reason}` (undo) e `{expectedVersion, reason, selection}` (resolve). Pendências são resolvidas escolhendo um registro existente buscado pelo nome proposto no lote.
+- Editor segue as regras da API (justificativa obrigatória, evidência de suporte com fonte, atribuição/autoria conforme a classificação, contestação com evidências a favor e contra; tipo e escopo de ponto imutáveis após criar).
+- Mensagem de erro da API é exibida quando o status não tem mensagem própria.
+- Validação: lint, typecheck, Vitest, E2E com fixtures (desktop/mobile, axe) e smoke contra a API real em Docker e nativo (modo sem token).

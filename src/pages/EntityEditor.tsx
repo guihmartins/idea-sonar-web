@@ -8,18 +8,23 @@ import {
 import { Link, useParams } from 'react-router-dom';
 import { useServices } from '../app/services';
 import { ApiError } from '../api/client';
-import { defaultFilters, schemas } from '../api/domain';
-import type {
-  Entity,
-  EntityType,
-  Node,
-  Relation,
-  Context,
-  Source,
-} from '../api/domain';
+import { defaultFilters } from '../api/domain';
+import type { Entity, EntityType, Node, Context, Source } from '../api/domain';
 import { Failure } from '../components/Feedback';
-import { buildEditorBody } from './editor/payload';
-import type { Editable } from './editor/payload';
+import {
+  conceptScopeLabels,
+  kindLabels,
+  precisionLabels,
+  sourceKindLabels,
+  stanceLabels,
+} from '../components/labels';
+import {
+  buildEditorBody,
+  emptyEvidence,
+  evidenceDraft,
+  formatAliases,
+} from './editor/payload';
+import type { Editable, EvidenceDraft } from './editor/payload';
 import { typeLabels } from './RecordsPage';
 const editable = ['nodes', 'relations', 'sources', 'contexts'] as const;
 const isEditable = (type: string | undefined): type is Editable =>
@@ -52,7 +57,7 @@ function initialFields(entity?: Entity): Record<string, string> {
     aliases: '',
     conceptScope: '',
     status: 'active',
-    context: '',
+    contextId: '',
     sourceId: '',
     targetId: '',
     type: '',
@@ -61,10 +66,18 @@ function initialFields(entity?: Entity): Record<string, string> {
     evidenceStatus: 'inference',
     intensity: '',
     intensityReason: '',
-    attribution: '',
-    author: '',
-    url: '',
-    region: '',
+    attributionText: '',
+    inferenceAuthor: '',
+    contestationNote: '',
+    title: '',
+    authorText: '',
+    canonicalUrl: '',
+    publicationLabel: '',
+    doi: '',
+    notes: '',
+    regionLabel: '',
+    periodLabel: '',
+    precision: 'unknown',
     start: '',
     end: '',
     startEra: 'ce',
@@ -74,8 +87,8 @@ function initialFields(entity?: Entity): Record<string, string> {
   for (const [key, value] of Object.entries(entity))
     if (typeof value === 'string' || typeof value === 'number')
       data[key] = String(value);
-  if ('aliases' in entity) data.aliases = entity.aliases.join(', ');
-  if ('period' in entity) Object.assign(data, periodFields(entity.period));
+  if ('aliases' in entity) data.aliases = formatAliases(entity.aliases);
+  if ('startYear' in entity) Object.assign(data, periodFields(entity));
   return data;
 }
 function useEditorForm(type: Editable, initial: Entity | undefined) {
@@ -86,7 +99,6 @@ function useEditorForm(type: Editable, initial: Entity | undefined) {
   const metadata = editorMetadata(initial);
   const [contexts, setContexts] = useState(metadata.contexts);
   const [evidence, setEvidence] = useState(metadata.evidence);
-  const [approximate, setApproximate] = useState(metadata.approximate);
   const [contested, setContested] = useState(metadata.contested);
   const [actionKey, setActionKey] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false);
@@ -158,16 +170,10 @@ function useEditorForm(type: Editable, initial: Entity | undefined) {
     try {
       const body = await buildEditorBody(
         type,
-        { fields, baseline, contexts, evidence, approximate, contested },
+        { fields, contexts, evidence, contested },
         catalog.data,
         api,
       );
-      // Valida o modelo provisório sem enviar campos gerados pelo servidor.
-      schemas[type].parse({
-        ...body,
-        id: baseline?.id ?? 'new',
-        version: baseline?.version ?? 'new',
-      });
       const saved = await api.save(type, body, actionKey, baseline);
       setBaseline(saved);
       setMessage('Registro salvo.');
@@ -217,7 +223,6 @@ function useEditorForm(type: Editable, initial: Entity | undefined) {
     fields,
     contexts,
     evidence,
-    approximate,
     contested,
     busy,
     error,
@@ -232,7 +237,6 @@ function useEditorForm(type: Editable, initial: Entity | undefined) {
     doArchive,
     setContexts,
     setEvidence,
-    setApproximate,
     setContested,
     setActionKey,
     setConflict,
@@ -271,8 +275,6 @@ function EditorForm({
       <form onSubmit={(e) => void model.submit(e)} className="editor">
         <fieldset disabled={model.busy || !!model.conflict}>
           <legend>Dados do registro</legend>
-          {model.text('label', 'Nome', true)}
-          {model.text('description', 'Descrição', false, true)}
           <label>
             Estado editorial
             <select
@@ -354,9 +356,9 @@ function EvidenceFields({
   onChange,
   onRemove,
 }: {
-  entry: Relation['evidence'][number];
+  entry: EvidenceDraft;
   sources: Source[];
-  onChange: (entry: Relation['evidence'][number]) => void;
+  onChange: (entry: EvidenceDraft) => void;
   onRemove: () => void;
 }) {
   return (
@@ -364,14 +366,13 @@ function EvidenceFields({
       <label>
         Fonte
         <select
-          required
           value={entry.sourceId}
           onChange={(e) => onChange({ ...entry, sourceId: e.target.value })}
         >
-          <option value="">Selecione uma fonte</option>
+          <option value="">Sem fonte cadastrada</option>
           {sources.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.label} · {s.author}
+              {s.title} · {s.authorText}
             </option>
           ))}
         </select>
@@ -379,30 +380,46 @@ function EvidenceFields({
       <label>
         Papel da evidência
         <select
-          value={entry.role}
-          onChange={(e) =>
-            onChange({ ...entry, role: e.target.value as typeof entry.role })
-          }
-        >
-          <option value="supports">Sustenta</option>
-          <option value="challenges">Contesta</option>
-          <option value="contextualizes">Contextualiza</option>
-        </select>
-      </label>
-      <label>
-        Fonte relativa à afirmação
-        <select
-          value={entry.sourceRole}
+          value={entry.stance}
           onChange={(e) =>
             onChange({
               ...entry,
-              sourceRole: e.target.value as typeof entry.sourceRole,
+              stance: e.target.value as EvidenceDraft['stance'],
             })
           }
         >
-          <option value="primary">Primária</option>
-          <option value="secondary">Secundária</option>
+          {Object.entries(stanceLabels).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
         </select>
+      </label>
+      <label>
+        Tipo de fonte
+        <select
+          value={entry.sourceKind}
+          onChange={(e) =>
+            onChange({
+              ...entry,
+              sourceKind: e.target.value as EvidenceDraft['sourceKind'],
+            })
+          }
+        >
+          {Object.entries(sourceKindLabels).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Localizador / página
+        <input
+          required
+          value={entry.locator}
+          onChange={(e) => onChange({ ...entry, locator: e.target.value })}
+        />
       </label>
       <label>
         Trecho
@@ -412,12 +429,24 @@ function EvidenceFields({
         />
       </label>
       <label>
-        Localizador / página
-        <input
-          value={entry.locator}
-          onChange={(e) => onChange({ ...entry, locator: e.target.value })}
+        Explicação da evidência
+        <textarea
+          required
+          value={entry.explanation}
+          onChange={(e) => onChange({ ...entry, explanation: e.target.value })}
         />
       </label>
+      {entry.sourceKind === 'conversation' && (
+        <label>
+          Referência da conversa
+          <input
+            value={entry.conversationReference}
+            onChange={(e) =>
+              onChange({ ...entry, conversationReference: e.target.value })
+            }
+          />
+        </label>
+      )}
       <button type="button" onClick={onRemove}>
         Remover evidência
       </button>
@@ -425,36 +454,78 @@ function EvidenceFields({
   );
 }
 
-function periodFields(period: Context['period']) {
+function periodFields(period: Pick<Context, 'startYear' | 'endYear'>) {
   const data: Record<string, string> = {};
-  for (const key of ['start', 'end'] as const) {
-    const year = period[key];
+  for (const [key, year] of [
+    ['start', period.startYear],
+    ['end', period.endYear],
+  ] as const) {
     data[key] = year === null ? '' : String(year <= 0 ? 1 - year : year);
     data[`${key}Era`] = year !== null && year <= 0 ? 'bce' : 'ce';
   }
-
   return data;
 }
 
+function Choice({
+  model,
+  field,
+  label,
+  options,
+  disabled = false,
+}: {
+  model: EditorModel;
+  field: string;
+  label: string;
+  options: Record<string, string>;
+  disabled?: boolean;
+}) {
+  return (
+    <label>
+      {label}
+      <select
+        value={model.fields[field]}
+        disabled={disabled}
+        onChange={(e) => model.update(field, e.target.value)}
+      >
+        {Object.entries(options).map(([value, text]) => (
+          <option key={value} value={value}>
+            {text}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function NodeFields({ model }: { model: EditorModel }) {
+  // A API não permite mudar tipo nem escopo depois da criação.
+  const fixed = !!model.baseline;
   return (
     <>
-      <label>
-        Tipo
-        <select
-          value={model.fields.kind}
-          onChange={(e) => model.update('kind', e.target.value)}
-        >
-          {model.catalog.data?.kinds.map((k) => (
-            <option key={k.id} value={k.id}>
-              {k.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      {model.text('aliases', 'Outros nomes (separados por vírgula)')}
-      {model.fields.kind === 'concept' &&
-        model.text('conceptScope', 'Interpretação contextualizada')}
+      {model.text('label', 'Nome', true)}
+      {model.text('description', 'Descrição', true, true)}
+      <Choice
+        model={model}
+        field="kind"
+        label="Tipo"
+        options={Object.fromEntries(
+          (model.catalog.data?.nodeKinds ?? []).map((k) => [k, kindLabels[k]]),
+        )}
+        disabled={fixed}
+      />
+      {model.fields.kind === 'concept' && (
+        <Choice
+          model={model}
+          field="conceptScope"
+          label="Escopo do conceito"
+          options={{ '': 'Selecione', ...conceptScopeLabels }}
+          disabled={fixed}
+        />
+      )}
+      {model.text(
+        'aliases',
+        'Outros nomes (separados por vírgula; idioma opcional, ex.: Jung (de))',
+      )}
       <fieldset>
         <legend>Contextos</legend>
         {model.options.data?.contexts.map((c) => (
@@ -482,8 +553,13 @@ function NodeFields({ model }: { model: EditorModel }) {
 function SourceFields({ model }: { model: EditorModel }) {
   return (
     <>
-      {model.text('author', 'Autor da fonte')}
-      {model.text('url', 'URL da fonte (HTTP/HTTPS)')}
+      {model.text('title', 'Título', true)}
+      {model.text('authorText', 'Autor da fonte', true)}
+      <p>Informe ao menos URL, DOI ou publicação.</p>
+      {model.text('canonicalUrl', 'URL da fonte (HTTP/HTTPS)')}
+      {model.text('publicationLabel', 'Publicação')}
+      {model.text('doi', 'DOI')}
+      {model.text('notes', 'Notas', false, true)}
     </>
   );
 }
@@ -491,7 +567,9 @@ function SourceFields({ model }: { model: EditorModel }) {
 function ContextFields({ model }: { model: EditorModel }) {
   return (
     <>
-      {model.text('region', 'Região')}
+      {model.text('label', 'Nome', true)}
+      {model.text('regionLabel', 'Região')}
+      {model.text('periodLabel', 'Rótulo do período')}
       <p>Deixe os anos vazios para período desconhecido.</p>
       {(['start', 'end'] as const).map((key) => (
         <div className="form-grid" key={key}>
@@ -517,17 +595,60 @@ function ContextFields({ model }: { model: EditorModel }) {
           </label>
         </div>
       ))}
+      <Choice
+        model={model}
+        field="precision"
+        label="Precisão do período"
+        options={precisionLabels}
+      />
+      {model.text('notes', 'Notas', false, true)}
+    </>
+  );
+}
+
+function RelationClassification({ model }: { model: EditorModel }) {
+  const status = model.fields.evidenceStatus;
+  return (
+    <>
+      <Choice
+        model={model}
+        field="evidenceStatus"
+        label="Classificação da evidência"
+        options={{
+          documented: 'Documentada',
+          attributed_interpretation: 'Interpretação atribuída',
+          inference: 'Inferência / hipótese',
+        }}
+      />
+      {status === 'attributed_interpretation' &&
+        model.text('attributionText', 'Atribuição (quem interpreta)', true)}
+      {status === 'inference' &&
+        model.text('inferenceAuthor', 'Autoria da inferência', true)}
+      <Choice
+        model={model}
+        field="intensity"
+        label="Intensidade"
+        options={{
+          '': 'Não avaliada',
+          '1': '1 — Pontual',
+          '2': '2 — Relevante',
+          '3': '3 — Central',
+        }}
+      />
+      {model.text('intensityReason', 'Justificativa da intensidade')}
       <label className="check">
         <input
           type="checkbox"
-          checked={model.approximate}
+          checked={model.contested}
           onChange={(e) => {
-            model.setApproximate(e.target.checked);
+            model.setContested(e.target.checked);
             model.setActionKey(crypto.randomUUID());
           }}
         />
-        Período aproximado
+        Relação contestada
       </label>
+      {model.contested &&
+        model.text('contestationNote', 'Nota de contestação', true, true)}
     </>
   );
 }
@@ -553,21 +674,21 @@ function RelationFields({ model }: { model: EditorModel }) {
           onChange={(e) => model.update('type', e.target.value)}
         >
           <option value="">Selecione</option>
-          {model.catalog.data?.predicates.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label}
-              {p.symmetric ? ' (simétrica)' : ''}
+          {model.catalog.data?.relationTypes.map((t) => (
+            <option key={t.code} value={t.code}>
+              {t.label}
+              {t.symmetric ? ' (simétrica)' : ''}
             </option>
           ))}
         </select>
       </label>
       {model.text('claim', 'Afirmação', true, true)}
-      {model.text('justification', 'Justificativa', false, true)}
+      {model.text('justification', 'Justificativa', true, true)}
       <label>
         Contexto
         <select
-          value={model.fields.context}
-          onChange={(e) => model.update('context', e.target.value)}
+          value={model.fields.contextId}
+          onChange={(e) => model.update('contextId', e.target.value)}
         >
           <option value="">Sem contexto</option>
           {model.options.data?.contexts.map((c) => (
@@ -577,44 +698,7 @@ function RelationFields({ model }: { model: EditorModel }) {
           ))}
         </select>
       </label>
-      <label>
-        Classificação da evidência
-        <select
-          value={model.fields.evidenceStatus}
-          onChange={(e) => model.update('evidenceStatus', e.target.value)}
-        >
-          <option value="documented">Documentada</option>
-          <option value="attributed_interpretation">
-            Interpretação atribuída
-          </option>
-          <option value="inference">Inferência / hipótese</option>
-        </select>
-      </label>
-      {model.text('attribution', 'Autoria / atribuição')}
-      <label>
-        Intensidade
-        <select
-          value={model.fields.intensity}
-          onChange={(e) => model.update('intensity', e.target.value)}
-        >
-          <option value="">Não avaliada</option>
-          <option value="1">1 — Pontual</option>
-          <option value="2">2 — Relevante</option>
-          <option value="3">3 — Central</option>
-        </select>
-      </label>
-      {model.text('intensityReason', 'Justificativa da intensidade')}
-      <label className="check">
-        <input
-          type="checkbox"
-          checked={model.contested}
-          onChange={(e) => {
-            model.setContested(e.target.checked);
-            model.setActionKey(crypto.randomUUID());
-          }}
-        />
-        Relação contestada
-      </label>
+      <RelationClassification model={model} />
       <fieldset>
         <legend>Evidências</legend>
         <p>Adicionar uma URL não promove a classificação automaticamente.</p>
@@ -640,16 +724,7 @@ function RelationFields({ model }: { model: EditorModel }) {
         <button
           type="button"
           onClick={() => {
-            model.setEvidence((values) => [
-              ...values,
-              {
-                sourceId: '',
-                role: 'supports',
-                sourceRole: 'secondary',
-                excerpt: '',
-                locator: '',
-              },
-            ]);
+            model.setEvidence((values) => [...values, { ...emptyEvidence }]);
             model.setActionKey(crypto.randomUUID());
           }}
         >
@@ -707,11 +782,10 @@ function ConflictPanel({ model }: { model: EditorModel }) {
       <button
         onClick={() => {
           model.setFields(initialFields(conflict));
-          if ('contexts' in conflict) model.setContexts(conflict.contexts);
-          if ('evidence' in conflict) model.setEvidence(conflict.evidence);
-          if ('contested' in conflict) model.setContested(conflict.contested);
-          if ('period' in conflict)
-            model.setApproximate(conflict.period.approximate);
+          const metadata = editorMetadata(conflict);
+          model.setContexts(metadata.contexts);
+          model.setEvidence(metadata.evidence);
+          model.setContested(metadata.contested);
           model.setBaseline(conflict);
           model.setConflict(null);
           model.setError(null);
@@ -767,18 +841,11 @@ function EditorActions({ model }: { model: EditorModel }) {
 }
 
 function editorMetadata(entity: Entity | undefined) {
-  if (!entity)
-    return {
-      contexts: [] as string[],
-      evidence: [] as Relation['evidence'],
-      approximate: false,
-      contested: false,
-    };
   return {
-    contexts: 'contexts' in entity ? entity.contexts : [],
-    evidence: 'evidence' in entity ? entity.evidence : [],
-    approximate: 'period' in entity ? entity.period.approximate : false,
-    contested: 'contested' in entity ? entity.contested : false,
+    contexts: entity && 'contexts' in entity ? entity.contexts : [],
+    evidence:
+      entity && 'evidence' in entity ? entity.evidence.map(evidenceDraft) : [],
+    contested: entity && 'contested' in entity ? entity.contested : false,
   };
 }
 function TypeFields({ model }: { model: EditorModel }) {
@@ -811,7 +878,7 @@ function conflictChanges(model: EditorModel, conflict: Entity): FieldChange[] {
     changes.push({
       label: 'Evidências',
       draft: JSON.stringify(model.evidence, null, 2),
-      latest: JSON.stringify(conflict.evidence, null, 2),
+      latest: JSON.stringify(conflict.evidence.map(evidenceDraft), null, 2),
       multiline: true,
     });
   if ('contested' in conflict)
@@ -819,12 +886,6 @@ function conflictChanges(model: EditorModel, conflict: Entity): FieldChange[] {
       label: 'Contestação',
       draft: model.contested ? 'Sim' : 'Não',
       latest: conflict.contested ? 'Sim' : 'Não',
-    });
-  if ('period' in conflict)
-    changes.push({
-      label: 'Período aproximado',
-      draft: model.approximate ? 'Sim' : 'Não',
-      latest: conflict.period.approximate ? 'Sim' : 'Não',
     });
   return changes;
 }
@@ -867,7 +928,12 @@ function NodeSearchResults({
     queryKey: ['picker', q],
     initialPageParam: null as string | null,
     queryFn: ({ pageParam, signal }) =>
-      api.search(q, { ...defaultFilters, pending: true }, pageParam, signal),
+      api.search(
+        q,
+        { ...defaultFilters, includePending: true },
+        pageParam,
+        signal,
+      ),
     getNextPageParam: (p) => p.nextCursor,
     enabled: !!q,
   });
@@ -889,16 +955,7 @@ function NodeSearchResults({
               checked={value === n.id}
               onChange={() => onChange(n.id)}
             />
-            {n.label} ·{' '}
-            {
-              {
-                person: 'Pessoa',
-                tradition: 'Tradição',
-                concept: 'Conceito',
-                work: 'Obra',
-              }[n.kind]
-            }{' '}
-            · {n.description} · ID {n.id}
+            {n.label} · {kindLabels[n.kind]} · {n.description} · ID {n.id}
           </label>
         ))}
       {q && search.data?.pages[0]?.items.length === 0 && (

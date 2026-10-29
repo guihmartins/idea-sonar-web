@@ -26,24 +26,25 @@ export function elements(
           : '#697c81',
       },
     })),
-    ...relations.map((r) => ({
-      group: 'edges' as const,
-      data: {
-        id: r.id,
-        source: r.sourceId,
-        target: r.targetId,
-        label: catalog.predicates.find((p) => p.id === r.type)?.label ?? r.type,
-        line: {
-          documented: 'solid',
-          attributed_interpretation: 'dashed',
-          inference: 'dotted',
-        }[r.evidenceStatus],
-        width: r.intensity === null ? 1 : r.intensity * 1.5,
-        arrow: catalog.predicates.find((p) => p.id === r.type)?.symmetric
-          ? 'none'
-          : 'triangle',
-        contested: r.contested,
-      },
-    })),
+    ...relations.map((r) => {
+      const type = catalog.relationTypes.find((t) => t.code === r.type);
+      return {
+        group: 'edges' as const,
+        data: {
+          id: r.id,
+          source: r.sourceId,
+          target: r.targetId,
+          label: type?.label ?? r.type,
+          line: {
+            documented: 'solid',
+            attributed_interpretation: 'dashed',
+            inference: 'dotted',
+          }[r.evidenceStatus],
+          width: r.intensity === null ? 1 : r.intensity * 1.5,
+          arrow: type?.symmetric ? 'none' : 'triangle',
+          contested: r.contested,
+        },
+      };
+    }),
   ];
 }

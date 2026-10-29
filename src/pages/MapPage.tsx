@@ -19,15 +19,22 @@ const GraphCanvas = lazy(() =>
 );
 import { emptyLedger, reduceLedger, visible } from '../graph/visibility/ledger';
 import type { Ledger } from '../graph/visibility/ledger';
-import { defaultFilters } from '../api/domain';
+import { defaultFilters, toStoredFilters } from '../api/domain';
 import type {
   Filters,
   Node,
   Relation,
   Catalog,
+  RelationType,
   Source,
   Context,
 } from '../api/domain';
+import {
+  conceptScopeLabels,
+  kindLabels,
+  sourceKindLabels,
+  stanceLabels,
+} from '../components/labels';
 import type { Positions, Viewport } from '../graph/layout/positions';
 import { restoreView } from '../graph/restore';
 import { formatPeriod } from '../components/period';
@@ -120,6 +127,7 @@ function useMapController() {
     void (async () => {
       const {
         view,
+        filters: restoredFilters,
         root,
         ledger: restored,
         partial,
@@ -129,7 +137,7 @@ function useMapController() {
         controller.signal,
         () => latest.current.generation,
       );
-      setFilters(view.filters);
+      setFilters(restoredFilters);
       dispatch({ type: 'root', node: root });
       // Geração do reducer após root corresponde à geração capturada acima.
       for (const [id, page] of Object.entries(restored.expansions))
@@ -251,11 +259,10 @@ function useMapController() {
       await api.save(
         'views',
         {
-          label: viewName.trim(),
-          description: '',
+          name: viewName.trim(),
           status: 'active',
-          root: root.id,
-          filters,
+          rootNodeId: root.id,
+          filters: toStoredFilters(filters),
           expandedNodes: Object.keys(ledger.expansions),
           positions: positionsRef.current,
           viewport: viewportRef.current,
@@ -383,15 +390,7 @@ export const evidenceLabels = {
   attributed_interpretation: 'Interpretação atribuída',
   inference: 'Inferência / hipótese',
 };
-function NodePanel({
-  id,
-  catalog,
-  contexts,
-}: {
-  id: string;
-  catalog: Catalog;
-  contexts: Context[];
-}) {
+function NodePanel({ id, contexts }: { id: string; contexts: Context[] }) {
   const { api } = useServices();
   const query = useQuery({
     queryKey: ['node', id],
@@ -403,13 +402,13 @@ function NodePanel({
   const n = query.data;
   return (
     <>
-      <p className="eyebrow">
-        {catalog.kinds.find((k) => k.id === n.kind)?.label ?? n.kind}
-      </p>
+      <p className="eyebrow">{kindLabels[n.kind]}</p>
       <h2>{n.label}</h2>
       <p>{n.description}</p>
-      {n.aliases.length > 0 && <p>Também chamado: {n.aliases.join(', ')}</p>}
-      {n.conceptScope && <p>Interpretação: {n.conceptScope}</p>}
+      {n.aliases.length > 0 && (
+        <p>Também chamado: {n.aliases.map((a) => a.alias).join(', ')}</p>
+      )}
+      {n.conceptScope && <p>Escopo: {conceptScopeLabels[n.conceptScope]}</p>}
       <p>
         Estado editorial: {editorialLabels[n.status]} · {n.degreeTotal} conexões
         no total
@@ -418,7 +417,7 @@ function NodePanel({
         const c = contexts.find((c) => c.id === id);
         return (
           <p className="badge-light" key={id}>
-            {c?.label ?? id} {c && formatPeriod(c.period)}
+            {c?.label ?? id} {c && formatPeriod(c)}
           </p>
         );
       })}
@@ -439,7 +438,7 @@ function RelationPanel({ id, catalog }: { id: string; catalog: Catalog }) {
   if (query.error)
     return <Failure error={query.error} retry={() => void query.refetch()} />;
   const r: Relation = query.data;
-  const predicate = catalog.predicates.find((p) => p.id === r.type);
+  const predicate = catalog.relationTypes.find((t) => t.code === r.type);
   return (
     <>
       <p className="eyebrow">Relação · {predicate?.label ?? r.type}</p>
@@ -455,21 +454,17 @@ function RelationPanel({ id, catalog }: { id: string; catalog: Catalog }) {
         </p>
       )}
       {r.evidence.map((e, i) => (
-        <div className="evidence" key={`${e.sourceId}-${i}`}>
+        <div className="evidence" key={`${e.sourceId ?? 'sem-fonte'}-${i}`}>
           <p>
-            {
-              {
-                supports: 'Sustenta',
-                challenges: 'Contesta',
-                contextualizes: 'Contextualiza',
-              }[e.role]
-            }{' '}
-            · Fonte {e.sourceRole === 'primary' ? 'primária' : 'secundária'}{' '}
-            para esta afirmação
+            {stanceLabels[e.stance]} · {sourceKindLabels[e.sourceKind]}
           </p>
-          <blockquote>{e.excerpt}</blockquote>
+          {e.excerpt && <blockquote>{e.excerpt}</blockquote>}
           <p>{e.locator}</p>
-          <SourceEvidence id={e.sourceId} />
+          <p>{e.explanation}</p>
+          {e.conversationReference && (
+            <p>Conversa: {e.conversationReference}</p>
+          )}
+          {e.sourceId && <SourceEvidence id={e.sourceId} />}
         </div>
       ))}
       <div className="links">
@@ -489,9 +484,16 @@ function SourceEvidence({ id }: { id: string }) {
   if (query.error)
     return <Failure error={query.error} retry={() => void query.refetch()} />;
   const source = query.data as Source;
+  const reference = source.publicationLabel ?? source.doi;
   return (
     <p>
-      <SafeLink url={source.url}>{source.label}</SafeLink> · {source.author}
+      {source.canonicalUrl ? (
+        <SafeLink url={source.canonicalUrl}>{source.title}</SafeLink>
+      ) : (
+        source.title
+      )}{' '}
+      · {source.authorText}
+      {reference ? ` · ${reference}` : ''}
     </p>
   );
 }
@@ -507,8 +509,9 @@ function ContextEvidence({ id }: { id: string }) {
   const context = query.data as Context;
   return (
     <p>
-      Contexto: {context.label} · {context.region} ·{' '}
-      {formatPeriod(context.period)}
+      Contexto: {context.label}
+      {context.regionLabel ? ` · ${context.regionLabel}` : ''} ·{' '}
+      {formatPeriod(context)}
     </p>
   );
 }
@@ -523,13 +526,16 @@ function FilterControls({ model }: { model: MapModel }) {
           <select
             value={model.filters.kind}
             onChange={(e) =>
-              model.changeFilters({ ...model.filters, kind: e.target.value })
+              model.changeFilters({
+                ...model.filters,
+                kind: e.target.value as Filters['kind'],
+              })
             }
           >
             <option value="">Todos</option>
-            {model.catalog.data?.kinds.map((k) => (
-              <option key={k.id} value={k.id}>
-                {k.label}
+            {model.catalog.data?.nodeKinds.map((k) => (
+              <option key={k} value={k}>
+                {kindLabels[k]}
               </option>
             ))}
           </select>
@@ -537,9 +543,12 @@ function FilterControls({ model }: { model: MapModel }) {
         <label>
           Contexto
           <select
-            value={model.filters.context}
+            value={model.filters.contextId}
             onChange={(e) =>
-              model.changeFilters({ ...model.filters, context: e.target.value })
+              model.changeFilters({
+                ...model.filters,
+                contextId: e.target.value,
+              })
             }
           >
             <option value="">Todos</option>
@@ -554,11 +563,12 @@ function FilterControls({ model }: { model: MapModel }) {
           Ano inicial (astronômico)
           <input
             type="number"
-            value={model.filters.from ?? ''}
+            value={model.filters.startYear ?? ''}
             onChange={(e) =>
               model.changeFilters({
                 ...model.filters,
-                from: e.target.value === '' ? null : Number(e.target.value),
+                startYear:
+                  e.target.value === '' ? null : Number(e.target.value),
               })
             }
           />
@@ -567,11 +577,11 @@ function FilterControls({ model }: { model: MapModel }) {
           Ano final (astronômico)
           <input
             type="number"
-            value={model.filters.to ?? ''}
+            value={model.filters.endYear ?? ''}
             onChange={(e) =>
               model.changeFilters({
                 ...model.filters,
-                to: e.target.value === '' ? null : Number(e.target.value),
+                endYear: e.target.value === '' ? null : Number(e.target.value),
               })
             }
           />
@@ -579,11 +589,11 @@ function FilterControls({ model }: { model: MapModel }) {
         <label className="check">
           <input
             type="checkbox"
-            checked={model.filters.unknown}
+            checked={model.filters.includeUnknownPeriod}
             onChange={(e) =>
               model.changeFilters({
                 ...model.filters,
-                unknown: e.target.checked,
+                includeUnknownPeriod: e.target.checked,
               })
             }
           />
@@ -592,11 +602,11 @@ function FilterControls({ model }: { model: MapModel }) {
         <label className="check">
           <input
             type="checkbox"
-            checked={model.filters.pending}
+            checked={model.filters.includePending}
             onChange={(e) =>
               model.changeFilters({
                 ...model.filters,
-                pending: e.target.checked,
+                includePending: e.target.checked,
               })
             }
           />
@@ -629,9 +639,7 @@ function SearchResults({ model }: { model: MapModel }) {
           >
             <strong>{n.label}</strong>
             <small>
-              {model.catalog.data?.kinds.find((k) => k.id === n.kind)?.label ??
-                n.kind}{' '}
-              · {n.description}
+              {kindLabels[n.kind]} · {n.description}
             </small>
             <small>ID: {n.id}</small>
           </button>
@@ -725,7 +733,8 @@ function MapDisplay({ model, catalog }: { model: MapModel; catalog: Catalog }) {
               }}
             >
               {model.data.nodes.find((n) => n.id === r.sourceId)?.label} —{' '}
-              {catalog.predicates.find((p) => p.id === r.type)?.label ?? r.type}{' '}
+              {catalog.relationTypes.find((t) => t.code === r.type)?.label ??
+                r.type}{' '}
               — {model.data.nodes.find((n) => n.id === r.targetId)?.label} (
               {evidenceLabels[r.evidenceStatus]})
               {r.contested ? ' · Contestada' : ''}
@@ -775,7 +784,6 @@ function MapDetails({ model, catalog }: { model: MapModel; catalog: Catalog }) {
         ) : (
           <NodePanel
             id={model.selection.id}
-            catalog={catalog}
             contexts={model.contexts.data ?? []}
           />
         )}
@@ -923,22 +931,29 @@ function RelationMetadata({
   predicate,
 }: {
   r: Relation;
-  predicate: Catalog['predicates'][number] | undefined;
+  predicate: RelationType | undefined;
 }) {
   return (
     <>
       {' '}
       <p>Estado editorial: {editorialLabels[r.status]}</p>
       <p>
-        Intensidade: {r.intensity ?? 'Não avaliada'} · {r.intensityReason}
+        Intensidade: {r.intensity ?? 'Não avaliada'}
+        {r.intensityReason ? ` · ${r.intensityReason}` : ''}
       </p>
-      <p>Atribuição: {r.attribution || 'Não informada'}</p>
-      <p>
-        {predicate?.symmetric
-          ? 'Relação simétrica'
-          : `Direção: ${r.sourceId} → ${r.targetId}. ${predicate?.inverse ?? ''}`}
-      </p>
-      {r.context && <ContextEvidence id={r.context} />}
+      <p>Atribuição: {relationAttribution(r)}</p>
+      {r.contested && r.contestationNote && (
+        <p>Contestação: {r.contestationNote}</p>
+      )}
+      <p>{relationDirection(r, predicate)}</p>
+      {r.contextId && <ContextEvidence id={r.contextId} />}
     </>
   );
+}
+function relationAttribution(r: Relation) {
+  return r.attributionText ?? r.inferenceAuthor ?? 'Não informada';
+}
+function relationDirection(r: Relation, predicate: RelationType | undefined) {
+  if (predicate?.symmetric) return 'Relação simétrica';
+  return `Direção: ${r.sourceId} → ${r.targetId}. ${predicate?.inverseLabel ?? ''}`;
 }

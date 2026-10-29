@@ -2,9 +2,9 @@
 
 ## Situação
 
-Em 24/10/2026 o caminho oficial retornou 404; nova consulta da árvore de `main` encontrou apenas `PLAN.md`. `contracts/source.json` permanece `pending`. Não existe OpenAPI ou cliente **oficial** inventado neste repositório. Smoke real pendente.
+Em 29/10/2026 foi importado o snapshot de `contracts/openapi.json` da API (commit `d0119459e99e806fb0c55d1a1df33643099e0f3c`, `info.version` 1.0.0). `contracts/source.json` registra origem, commit e SHA-256; `src/api/generated/` contém tipos e cliente gerados.
 
-`src/api/domain.ts` é modelo de apresentação validado por Zod. `src/api/adapter.ts` usa provisoriamente as rotas/formatos de referência do PLAN. Respostas incompatíveis mostram erro explícito; produção nunca troca para mocks. Isso permite implementar e testar o frontend antes da API, sem alegar que o protocolo de rede está confirmado.
+`src/api/domain.ts` valida por Zod os formatos de resposta do contrato; o tipo `ContractCheck` falha a compilação se o modelo divergir dos tipos gerados. `src/api/adapter.ts` usa as rotas, filtros (`contextId`, `includePending`, `startYear`, `endYear`, `includeUnknownPeriod`), `If-Match` com a versão inteira e os corpos de undo/resolve do contrato. Respostas fora do contrato mostram erro explícito; produção nunca troca para mocks.
 
 ## Importar versão publicada
 

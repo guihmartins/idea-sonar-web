@@ -1,5 +1,5 @@
-// Adapter HTTP TEMPORÁRIO baseado nas rotas de referência do PLAN.md.
-// Substituir mapeamento/DTOs pelo cliente gerado quando o snapshot for publicado.
+// Cliente HTTP da API: rotas e formatos conforme contracts/openapi.json; cada
+// resposta é validada pelos schemas de domain.ts.
 import { z } from 'zod';
 import {
   catalogSchema,
@@ -10,11 +10,15 @@ import {
   contextSchema,
   viewSchema,
   pendingSchema,
-  importSchema,
+  importSummarySchema,
+  importDetailSchema,
+  undoResultSchema,
+  resolveResultSchema,
   historySchema,
+  identitySchema,
   pageSchema,
 } from './domain';
-import type { EntityType, Filters, Entity } from './domain';
+import type { EntityType, Filters, Entity, PendingItem } from './domain';
 import type { RequestOptions, Transport } from './client';
 const entitySchemas = {
   nodes: nodeSchema,
@@ -23,6 +27,7 @@ const entitySchemas = {
   contexts: contextSchema,
   views: viewSchema,
 };
+export type CandidateType = 'nodes' | 'sources' | 'contexts';
 function query(
   values: Record<string, string | number | boolean | null | undefined>,
 ): string {
@@ -32,6 +37,7 @@ function query(
       params.set(key, String(value));
   return params.size ? `?${params}` : '';
 }
+const withSignal = (signal?: AbortSignal) => (signal ? { signal } : {});
 export function createApi(send: Transport) {
   async function read<T>(
     schema: z.ZodType<T>,
@@ -42,14 +48,14 @@ export function createApi(send: Transport) {
     const parsed = schema.safeParse(data);
     if (!parsed.success)
       throw new Error(
-        'Resposta incompatível com o adapter provisório. É necessário alinhar o contrato publicado pela API.',
+        'Resposta da API fora do contrato esperado. Confira se API e frontend usam o mesmo snapshot OpenAPI.',
       );
     return parsed.data;
   }
   return {
-    me: () => read(z.object({ id: z.string(), name: z.string() }), '/me'),
+    me: () => read(identitySchema, '/me'),
     catalog: (signal?: AbortSignal) =>
-      read(catalogSchema, '/catalog', signal ? { signal } : {}),
+      read(catalogSchema, '/catalog', withSignal(signal)),
     search: (
       q: string,
       filters: Filters,
@@ -61,17 +67,19 @@ export function createApi(send: Transport) {
         `/nodes${query({ q, ...filters, cursor, limit: 50 })}`,
         { signal },
       ),
-    node: (id: string, signal?: AbortSignal) =>
+    candidates: (type: CandidateType, q: string, signal?: AbortSignal) =>
       read(
-        nodeSchema,
-        `/nodes/${encodeURIComponent(id)}`,
-        signal ? { signal } : {},
+        pageSchema(entitySchemas[type]),
+        `/${type}${query({ q, includePending: true, limit: 20 })}`,
+        withSignal(signal),
       ),
+    node: (id: string, signal?: AbortSignal) =>
+      read(nodeSchema, `/nodes/${encodeURIComponent(id)}`, withSignal(signal)),
     relation: (id: string, signal?: AbortSignal) =>
       read(
         relationSchema,
         `/relations/${encodeURIComponent(id)}`,
-        signal ? { signal } : {},
+        withSignal(signal),
       ),
     neighbors: (
       id: string,
@@ -88,13 +96,13 @@ export function createApi(send: Transport) {
       read(
         pageSchema(entitySchemas[type]),
         `/${type}${query({ cursor, limit: 50 })}`,
-        signal ? { signal } : {},
+        withSignal(signal),
       ),
     detail: (type: EntityType, id: string, signal?: AbortSignal) =>
       read<Entity>(
         entitySchemas[type],
         `/${type}/${encodeURIComponent(id)}`,
-        signal ? { signal } : {},
+        withSignal(signal),
       ),
     save: (type: EntityType, body: unknown, key: string, entity?: Entity) =>
       read<Entity>(
@@ -103,23 +111,27 @@ export function createApi(send: Transport) {
         {
           method: entity ? 'PATCH' : 'POST',
           body,
-          ...(entity ? { version: entity.version } : { idempotencyKey: key }),
+          ...(entity
+            ? { version: String(entity.version) }
+            : { idempotencyKey: key }),
         },
       ),
     imports: (cursor: string | null, signal: AbortSignal) =>
       read(
-        pageSchema(importSchema),
+        pageSchema(importSummarySchema),
         `/imports${query({ cursor, limit: 50 })}`,
         { signal },
       ),
     import: (id: string, signal: AbortSignal) =>
-      read(importSchema, `/imports/${encodeURIComponent(id)}`, { signal }),
-    undo: (id: string, key: string) =>
-      read(
-        z.object({ message: z.string(), conflicts: z.array(z.string()) }),
-        `/imports/${encodeURIComponent(id)}/undo`,
-        { method: 'POST', idempotencyKey: key },
-      ),
+      read(importDetailSchema, `/imports/${encodeURIComponent(id)}`, {
+        signal,
+      }),
+    undo: (id: string, expectedVersion: number, reason: string, key: string) =>
+      read(undoResultSchema, `/imports/${encodeURIComponent(id)}/undo`, {
+        method: 'POST',
+        body: { expectedVersion, reason },
+        idempotencyKey: key,
+      }),
     pending: (cursor: string | null, signal: AbortSignal) =>
       read(
         pageSchema(pendingSchema),
@@ -127,16 +139,24 @@ export function createApi(send: Transport) {
         { signal },
       ),
     resolve: (
-      id: string,
-      resolution: string,
-      candidateId: string,
+      item: PendingItem,
+      entityId: string,
+      reason: string,
       key: string,
     ) =>
-      send(`/pending/${encodeURIComponent(id)}/resolve`, {
-        method: 'POST',
-        body: { resolution, candidateId },
-        idempotencyKey: key,
-      }),
+      read(
+        resolveResultSchema,
+        `/pending/${encodeURIComponent(item.id)}/resolve`,
+        {
+          method: 'POST',
+          body: {
+            expectedVersion: item.batchVersion,
+            reason,
+            selection: { entityId },
+          },
+          idempotencyKey: key,
+        },
+      ),
     history: (
       type: 'nodes' | 'relations',
       id: string,

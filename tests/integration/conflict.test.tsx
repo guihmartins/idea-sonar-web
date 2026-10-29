@@ -14,17 +14,23 @@ it('preserva rascunho no 409 e exige comparação antes de PATCH com versão atu
   await services.session.login();
   const original: Source = {
     id: ids.source,
-    label: 'Fonte',
-    description: 'Descrição inicial',
-    author: 'Autoria fictícia',
-    url: '',
+    title: 'Fonte',
+    authorText: 'Autoria fictícia',
+    canonicalUrl: 'https://example.com/fonte',
+    workNodeId: null,
+    publicationLabel: null,
+    doi: null,
+    accessedAt: null,
+    notes: 'Notas iniciais',
     status: 'active',
-    version: '"1"',
+    version: 1,
+    createdAt: '2026-10-24T12:00:00.000Z',
+    updatedAt: '2026-10-24T12:00:00.000Z',
   };
   const current: Source = {
     ...original,
-    description: 'Editado em outra sessão',
-    version: '"2"',
+    notes: 'Editado em outra sessão',
+    version: 2,
   };
   vi.spyOn(services.api, 'detail')
     .mockResolvedValueOnce(original)
@@ -34,8 +40,8 @@ it('preserva rascunho no 409 e exige comparação antes de PATCH com versão atu
     .mockRejectedValueOnce(new ApiError(409, 'Conflito'))
     .mockResolvedValue({
       ...current,
-      description: 'Meu rascunho',
-      version: '"3"',
+      notes: 'Meu rascunho',
+      version: 3,
     });
   render(
     <QueryClientProvider client={createQueryClient()}>
@@ -50,7 +56,7 @@ it('preserva rascunho no 409 e exige comparação antes de PATCH com versão atu
   );
   const user = userEvent.setup();
   const description = await screen.findByRole('textbox', {
-    name: 'Descrição',
+    name: 'Notas',
   });
   await user.clear(description);
   await user.type(description, 'Meu rascunho');
@@ -73,5 +79,5 @@ it('preserva rascunho no 409 e exige comparação antes de PATCH com versão atu
   expect(await screen.findByRole('status')).toHaveTextContent(
     'Registro salvo.',
   );
-  expect(save.mock.calls[1]?.[3]?.version).toBe('"2"');
+  expect(save.mock.calls[1]?.[3]?.version).toBe(2);
 });

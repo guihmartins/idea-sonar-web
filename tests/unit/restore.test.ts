@@ -9,12 +9,13 @@ async function setup() {
   await session.login();
   const view: SavedView = {
     id: 'view',
-    label: 'View sintética',
-    description: '',
-    version: '1',
+    name: 'View sintética',
+    version: 1,
+    createdAt: '2026-10-24T12:00:00.000Z',
+    updatedAt: '2026-10-24T12:00:00.000Z',
     status: 'active',
-    root: ids.jung,
-    filters: defaultFilters,
+    rootNodeId: ids.jung,
+    filters: {},
     expandedNodes: [ids.jung],
     positions: {},
     viewport: { zoom: 1, pan: { x: 0, y: 0 } },
