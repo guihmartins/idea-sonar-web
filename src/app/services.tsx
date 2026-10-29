@@ -31,7 +31,10 @@ export function SessionGate({ children }: { children: ReactNode }) {
   if (!session)
     return (
       <>
-        <div className="session-bar">Acesso sem login (temporário)</div>
+        <div className="session-bar">
+          <span className="marker" aria-hidden="true" />
+          Acesso sem login (temporário)
+        </div>
         {location.pathname === '/callback' ? (
           <Navigate to="/map" replace />
         ) : (
@@ -108,7 +111,6 @@ function AuthenticatedGate({
   if (state !== 'ready')
     return (
       <main id="conteudo" tabIndex={-1} className="login-card">
-        <p className="eyebrow">Idea Sonar</p>
         <h1>
           {state === 'denied' ? 'Acesso negado' : 'Seu mapa pessoal de ideias'}
         </h1>
@@ -116,6 +118,7 @@ function AuthenticatedGate({
         {message && <p role="alert">{message}</p>}
         {state === 'login' && (
           <button
+            className="primary"
             onClick={() => {
               void session
                 .login()

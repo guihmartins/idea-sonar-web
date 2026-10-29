@@ -31,7 +31,8 @@ export function App() {
       </a>
       <header className="header">
         <Link className="brand" to="/map">
-          <span aria-hidden="true">◉</span> Idea Sonar
+          <span className="brand-mark" aria-hidden="true" />
+          Idea Sonar
         </Link>
         <span className="badge">Conhecimento em perspectiva</span>
       </header>
