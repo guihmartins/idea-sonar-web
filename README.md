@@ -21,7 +21,7 @@ Para reativar: `VITE_AUTH_MODE=oidc`, configurar as três variáveis OIDC e reco
 
 ## Executar
 
-Node **24.19.0** (`nvm use`) e npm **11.9.0**. Se o Node instalado trouxer outro npm, instale `npm@11.9.0`. TypeScript 5.9.3 é compatível com o gerador OpenAPI escolhido. Lockfile e versões exatas são próprios.
+Node **24.19.0** (`nvm use`) e npm **11.9.0** são as versões de referência (CI/Docker); `engines` aceita Node 24.x a partir de 24.19.0 e npm >= 11.9.0. TypeScript 5.9.3 é compatível com o gerador OpenAPI escolhido. Lockfile e versões exatas são próprios.
 
 ```sh
 npm ci
@@ -51,7 +51,7 @@ VITE_OIDC_CLIENT_ID=public-spa-client-id
 VITE_OIDC_AUDIENCE=https://api.example.com
 ```
 
-Os exemplos não representam serviços configurados. `VITE_API_BASE_URL` é obrigatória e aceita somente origem absoluta: sem `/api/v1`, outros caminhos, credenciais, query ou fragmento. O cliente acrescenta `/api/v1` uma vez. HTTP apenas em localhost/127.0.0.1 no desenvolvimento; **todo build exige HTTPS**, inclusive `--mode development`. Parser compartilhado por Vite e app. Alterar valores exige rebuild/deploy.
+Os exemplos não representam serviços configurados. `VITE_API_BASE_URL` é obrigatória e aceita somente origem absoluta: sem `/api/v1`, outros caminhos, credenciais, query ou fragmento. O cliente acrescenta `/api/v1` uma vez. HTTP é aceito em desenvolvimento e em build (ambiente local e Docker sem TLS); em produção informe a URL `https` do proxy que termina o TLS (ex.: certbot na EC2). O issuer OIDC continua exigindo HTTPS em build. Parser compartilhado por Vite e app. Alterar valores exige rebuild/deploy.
 
 Todos os `VITE_*` são públicos. Nunca use token, senha, `client_secret`, credencial AWS ou banco nesses valores. Não existe configuração runtime, proxy obrigatório ou dependência do backend para servir `dist`. CORS é configurado na API externa.
 

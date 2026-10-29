@@ -21,18 +21,21 @@ function required(input: EnvironmentInput, key: string): string {
   return value;
 }
 
+function absoluteUrl(value: string, key: string): URL {
+  try {
+    return new URL(value);
+  } catch {
+    throw new Error(`${key}: use uma URL absoluta HTTP(S).`);
+  }
+}
+
 function publicUrl(
   input: EnvironmentInput,
   key: string,
   development: boolean,
 ): URL {
   const value = required(input, key);
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new Error(`${key}: use uma URL absoluta HTTP(S).`);
-  }
+  const url = absoluteUrl(value, key);
   const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
   if (
     url.protocol !== 'https:' &&
@@ -42,6 +45,17 @@ function publicUrl(
       `${key}: HTTPS obrigatório; HTTP somente em localhost/127.0.0.1 no desenvolvimento.`,
     );
   }
+  validateUrlSyntax(url, value, key);
+  return url;
+}
+// HTTP é aceito também em build: local e Docker não têm TLS, e em produção o
+// TLS pode terminar num proxy (ex.: certbot na EC2) com a URL https informada.
+function apiUrl(input: EnvironmentInput): URL {
+  const key = 'VITE_API_BASE_URL';
+  const value = required(input, key);
+  const url = absoluteUrl(value, key);
+  if (url.protocol !== 'https:' && url.protocol !== 'http:')
+    throw new Error(`${key}: use http:// ou https://.`);
   validateUrlSyntax(url, value, key);
   return url;
 }
@@ -69,7 +83,7 @@ export function parseEnvironment(
     input['VITE_ENABLE_FIXTURES'] !== 'false'
   )
     throw new Error('VITE_ENABLE_FIXTURES: fixtures proibidas em builds.');
-  const api = publicUrl(input, 'VITE_API_BASE_URL', development);
+  const api = apiUrl(input);
   const rawApi = required(input, 'VITE_API_BASE_URL');
   if (!/^https?:\/\/[^/]+\/?$/u.test(rawApi) || api.pathname !== '/') {
     throw new Error(

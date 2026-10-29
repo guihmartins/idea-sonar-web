@@ -47,10 +47,8 @@ describe('configuração pública', () => {
     '/api',
     'api.example.com',
     'ftp://api.example.com',
-    'http://api.example.com',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
     'https://user:password@api.example.com',
+    'http://user:password@localhost:3000',
     'https://@api.example.com',
     'https://api.example.com/api/v1',
     'https://api.example.com/../',
@@ -65,21 +63,19 @@ describe('configuração pública', () => {
       parseEnvironment({ ...valid, VITE_API_BASE_URL: url }, false),
     ).toThrow('VITE_API_BASE_URL');
   });
-  it.each(['http://localhost:3000/', 'http://127.0.0.1:3000/'])(
-    'permite HTTP local somente em desenvolvimento: %s',
-    (url) => {
-      expect(
-        parseEnvironment({ ...valid, VITE_API_BASE_URL: url }, true).apiBaseUrl,
-      ).toBe(url.slice(0, -1));
-    },
-  );
-  it('não permite HTTP remoto em desenvolvimento', () => {
-    expect(() =>
-      parseEnvironment(
-        { ...valid, VITE_API_BASE_URL: 'http://api.example.com' },
-        true,
-      ),
-    ).toThrow('HTTPS');
+  it.each([
+    ['http://localhost:3000/', true],
+    ['http://127.0.0.1:3000/', false],
+    ['http://localhost:3000/', false],
+    ['http://api.example.com/', false],
+    ['http://api.example.com/', true],
+  ])('permite HTTP na API (TLS fora da aplicação): %s dev=%s', (url, dev) => {
+    expect(
+      parseEnvironment({ ...valid, VITE_API_BASE_URL: url }, dev),
+    ).toMatchObject({
+      apiBaseUrl: url.slice(0, -1),
+      apiV1Url: `${url.slice(0, -1)}/api/v1`,
+    });
   });
   it.each(['VITE_OIDC_ISSUER', 'VITE_OIDC_CLIENT_ID', 'VITE_OIDC_AUDIENCE'])(
     'exige configuração OIDC: %s',

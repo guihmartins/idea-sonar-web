@@ -87,3 +87,10 @@
 - O relatório de mutação de 91,34% permanece histórico, anterior a esta refatoração, e não representa uma nova execução. O usuário fará a próxima rodada manualmente. Modo sem token e escopo exclusivo do frontend preservados.
 
 - Validação final: lint sem erros/warnings, TypeScript estrito, 141 testes unitários/de integração, 16 E2E desktop/celular (incluindo acessibilidade e fluxos completos) e build aprovados. Auditoria via ESLint encontrou 432 funções em src, máximo 10 e zero acima do limite. Nenhuma execução do Stryker nesta alteração.
+
+## 2026-10-29 — HTTP permitido na URL da API, engines e correções de revisão
+
+- Solicitado pelo usuário: rodar localmente e em Docker sem HTTPS; TLS será configurado depois (certbot na EC2). `VITE_API_BASE_URL` passa a aceitar `http:` e `https:` em dev e em build, mantendo as demais restrições (somente origem, sem credenciais/query/fragmento). Issuer OIDC continua exigindo HTTPS em build.
+- `engines` relaxado para Node `>=24.19.0 <25` e npm `>=11.9.0` (igual à API); 24.19.0/11.9.0 seguem como referência em `.nvmrc`, Docker e CI.
+- Auth0: `domain` sem barra final; o SDK monta `${domain}/authorize` e o issuer esperado `${domain}/`.
+- nginx: headers de segurança repetidos nos `location` com `add_header` próprio (a herança do bloco `server` era descartada).

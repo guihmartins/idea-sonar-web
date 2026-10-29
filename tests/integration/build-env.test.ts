@@ -27,16 +27,10 @@ describe('validação na entrada real do Vite', () => {
       nodeEnv: 'production',
     },
     {
-      label: 'HTTP com mode development',
-      api: 'http://localhost:3000',
-      args: ['--mode', 'development'],
-      nodeEnv: 'production',
-    },
-    {
-      label: 'HTTP com NODE_ENV development',
-      api: 'http://localhost:3000',
+      label: 'protocolo não HTTP',
+      api: 'ftp://api.example.com',
       args: [],
-      nodeEnv: 'development',
+      nodeEnv: 'production',
     },
   ])('bloqueia $label antes de emitir bundle', ({ api, args, nodeEnv }) => {
     const result = spawnSync(process.execPath, [vite, 'build', ...args], {
