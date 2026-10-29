@@ -87,7 +87,7 @@ it('valida modo/configuração antes de inicializar SDK', () => {
 it('delega login e estado real da sessão, validando o access token retornado', async () => {
   const session = createSession(config);
   expect(sdk.init).toHaveBeenCalledWith({
-    domain: 'https://identity.example.com/',
+    domain: 'https://identity.example.com',
     clientId: 'public-spa',
     cacheLocation: 'memory',
     useRefreshTokens: false,

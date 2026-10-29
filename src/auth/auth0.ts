@@ -5,7 +5,8 @@ export function createSession(config: AppConfig): Session {
   if (config.authMode !== 'oidc' || !config.oidc)
     throw new Error('OIDC não configurado.');
   const client = new Auth0Client({
-    domain: config.oidc.issuer,
+    // O SDK monta `${domain}/authorize` e espera o issuer `${domain}/`.
+    domain: config.oidc.issuer.replace(/\/+$/u, ''),
     clientId: config.oidc.clientId,
     cacheLocation: 'memory',
     useRefreshTokens: false,
