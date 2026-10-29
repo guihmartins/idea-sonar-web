@@ -3,6 +3,7 @@ import {
   contestedColor,
   edgeColor,
   highlightColor,
+  neighborColor,
   labelColor,
 } from './palette';
 export const graphStyle: StylesheetJson = [
@@ -49,7 +50,7 @@ export const graphStyle: StylesheetJson = [
   },
   {
     selector: '.neighbor',
-    style: { 'border-width': 2, 'border-color': highlightColor },
+    style: { 'border-width': 1, 'border-color': neighborColor },
   },
   {
     selector: 'edge[?contested]',

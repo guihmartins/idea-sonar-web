@@ -529,6 +529,9 @@ function NodeFields({ model }: { model: EditorModel }) {
       )}
       <fieldset>
         <legend>Contextos</legend>
+        {model.options.data?.contexts.length === 0 && (
+          <p className="muted">Nenhum contexto cadastrado.</p>
+        )}
         {model.options.data?.contexts.map((c) => (
           <label className="check" key={c.id}>
             <input

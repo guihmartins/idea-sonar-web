@@ -46,6 +46,10 @@ export function GraphCanvas({
       maxZoom: 3,
     });
     core.current = cy;
+    // O canvas não redesenha sozinho quando a fonte dos rótulos termina de carregar.
+    void document.fonts?.ready.then(() => {
+      if (!cy.destroyed()) cy.style().update();
+    });
     appliedPositions.current = null;
     const snapshot = () => {
       const positions: Positions = {};

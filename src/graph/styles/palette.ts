@@ -5,3 +5,4 @@ export const edgeColor = '#6d7a64';
 export const contestedColor = '#f08a9b';
 export const highlightColor = '#e76732';
 export const labelColor = '#dfe5d8';
+export const neighborColor = '#c3cabc';
