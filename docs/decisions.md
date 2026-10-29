@@ -103,3 +103,11 @@
 - Editor segue as regras da API (justificativa obrigatória, evidência de suporte com fonte, atribuição/autoria conforme a classificação, contestação com evidências a favor e contra; tipo e escopo de ponto imutáveis após criar).
 - Mensagem de erro da API é exibida quando o status não tem mensagem própria.
 - Validação: lint, typecheck, Vitest, E2E com fixtures (desktop/mobile, axe) e smoke contra a API real em Docker e nativo (modo sem token).
+
+## 2026-10-29 — Novo sistema visual (Impeccable)
+
+- Identidade visual redesenhada com a skill Impeccable 4.8.0 (modo Operate): papel claro `#f7f7f2`, tinta `#252920`, destaque laranja, DM Sans para interface e IBM Plex Mono para metadado. `PRODUCT.md` e `DESIGN.md` na raiz passam a ser a referência; tema claro apenas.
+- Acessibilidade: branco sobre `#e76732` dá ~3,3:1, então o botão primário e os links usam `#bb431d` (~5,3:1) e o laranja fica restrito a marcadores, foco e destaques do grafo. Bordas laterais coloridas e kicker acima de títulos de página foram removidos.
+- Fontes self-hosted via `@fontsource-variable/dm-sans` 5.3.0 e `@fontsource/ibm-plex-mono` 5.3.0 (pesos 400 e 500), sem CDN: o app lida com dados privados, roda offline em Docker e usa `no-referrer`. Versões exatas, publicadas há mais de duas semanas, sem `engines`/peers.
+- O mapa virou uma janela escura `#20271f` (barra de título com raiz e contagem, controles segmentados com `aria-pressed`, grade pontilhada, painel de detalhes e legenda em rodapé). Cores do grafo centralizadas em `src/graph/styles/palette.ts`, usadas pelo adapter, pela legenda e pelos testes.
+- Apenas apresentação: contrato, `src/api`, payloads, visibilidade e restauração não mudaram. Nomes acessíveis, papéis e a classe `.graph-list` foram preservados.
