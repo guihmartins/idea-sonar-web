@@ -107,10 +107,15 @@ function errorDetails(payload: unknown) {
       : null;
   return error && typeof error === 'object' ? error : {};
 }
+function apiMessage(details: object): string | undefined {
+  const message = 'message' in details ? details.message : undefined;
+  return typeof message === 'string' && message.trim() ? message : undefined;
+}
 function responseMessage(
   status: number,
   authenticated: boolean,
   seconds: number,
+  fromApi?: string,
 ) {
   if (status === 401)
     return authenticated
@@ -123,7 +128,7 @@ function responseMessage(
     409: 'O registro mudou. Compare a versão atual antes de editar novamente.',
     412: 'O registro mudou. Compare a versão atual antes de editar novamente.',
   };
-  return messages[status] ?? 'Não foi possível concluir a operação.';
+  return messages[status] ?? fromApi ?? 'Não foi possível concluir a operação.';
 }
 async function parseResponse(
   response: Response,
@@ -132,14 +137,16 @@ async function parseResponse(
 ) {
   const payload: unknown =
     response.status === 204 ? null : await response.json().catch(() => null);
-  if (!response.ok)
+  if (!response.ok) {
+    const details = errorDetails(payload);
     throw new ApiError(
       response.status,
-      responseMessage(response.status, !!session, seconds),
-      errorDetails(payload),
+      responseMessage(response.status, !!session, seconds, apiMessage(details)),
+      details,
       response.headers.get('X-Request-Id') ?? '',
       seconds,
     );
+  }
   return payload;
 }
 interface RetryState {

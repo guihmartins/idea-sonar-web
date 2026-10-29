@@ -252,6 +252,20 @@ describe('integridade, cancelamento e erros do transporte', () => {
       requestId: '',
     });
   });
+  it('usa a mensagem da API quando o status não tem mensagem própria', async () => {
+    const { send } = setup([
+      new Response(
+        JSON.stringify({
+          error: { code: 'CONTEXT_REQUIRED', message: 'Contexto obrigatório' },
+        }),
+        { status: 422 },
+      ),
+    ]);
+    await expect(send('/catalog')).rejects.toMatchObject({
+      status: 422,
+      message: 'Contexto obrigatório',
+    });
+  });
   it('um 403 é exibido sem tratar como sessão expirada', async () => {
     const { send } = setup([new Response('{}', { status: 403 })]);
     await expect(send('/me')).rejects.toMatchObject({
