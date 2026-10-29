@@ -23,5 +23,11 @@ for route in /assets/missing.js /missing.css /unknown /map/missing.js; do
   test "$code" = 404
   echo "OK 404 $route"
 done
+for route in / /map /index.html; do
+  headers=$(curl -sI "$base$route")
+  echo "$headers" | grep -qi '^x-content-type-options: nosniff'
+  echo "$headers" | grep -qi '^referrer-policy: no-referrer'
+  echo "OK headers de segurança $route"
+done
 test "$(docker exec "$container" id -u)" != 0
 echo 'OK runtime não root, sem backend, filesystem read-only'
