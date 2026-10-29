@@ -1,12 +1,8 @@
 {
-  "status": "pending",
+  "status": "available",
   "repository": "guihmartins/idea-sonar-api",
   "path": "contracts/openapi.json",
-  "checkedRef": "main",
-  "checkedAt": "2026-10-24",
-  "result": "OpenAPI ausente na árvore main consultada; somente PLAN.md publicado. Integração oficial pendente.",
-  "commit": null,
-  "infoVersion": null,
-  "sha256": null,
-  "checkedTree": "b50cf3f50cc865a6f35fba56f8400135fbe7bb64"
+  "commit": "d0119459e99e806fb0c55d1a1df33643099e0f3c",
+  "infoVersion": "1.0.0",
+  "sha256": "dac56ea36d284d4141f7709222a3e4ffe8094ff2d45248c222d006c34e818f49"
 }

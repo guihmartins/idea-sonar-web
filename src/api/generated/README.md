@@ -1,1 +1,1 @@
-Reservado ao cliente gerado de snapshot oficial versionado. Sem arquivos gerados enquanto o contrato estiver indisponível. Nunca editar gerados manualmente.
+Gerado por `npm run contracts:generate` a partir do snapshot identificado em `contracts/source.json` (`schema.ts` com openapi-typescript, `client.ts` com openapi-fetch). `npm run contracts:check` (também no build) falha se divergir. Nunca editar manualmente.
