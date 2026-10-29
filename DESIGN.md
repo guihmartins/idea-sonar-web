@@ -39,6 +39,21 @@ typography:
     fontSize: '16px'
     fontWeight: 400
     lineHeight: 1.6
+  meta:
+    fontFamily: 'IBM Plex Mono, ui-monospace, monospace'
+    fontSize: '12px'
+    fontWeight: 400
+    lineHeight: 1.6
+  small:
+    fontFamily: 'DM Sans Variable, system-ui, sans-serif'
+    fontSize: '14px'
+    fontWeight: 400
+    lineHeight: 1.6
+  title:
+    fontFamily: 'DM Sans Variable, system-ui, sans-serif'
+    fontSize: '18px'
+    fontWeight: 600
+    lineHeight: 1.4
   label:
     fontFamily: 'IBM Plex Mono, ui-monospace, monospace'
     fontSize: '11px'
@@ -90,13 +105,14 @@ superfície escura, tratada como uma janela de instrumento.
 - **Papel (#f7f7f2) e tinta (#252920)** formam a base; `muted` (#646959) é o texto secundário e passa AA sobre papel e `hover`.
 - **Laranja `accent` (#e76732)** só para o que não é texto: marcadores quadrados, anel de foco de 2px, sublinhados, destaques do grafo. Texto branco sobre ele reprova (3,3:1).
 - **`accent-strong` (#bb431d)** é o fundo do botão primário (branco 5,3:1) e a cor de link; hover `accent-deep` (#9e3818).
+- **Tons de apoio**: `accent-tint`/`accent-tint-line` (selo), `success-line`, `error-line`, `warning-line` (contornos das caixas de estado) e `dark-control-line` (borda dos controles no painel escuro).
 - **Estados** dentro da paleta: sucesso verde, erro ferrugem, aviso âmbar, cada um com fundo claro e texto AA.
 - **Painel escuro**: `dark` #20271f, bordas #323b2f, divisórias #ffffff13, texto #e9eee4 / #c3cabc, apoio #9aa68f, verde #b9d99b para links e estado ativo, rosa #f08a9b para contestação.
 - **Grafo**: contextos #b9d99b, #f0a074, #8fb8e8, #b8a4e0; neutro #7b8772; arestas #6d7a64; seleção #e76732; contestada #f08a9b. Todos ≥3:1 sobre o painel.
 
 ## Typography
 
-DM Sans Variável, pesos 400 a 650. `h1` 550 com `clamp(28px,3vw,40px)` e tracking -0.035em; `h2` 600. Etiquetas em IBM Plex Mono 11px maiúsculas, tracking ~0,145em, com marcador quadrado laranja de 6px. Corpo com medida máxima de 72ch. Fontes servidas pelo bundle (`@fontsource*`), nunca por CDN.
+DM Sans Variável, pesos 400 a 650. Escala fixa em custom properties: `--text-xs` 12px (mono/meta), `--text-sm` 14px (UI pequena), 16px (corpo), `--text-lg` 18px (h2/h3 e títulos de linha), mais o `clamp` do h1 e o rótulo de 11px. `h1` 550 com `clamp(28px,3vw,40px)` e tracking -0.035em; `h2` 600. Etiquetas em IBM Plex Mono 11px maiúsculas, tracking ~0,145em, com marcador quadrado laranja de 6px. Corpo com medida máxima de 72ch. Fontes servidas pelo bundle (`@fontsource*`), nunca por CDN.
 
 ## Layout
 
