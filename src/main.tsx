@@ -9,6 +9,9 @@ import type { Services } from './app/services';
 import { createTransport } from './api/client';
 import { createApi } from './api/adapter';
 import { env } from './config/env';
+import '@fontsource-variable/dm-sans';
+import '@fontsource/ibm-plex-mono/400.css';
+import '@fontsource/ibm-plex-mono/500.css';
 import './app/styles.css';
 async function bootstrap() {
   const root = document.getElementById('root');
