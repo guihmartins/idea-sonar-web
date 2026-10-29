@@ -2,74 +2,74 @@
 name: Idea Sonar
 description: Papel claro, tinta verde-oliva, um laranja de destaque e uma janela escura para o mapa.
 colors:
-  paper: "#f7f7f2"
-  surface: "#fdfdfa"
-  ink: "#252920"
-  muted: "#646959"
-  line: "#dcded4"
-  line-strong: "#bfc3b6"
-  hover: "#eceee5"
-  accent: "#e76732"
-  accent-strong: "#bb431d"
-  accent-deep: "#9e3818"
-  selection: "#f5c5ad"
-  success: "#3f6b2a"
-  success-bg: "#eaf0e0"
-  error: "#a3321a"
-  error-bg: "#fbece6"
-  warning: "#8a5a00"
-  warning-bg: "#f8f0d9"
-  dark: "#20271f"
-  dark-raised: "#2a3228"
-  dark-line: "#323b2f"
-  dark-text: "#e9eee4"
-  dark-text-2: "#c3cabc"
-  dark-muted: "#9aa68f"
-  dark-green: "#b9d99b"
-  dark-rose: "#f08a9b"
+  paper: '#f7f7f2'
+  surface: '#fdfdfa'
+  ink: '#252920'
+  muted: '#646959'
+  line: '#dcded4'
+  line-strong: '#bfc3b6'
+  hover: '#eceee5'
+  accent: '#e76732'
+  accent-strong: '#bb431d'
+  accent-deep: '#9e3818'
+  selection: '#f5c5ad'
+  success: '#3f6b2a'
+  success-bg: '#eaf0e0'
+  error: '#a3321a'
+  error-bg: '#fbece6'
+  warning: '#8a5a00'
+  warning-bg: '#f8f0d9'
+  dark: '#20271f'
+  dark-raised: '#2a3228'
+  dark-line: '#323b2f'
+  dark-text: '#e9eee4'
+  dark-text-2: '#c3cabc'
+  dark-muted: '#9aa68f'
+  dark-green: '#b9d99b'
+  dark-rose: '#f08a9b'
 typography:
   display:
-    fontFamily: "DM Sans Variable, system-ui, sans-serif"
-    fontSize: "clamp(28px, 3vw, 40px)"
+    fontFamily: 'DM Sans Variable, system-ui, sans-serif'
+    fontSize: 'clamp(28px, 3vw, 40px)'
     fontWeight: 550
     lineHeight: 1.15
-    letterSpacing: "-0.035em"
+    letterSpacing: '-0.035em'
   body:
-    fontFamily: "DM Sans Variable, system-ui, sans-serif"
-    fontSize: "16px"
+    fontFamily: 'DM Sans Variable, system-ui, sans-serif'
+    fontSize: '16px'
     fontWeight: 400
     lineHeight: 1.6
   label:
-    fontFamily: "IBM Plex Mono, ui-monospace, monospace"
-    fontSize: "10px"
+    fontFamily: 'IBM Plex Mono, ui-monospace, monospace'
+    fontSize: '11px'
     fontWeight: 500
-    letterSpacing: "0.145em"
+    letterSpacing: '0.145em'
 rounded:
-  control: "3px"
-  window: "7px"
+  control: '3px'
+  window: '7px'
 spacing:
-  sm: "8px"
-  md: "16px"
-  lg: "32px"
+  sm: '8px'
+  md: '16px'
+  lg: '32px'
 components:
   button-primary:
-    backgroundColor: "{colors.accent-strong}"
-    textColor: "#ffffff"
-    rounded: "{rounded.control}"
-    padding: "8px 14px"
+    backgroundColor: '{colors.accent-strong}'
+    textColor: '#ffffff'
+    rounded: '{rounded.control}'
+    padding: '8px 14px'
   button-primary-hover:
-    backgroundColor: "{colors.accent-deep}"
+    backgroundColor: '{colors.accent-deep}'
   button-secondary:
-    backgroundColor: "transparent"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.control}"
-    padding: "8px 14px"
+    backgroundColor: 'transparent'
+    textColor: '{colors.ink}'
+    rounded: '{rounded.control}'
+    padding: '8px 14px'
   button-secondary-hover:
-    backgroundColor: "{colors.hover}"
+    backgroundColor: '{colors.hover}'
   instrument:
-    backgroundColor: "{colors.dark}"
-    textColor: "{colors.dark-text}"
-    rounded: "{rounded.window}"
+    backgroundColor: '{colors.dark}'
+    textColor: '{colors.dark-text}'
+    rounded: '{rounded.window}'
 ---
 
 # Design System: Idea Sonar
@@ -96,7 +96,7 @@ superfície escura, tratada como uma janela de instrumento.
 
 ## Typography
 
-DM Sans Variável, pesos 400 a 650. `h1` 550 com `clamp(28px,3vw,40px)` e tracking -0.035em; `h2` 600. Etiquetas em IBM Plex Mono 10px maiúsculas, tracking ~0,145em, com marcador quadrado laranja de 6px. Corpo com medida máxima de 72ch. Fontes servidas pelo bundle (`@fontsource*`), nunca por CDN.
+DM Sans Variável, pesos 400 a 650. `h1` 550 com `clamp(28px,3vw,40px)` e tracking -0.035em; `h2` 600. Etiquetas em IBM Plex Mono 11px maiúsculas, tracking ~0,145em, com marcador quadrado laranja de 6px. Corpo com medida máxima de 72ch. Fontes servidas pelo bundle (`@fontsource*`), nunca por CDN.
 
 ## Layout
 
@@ -114,7 +114,7 @@ Quadrado ou 3px nos controles; 7px apenas na janela do instrumento. Marcadores s
 
 - **Botão primário**: fundo `accent-strong`, texto branco, 3px. Usado para a ação principal da tela (`.primary`).
 - **Botão secundário**: contorno `line-strong`, hover `hover`. Padrão de todo `button`.
-- **Segmentado (barra do mapa)**: mono maiúsculo 11px, bordas compartilhadas, `aria-pressed="true"` em fundo `dark-line` com texto verde.
+- **Segmentado (barra do mapa)**: mono maiúsculo 12px, bordas compartilhadas, `aria-pressed="true"` em fundo `dark-line` com texto verde.
 - **Linhas de registro**: itens separados por fio, sem cartões nem cartões dentro de cartões.
 - **Selo**: retângulo mono com fundo de ~10% do destaque.
 - **Instrumento do mapa**: janela #20271f com barra de título mono (ponto raiz e "N/500 pontos · M relações"), barra de controles, canvas com grade pontilhada, painel de detalhes com evidências separadas por fios, rodapé mono com legenda de contextos e "Como ler o mapa".
