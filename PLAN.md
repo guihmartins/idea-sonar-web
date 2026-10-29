@@ -2,6 +2,8 @@
 
 Versão 2.0 · 24/10/2026 · Repositório: guihmartins/idea-sonar-web
 
+> Atualização do usuário em 25/10/2026: deixar sem token por enquanto. O padrão temporário é VITE_AUTH_MODE=none, sem login, /me ou Authorization. OIDC permanece opcional via mode oidc. Esta orientação posterior substitui a exigência de autenticação abaixo enquanto vigente; detalhes em docs/decisions.md.
+
 ## 1. Instruções para o Codex e escopo
 
 Implemente SOMENTE o frontend web neste repositório. Backend independente está em guihmartins/idea-sonar-api. Este plano substitui a proposta anterior de monorepo. Não criar servidor Hono, MCP, PostgreSQL, Drizzle, migrations, sistema próprio de senhas ou endpoints de negócio aqui. Não acessar banco pelo navegador.
@@ -278,16 +280,16 @@ S3/CloudFront:
 
 ## 12. Checklist
 
-- [ ] Inspecionar repo, fixar versões e registrar decisões.
-- [ ] Configuração de build e VITE_API_BASE_URL com validação.
-- [ ] Importar contrato versionado e gerar cliente.
-- [ ] Autenticação e requests HTTP.
-- [ ] Busca, navegação, expansão/recolhimento e painel.
-- [ ] Legenda, filtros, contextos e evidências.
-- [ ] Formulários e conflitos de versão.
-- [ ] Importações, pendências, histórico e views.
-- [ ] Testes, acessibilidade e smoke real quando API disponível.
-- [ ] Docker independente e runbook S3/CloudFront.
+- [x] Inspecionar repo, fixar versões e registrar decisões.
+- [x] Configuração de build e VITE_API_BASE_URL com validação.
+- [x] Importar contrato oficial versionado e reconciliar cliente (snapshot da API em `d011945`; modelo/adapter alinhados em 29/10/2026).
+- [x] Autenticação e requests HTTP.
+- [x] Busca, navegação, expansão/recolhimento e painel.
+- [x] Legenda, filtros, contextos e evidências.
+- [x] Formulários e conflitos de versão.
+- [x] Importações, pendências, histórico e views.
+- [ ] Smoke real quando API/provedor disponíveis (smoke local contra a API real em modo sem token feito em 29/10/2026, em Docker e nativo; OAuth/provedor ainda pendentes).
+- [x] Docker independente e runbook S3/CloudFront.
 
 ## 13. Entregáveis e referências
 

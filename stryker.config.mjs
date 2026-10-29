@@ -1,0 +1,25 @@
+/** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
+export default {
+  $schema: './node_modules/@stryker-mutator/core/schema/stryker-schema.json',
+  testRunner: 'vitest',
+  vitest: { configFile: 'vitest.mutation.config.ts', related: true },
+  checkers: ['typescript'],
+  tsconfigFile: 'tsconfig.json',
+  mutate: [
+    'src/config/schema.ts',
+    'src/api/client.ts',
+    'src/auth/auth0.ts',
+    'src/graph/visibility/ledger.ts',
+    'src/graph/adapter/elements.ts',
+    'src/components/period.ts',
+  ],
+  coverageAnalysis: 'perTest',
+  concurrency: 2,
+  timeoutMS: 2000,
+  timeoutFactor: 1.5,
+  reporters: ['clear-text', 'progress', 'html', 'json'],
+  htmlReporter: { fileName: 'reports/mutation/index.html' },
+  jsonReporter: { fileName: 'reports/mutation/mutation.json' },
+  thresholds: { high: 80, low: 60, break: 80 },
+  cleanTempDir: 'always',
+};

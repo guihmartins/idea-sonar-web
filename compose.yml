@@ -1,0 +1,21 @@
+services:
+  web:
+    image: idea-sonar-web:local
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      args:
+        VITE_AUTH_MODE: ${VITE_AUTH_MODE:-none}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:?Defina VITE_API_BASE_URL no build}
+        VITE_OIDC_ISSUER: ${VITE_OIDC_ISSUER:-}
+        VITE_OIDC_CLIENT_ID: ${VITE_OIDC_CLIENT_ID:-}
+        VITE_OIDC_AUDIENCE: ${VITE_OIDC_AUDIENCE:-}
+    ports:
+      - '8080:8080'
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
