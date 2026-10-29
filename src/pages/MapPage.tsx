@@ -38,6 +38,7 @@ import {
 import type { Positions, Viewport } from '../graph/layout/positions';
 import { restoreView } from '../graph/restore';
 import { formatPeriod } from '../components/period';
+import { contextColors } from '../graph/styles/palette';
 const initialViewport: Viewport = { zoom: 1, pan: { x: 0, y: 0 } };
 function useMapController() {
   const { api } = useServices();
@@ -334,11 +335,8 @@ export function MapPage() {
   return (
     <section className="map-page">
       <div className="page-heading">
-        <div>
-          <p className="eyebrow">Seu recorte de conhecimento</p>
-          <h1>Explorar mapa</h1>
-        </div>
-        <Link className="button" to="/edit/nodes">
+        <h1>Explorar mapa</h1>
+        <Link className="button primary" to="/edit/nodes">
           Novo ponto
         </Link>
       </div>
@@ -357,7 +355,7 @@ export function MapPage() {
             placeholder="Autor, tradição, conceito ou obra"
           />
         </label>
-        <button>Buscar</button>
+        <button className="primary">Buscar</button>
       </form>
       <FilterControls model={model} />
       {model.contexts.error && (
@@ -690,10 +688,6 @@ function MapToolbar({ model }: { model: MapModel }) {
       >
         Ajustar mapa à tela
       </button>
-      <span>
-        {model.data.nodes.length}/500 pontos · {model.data.relations.length}{' '}
-        relações
-      </span>
     </div>
   );
 }
@@ -797,40 +791,45 @@ function MapDetails({ model, catalog }: { model: MapModel; catalog: Catalog }) {
 
 function MapLegend({ model }: { model: MapModel }) {
   return (
-    <details className="legend">
-      <summary>Como ler o mapa</summary>
-      <p>
-        ○ Pessoa · ⬡ Tradição · ◇ Conceito · ▭ Obra. Tamanho limitado pelo total
-        de conexões informado pela API.
-      </p>
-      <p>
-        Linha contínua: documentada. Tracejada: interpretação atribuída.
-        Pontilhada: inferência. Espessura: intensidade (1 pontual, 2 relevante,
-        3 central; sem avaliação = neutra).
-      </p>
-      <p>
-        Setas indicam direção; relações simétricas não têm seta. A disposição é
-        visual, sem escala de distância histórica. Arraste para fixar posições.
-        Rosa indica contestação, também identificada no painel.
-      </p>
-      <ul>
+    <div className="legend">
+      <ul className="legend-dots">
         {[...new Set(model.data.nodes.flatMap((n) => n.contexts))]
           .sort()
           .map((id, i) => (
             <li key={id}>
               <span
-                className={`context-dot context-${i % 4}`}
+                className="context-dot"
+                style={{
+                  background: contextColors[i % contextColors.length],
+                }}
                 aria-hidden="true"
               />
               {model.contexts.data?.find((c) => c.id === id)?.label ?? id}
             </li>
           ))}
-        <li>
+      </ul>
+      <details>
+        <summary>Como ler o mapa</summary>
+        <p>
+          ○ Pessoa · ⬡ Tradição · ◇ Conceito · ▭ Obra. Tamanho limitado pelo
+          total de conexões informado pela API.
+        </p>
+        <p>
+          Linha contínua: documentada. Tracejada: interpretação atribuída.
+          Pontilhada: inferência. Espessura: intensidade (1 pontual, 2
+          relevante, 3 central; sem avaliação = neutra).
+        </p>
+        <p>
+          Setas indicam direção; relações simétricas não têm seta. A disposição
+          é visual, sem escala de distância histórica. Arraste para fixar
+          posições. Rosa indica contestação, também identificada no painel.
+        </p>
+        <p>
           Sem contexto: neutro. Vários contextos aparecem no painel; a cor usa o
           primeiro contexto.
-        </li>
-      </ul>
-    </details>
+        </p>
+      </details>
+    </div>
   );
 }
 
@@ -855,10 +854,27 @@ function SaveView({ model }: { model: MapModel }) {
           maxLength={120}
         />
       </label>
-      <button disabled={!model.ledger.roots.length || model.saving}>
+      <button
+        className="primary"
+        disabled={!model.ledger.roots.length || model.saving}
+      >
         Salvar view
       </button>
     </form>
+  );
+}
+
+function InstrumentBar({ model }: { model: MapModel }) {
+  const rootId = model.ledger.roots[0]?.id;
+  const root = model.data.nodes.find((n) => n.id === rootId);
+  return (
+    <div className="instrument-bar">
+      <span className="instrument-title">{root?.label ?? 'Sem raiz'}</span>
+      <span className="instrument-count">
+        {model.data.nodes.length}/500 pontos · {model.data.relations.length}{' '}
+        relações
+      </span>
+    </div>
   );
 }
 
@@ -867,12 +883,15 @@ function ReadyMap({ model }: { model: MapModel }) {
   if (!catalog) return null;
   return (
     <>
-      <MapToolbar model={model} />
-      <div className="map-workspace">
-        <MapDisplay model={model} catalog={catalog} />
-        <MapDetails model={model} catalog={catalog} />
+      <div className="instrument">
+        <InstrumentBar model={model} />
+        <MapToolbar model={model} />
+        <div className="map-workspace">
+          <MapDisplay model={model} catalog={catalog} />
+          <MapDetails model={model} catalog={catalog} />
+        </div>
+        <MapLegend model={model} />
       </div>
-      <MapLegend model={model} />
       <SaveView model={model} />
     </>
   );

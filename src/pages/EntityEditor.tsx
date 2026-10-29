@@ -291,6 +291,7 @@ function EditorForm({
           <TypeFields model={model} />
 
           <button
+            className="primary"
             disabled={
               model.catalog.isPending ||
               !!model.catalog.error ||
@@ -528,6 +529,9 @@ function NodeFields({ model }: { model: EditorModel }) {
       )}
       <fieldset>
         <legend>Contextos</legend>
+        {model.options.data?.contexts.length === 0 && (
+          <p className="muted">Nenhum contexto cadastrado.</p>
+        )}
         {model.options.data?.contexts.map((c) => (
           <label className="check" key={c.id}>
             <input
@@ -828,7 +832,11 @@ function EditorActions({ model }: { model: EditorModel }) {
             Arquivar altera o registro na API. Dependências podem impedir a
             operação. Recolher o mapa é uma ação visual separada.
           </p>
-          <button disabled={model.busy} onClick={() => void model.doArchive()}>
+          <button
+            className="primary"
+            disabled={model.busy}
+            onClick={() => void model.doArchive()}
+          >
             Confirmar arquivamento
           </button>
           <button disabled={model.busy} onClick={() => model.setArchive(false)}>

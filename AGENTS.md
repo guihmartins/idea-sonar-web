@@ -83,6 +83,13 @@ startYear, endYear, includeUnknownPeriod`; listas `{ items, nextCursor }`.
 - Textos de interface em PT-BR; acessibilidade verificada por axe nos E2E.
 - CI automático está desativado (`.github/workflows-disabled/`); mutação é manual.
 
+## Design
+
+- Fonte da verdade visual: `DESIGN.md` (tokens, tipografia, componentes, regras do painel escuro); contexto de produto em `PRODUCT.md`. Tokens em `:root` de `src/app/styles.css`; cores do grafo em `src/graph/styles/palette.ts`.
+- Skill de design em `.claude/skills/impeccable` (Impeccable 4.8.0): use-a para mudanças de UI e mantenha `DESIGN.md` em dia.
+- Detector de anti-padrões: `npx impeccable@4.8.0 detect src/` (e `detect http://localhost:5173/map` com o dev server rodando para as regras que precisam de página renderizada).
+- Contraste AA é regra: o laranja `#e76732` só em não-texto; botão primário usa `#bb431d`. Fontes são self-hosted (`@fontsource*`), nunca de CDN.
+
 ## Ambiente local completo
 
 Na pasta pai (`../`) há `compose.yml` + `Makefile` para subir Postgres, API e

@@ -43,7 +43,7 @@ export function RecordsPage({ type }: { type: EntityType }) {
       <div className="page-heading">
         <h1>{typeLabels[type]}</h1>
         {type !== 'views' && (
-          <Link className="button" to={`/edit/${type}`}>
+          <Link className="button primary" to={`/edit/${type}`}>
             Cadastrar
           </Link>
         )}
@@ -201,7 +201,9 @@ export function ImportPage() {
               }}
             />
           </label>
-          <button disabled={busy}>Confirmar desfazer lote</button>
+          <button className="primary" disabled={busy}>
+            Confirmar desfazer lote
+          </button>
           <button
             type="button"
             disabled={busy}
@@ -359,7 +361,9 @@ export function PendingPage() {
                 }}
               />
             </label>
-            <button disabled={!!busy}>Resolver pendência</button>
+            <button className="primary" disabled={!!busy}>
+              Resolver pendência
+            </button>
           </form>
         ))}
       {query.hasNextPage && (
@@ -458,7 +462,11 @@ export function ExportPage() {
         A exportação contém dados privados da sua conta. Guarde o arquivo em
         local seguro.
       </p>
-      <button disabled={busy} onClick={() => void download()}>
+      <button
+        className="primary"
+        disabled={busy}
+        onClick={() => void download()}
+      >
         {busy ? 'Preparando…' : 'Baixar exportação'}
       </button>
       {error !== null && (
