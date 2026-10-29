@@ -13,6 +13,8 @@ export default defineConfig([
       'test-results/**',
       'playwright-report/**',
       'src/api/generated/**',
+      // Skill Impeccable copiada do upstream (scripts próprios, não é código do app).
+      '.claude/**',
     ],
   },
   js.configs.recommended,
