@@ -1,5 +1,6 @@
 import type { ElementDefinition } from 'cytoscape';
 import type { Catalog, Node, Relation } from '../../api/domain';
+import { contextColors, neutralColor } from '../styles/palette';
 export const shapes = {
   person: 'ellipse',
   tradition: 'hexagon',
@@ -11,7 +12,6 @@ export function elements(
   relations: Relation[],
   catalog: Catalog,
 ): ElementDefinition[] {
-  const colors = ['#2e7064', '#785ca0', '#95601f', '#356899'];
   const contexts = [...new Set(nodes.flatMap((n) => n.contexts))].sort();
   return [
     ...nodes.map((n) => ({
@@ -22,8 +22,10 @@ export function elements(
         shape: shapes[n.kind],
         size: Math.min(68, 30 + Math.sqrt(n.degreeTotal) * 5),
         color: n.contexts.length
-          ? colors[contexts.indexOf(n.contexts[0] ?? '') % colors.length]
-          : '#697c81',
+          ? contextColors[
+              contexts.indexOf(n.contexts[0] ?? '') % contextColors.length
+            ]
+          : neutralColor,
       },
     })),
     ...relations.map((r) => {

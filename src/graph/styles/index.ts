@@ -1,4 +1,10 @@
 import type { StylesheetJson, Css } from 'cytoscape';
+import {
+  contestedColor,
+  edgeColor,
+  highlightColor,
+  labelColor,
+} from './palette';
 export const graphStyle: StylesheetJson = [
   {
     selector: 'node',
@@ -8,8 +14,9 @@ export const graphStyle: StylesheetJson = [
       width: 'data(size)',
       height: 'data(size)',
       'background-color': 'data(color)',
-      color: '#203840',
-      'font-size': 11,
+      color: labelColor,
+      'font-family': 'IBM Plex Mono',
+      'font-size': 10,
       'text-valign': 'bottom',
       'text-margin-y': 8,
       'text-wrap': 'ellipsis',
@@ -25,8 +32,8 @@ export const graphStyle: StylesheetJson = [
       'target-arrow-shape': (edge) => edge.data('arrow') as Css.ArrowShape,
       'curve-style': 'bezier',
       'control-point-step-size': 50,
-      'line-color': '#728c91',
-      'target-arrow-color': '#728c91',
+      'line-color': edgeColor,
+      'target-arrow-color': edgeColor,
       'arrow-scale': 1,
     },
   },
@@ -34,18 +41,21 @@ export const graphStyle: StylesheetJson = [
     selector: ':selected',
     style: {
       'border-width': 3,
-      'border-color': '#b06d13',
-      'line-color': '#b06d13',
-      'target-arrow-color': '#b06d13',
+      'border-color': highlightColor,
+      'line-color': highlightColor,
+      'target-arrow-color': highlightColor,
       label: 'data(label)',
     },
   },
   {
     selector: '.neighbor',
-    style: { 'border-width': 2, 'border-color': '#b06d13' },
+    style: { 'border-width': 2, 'border-color': highlightColor },
   },
   {
     selector: 'edge[?contested]',
-    style: { 'line-color': '#9a525d', 'target-arrow-color': '#9a525d' },
+    style: {
+      'line-color': contestedColor,
+      'target-arrow-color': contestedColor,
+    },
   },
 ];

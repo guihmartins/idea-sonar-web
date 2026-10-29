@@ -11,6 +11,7 @@ import {
   visible,
 } from '../../src/graph/visibility/ledger';
 import { elements } from '../../src/graph/adapter/elements';
+import { neutralColor } from '../../src/graph/styles/palette';
 import { astronomicalYear, displayYear } from '../../src/components/period';
 const meta = {
   version: 1,
@@ -301,7 +302,7 @@ it('mapeia todos os tipos, preserva identidade/direção e usa catálogo por ID'
     id: '0',
     label: 'Ponto 0',
     size: 30,
-    color: '#697c81',
+    color: neutralColor,
   });
   expect(dataAt(result, 3).size).toBe(68);
   expect(dataAt(result, 1).size).toBeGreaterThan(30);
@@ -341,7 +342,7 @@ it('cores de contexto são estáveis com ordem diferente dos pontos', () => {
   expect(first[0]?.data.color).toBe(reversed[1]?.data.color);
   expect(first[1]?.data.color).toBe(reversed[0]?.data.color);
   expect(first[0]?.data.color).not.toBe(first[1]?.data.color);
-  expect(first[0]?.data.color).not.toBe('#697c81');
+  expect(first[0]?.data.color).not.toBe(neutralColor);
 });
 
 function dataAt(result: ReturnType<typeof elements>, index: number) {
