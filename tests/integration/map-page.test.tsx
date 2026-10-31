@@ -341,7 +341,16 @@ describe('MapPage — painel de detalhes', () => {
   it('seleciona uma relação pelo grafo e mostra o painel de evidências', async () => {
     const services = createFixtureServices();
     await services.session.login();
-    const relation = await services.api.relation(ids.relation);
+    const [catalog, jung, gnosis, relation] = await Promise.all([
+      services.api.catalog(),
+      services.api.node(ids.jung),
+      services.api.node(ids.gnosis),
+      services.api.relation(ids.relation),
+    ]);
+    const studied = catalog.relationTypes.find(
+      (type) => type.code === relation.type,
+    );
+    if (!studied) throw new Error('tipo studied ausente do catálogo');
     vi.spyOn(services.api, 'relation').mockResolvedValue({
       ...relation,
       evidence: [
@@ -387,14 +396,14 @@ describe('MapPage — painel de detalhes', () => {
       screen.getByText('Atribuição: Autoria de demonstração'),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(
-        (_content, element) =>
-          element?.tagName === 'P' &&
-          element.textContent?.includes(
-            'Direção: Jung (exemplo fictício) estudou → Gnosticismo (exemplo fictício).',
-          ) === true &&
-          element.textContent.includes('Leitura inversa:'),
-      ),
+      screen.getByText((_content, element) => {
+        if (element?.tagName !== 'P') return false;
+        const text = element.textContent?.replace(/\s+/g, ' ').trim();
+        return (
+          text ===
+          `Direção: ${jung.label} ${studied.label} → ${gnosis.label}. Leitura inversa: ${gnosis.label} ${studied.inverseLabel} ${jung.label}.`
+        );
+      }),
     ).toBeInTheDocument();
     expect(
       await screen.findByText(
