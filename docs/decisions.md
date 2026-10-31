@@ -111,3 +111,41 @@
 - Fontes self-hosted via `@fontsource-variable/dm-sans` 5.3.0 e `@fontsource/ibm-plex-mono` 5.3.0 (pesos 400 e 500), sem CDN: o app lida com dados privados, roda offline em Docker e usa `no-referrer`. Versões exatas, publicadas há mais de duas semanas, sem `engines`/peers.
 - O mapa virou uma janela escura `#20271f` (barra de título com raiz e contagem, controles segmentados com `aria-pressed`, grade pontilhada, painel de detalhes e legenda em rodapé). Cores do grafo centralizadas em `src/graph/styles/palette.ts`, usadas pelo adapter, pela legenda e pelos testes.
 - Apenas apresentação: contrato, `src/api`, payloads, visibilidade e restauração não mudaram. Nomes acessíveis, papéis e a classe `.graph-list` foram preservados.
+
+## 2026-10-31 — Cobertura e mutação em todo o src
+
+- Pedido do usuário: ESLint com complexidade máx. 10 (já existia, mantido e
+  verificado), cobertura ≥80% e nota de mutação ≥80% em todo o `src`.
+- Escopo de qualidade único para as duas métricas, para não haver código
+  "medido por uma e não pela outra": `src/**` menos `src/api/generated/**`
+  (gerado do contrato, nunca editado à mão), `src/dev/**` (fixtures que não
+  entram em build de produção), `src/main.tsx` (bootstrap sem lógica) e
+  `*.d.ts`. Declarado em `qualityExclude` (`vitest.config.ts`) e espelhado em
+  `mutate` (`stryker.config.mjs`).
+- Cobertura com `@vitest/coverage-v8` 5.0.5, versão casada com o Vitest 5.0.5
+  do projeto (provider v8 é o mesmo motor do runtime, sem instrumentar o
+  código). Thresholds de 80% em linhas, ramos, funções e statements, todos no
+  mesmo patamar: um único número evita negociar métrica por métrica. Script
+  `test:coverage`; `coverage/` ignorado no Git, no ESLint e no Prettier.
+- Mutação deixa de cobrir seis arquivos do marco 1 e passa a cobrir o mesmo
+  `src`. Como isso inclui telas, `vitest.mutation.config.ts` passou a rodar
+  também os testes de integração `.tsx`; continuam fora apenas
+  `build-env`, `lint` e `contracts`, que sobem subprocessos (Vite, ESLint,
+  gerador de contrato) e custariam minutos por mutante sem exercitar `src`.
+- Telas com Testing Library e `user-event` são ordens de grandeza mais lentas
+  que as funções puras medidas antes: `timeoutMS` foi de 2s para 20s e
+  `timeoutFactor` de 1,5 para 2, para não contar mutante vivo como timeout.
+  Concorrência de 2 para 4 (executor com 10 núcleos). `incremental: true`
+  reaproveita mutantes cujo código e testes não mudaram, o que torna o loop
+  "matar sobreviventes" viável; o estado fica em `reports/`, fora do Git.
+- Nenhum operador de mutação foi desabilitado e nenhum limiar foi relaxado.
+  `// Stryker disable` fica reservado a mutante de fato equivalente, com o
+  motivo escrito; para rótulos PT-BR a regra é asserção no texto, não
+  supressão. O gate de 80% (`thresholds.break`) continua valendo.
+- Verificado que o Stryker não gera mutante para atributo nem para texto JSX
+  (`className`, `role`, `aria-label`, conteúdo de elemento): os mutantes de
+  tela são condicionais, operadores lógicos/relacionais, literais em
+  expressões, arrays e objetos. Isso define onde os testes de tela precisam
+  asserir para matar mutante, e foi o que guiou a escrita.
+- CI automático segue desativado e a mutação segue manual: o gate de cobertura
+  roda em `test:coverage`, o de mutação só quando alguém executa Stryker.
