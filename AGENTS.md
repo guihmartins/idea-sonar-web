@@ -43,6 +43,7 @@ npm run dev:fixtures      # sem backend, dados fictícios em memória
 npm run lint              # ESLint, complexidade máx. 10, 0 warnings
 npm run typecheck
 npm test                  # Vitest
+npm run test:coverage     # Vitest + cobertura v8, quebra abaixo de 80%
 npm run test:e2e:fixtures # Playwright desktop+mobile com fixtures (npx playwright install chromium)
 npm run format:check      # Prettier (npm run format corrige)
 npm run build             # contracts:check + lint + typecheck + vite build + check-dist
@@ -51,8 +52,24 @@ npm run contracts:generate                                   # regenera src/api/
 npm run test:mutation     # Stryker — só manual
 ```
 
-Antes de concluir: `lint`, `typecheck`, `test`, `format:check` e, se tocou telas,
-`test:e2e:fixtures`. O build exige `VITE_API_BASE_URL`.
+Antes de concluir: `lint`, `typecheck`, `test:coverage`, `format:check` e, se
+tocou telas, `test:e2e:fixtures`. O build exige `VITE_API_BASE_URL`.
+
+## Portões de qualidade
+
+- Escopo: todo `src/**`, menos `src/api/generated/**` (gerado do contrato),
+  `src/dev/**` (fixtures que não entram no bundle), `src/main.tsx` (bootstrap)
+  e `*.d.ts`. O mesmo escopo vale para cobertura e mutação — ver
+  `qualityExclude` em `vitest.config.ts` e `mutate` em `stryker.config.mjs`.
+- Cobertura: `test:coverage` quebra abaixo de 80% em linhas, ramos, funções e
+  statements. Relatório em `coverage/` (texto, HTML e lcov), fora do Git.
+- Mutação: `test:mutation` quebra abaixo de 80%. É manual e leva dezenas de
+  minutos; `incremental: true` reaproveita mutantes cujo código e testes não
+  mudaram, e `--force` refaz tudo. Relatório em `reports/mutation/`.
+  `vitest.mutation.config.ts` roda testes unitários e de integração de tela,
+  exceto os três que sobem subprocessos (`build-env`, `lint`, `contracts`).
+- `// Stryker disable` só para mutante de fato equivalente, com o motivo no
+  comentário. Para texto PT-BR, prefira asserções no texto a supressões.
 
 ## Configuração (build-time)
 

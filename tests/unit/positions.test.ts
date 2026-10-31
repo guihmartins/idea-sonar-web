@@ -1,17 +1,62 @@
-import cytoscape from 'cytoscape';
+import { describe, expect, it, vi } from 'vitest';
 import type { Core } from 'cytoscape';
-import { describe, expect, it } from 'vitest';
 import { arrangeNew } from '../../src/graph/layout/positions';
-import type { Positions } from '../../src/graph/layout/positions';
 
-// Reimplementação da fórmula de `estimateLabelBox` (privada em positions.ts)
-// só para montar a caixa de colisão esperada e checar sobreposição nos testes.
-function box(label: string, center: { x: number; y: number }) {
-  const w = (label.length + 2) * 7 + 14;
-  const h = 28;
-  return { x: center.x - w / 2, y: center.y - h / 2, w, h };
+interface FakeNode {
+  id: () => string;
+  data: (key: string) => unknown;
+  outerWidth: () => number;
+  outerHeight: () => number;
+  neighborhood: (kind: string) => {
+    nodes: () => {
+      filter: (predicate: (node: FakeNode) => boolean) => {
+        first: () => FakeNode;
+      };
+    };
+  };
+  position: (value: { x: number; y: number }) => void;
 }
-function overlaps(a: ReturnType<typeof box>, b: ReturnType<typeof box>) {
+
+function fakeNode(
+  id: string,
+  label: string,
+  neighbors: FakeNode[] = [],
+  dimensions = { width: 90, height: 34 },
+) {
+  const position = vi.fn();
+  const empty: FakeNode = {
+    id: () => '',
+    data: () => '',
+    outerWidth: () => 0,
+    outerHeight: () => 0,
+    neighborhood: () => ({
+      nodes: () => ({ filter: () => ({ first: () => empty }) }),
+    }),
+    position: vi.fn(),
+  };
+  const node: FakeNode = {
+    id: () => id,
+    data: (key) => (key === 'label' ? label : undefined),
+    outerWidth: () => dimensions.width,
+    outerHeight: () => dimensions.height,
+    neighborhood: (kind) => ({
+      nodes: () => ({
+        filter: (predicate) => ({
+          first: () =>
+            (kind === 'node' ? neighbors.filter(predicate)[0] : undefined) ??
+            empty,
+        }),
+      }),
+    }),
+    position,
+  };
+  return { node, position };
+}
+
+function overlaps(
+  a: { x: number; y: number; w: number; h: number },
+  b: { x: number; y: number; w: number; h: number },
+) {
   return !(
     a.x + a.w < b.x ||
     b.x + b.w < a.x ||
@@ -19,77 +64,94 @@ function overlaps(a: ReturnType<typeof box>, b: ReturnType<typeof box>) {
     b.y + b.h < a.y
   );
 }
-function buildCy(
-  nodeDefs: { id: string; label: string }[],
-  edgeDefs: [string, string][],
-): Core {
-  const cy = cytoscape({ headless: true });
-  cy.add(
-    nodeDefs.map((n) => ({
-      group: 'nodes' as const,
-      data: { id: n.id, label: n.label },
-    })),
-  );
-  cy.add(
-    edgeDefs.map(([source, target], i) => ({
-      group: 'edges' as const,
-      data: { id: `e${i}-${source}-${target}`, source, target },
-    })),
-  );
-  return cy;
-}
 
 describe('arrangeNew', () => {
-  it('não deixa dois nós novos nascidos do mesmo nó fixado com caixas sobrepostas', () => {
-    const cy = buildCy(
-      [
-        { id: 'root', label: 'Raiz fixada' },
-        { id: 'n1', label: 'Novo ponto um' },
-        { id: 'n2', label: 'Novo ponto dois' },
-      ],
-      [
-        ['root', 'n1'],
-        ['root', 'n2'],
-      ],
-    );
-    const pinned: Positions = { root: { x: 0, y: 0 } };
-    arrangeNew(cy, pinned);
-    const b1 = box('Novo ponto um', cy.getElementById('n1').position());
-    const b2 = box('Novo ponto dois', cy.getElementById('n2').position());
-    expect(overlaps(b1, b2)).toBe(false);
+  it('arranja nós novos ao redor de âncoras fixadas e da origem padrão', () => {
+    const anchor = fakeNode('anchor', 'Âncora');
+    const first = fakeNode('first', 'Primeiro', [anchor.node]);
+    const second = fakeNode('second', 'Segundo');
+    const cy = {
+      nodes: () => [anchor.node, first.node, second.node],
+      zoom: () => 1,
+      pan: () => ({ x: 0, y: 0 }),
+      width: () => 600,
+      height: () => 440,
+    } as unknown as Core;
+
+    arrangeNew(cy, { anchor: { x: 10, y: 20 } });
+
+    expect(anchor.position).not.toHaveBeenCalled();
+    expect(first.position).toHaveBeenCalledWith({ x: 140, y: 20 });
+    expect(second.position).toHaveBeenCalledWith({
+      x: expect.closeTo(300 + Math.cos(2.399963) * 130, 8),
+      y: expect.closeTo(220 + Math.sin(2.399963) * 130, 8),
+    });
   });
 
-  it('nós já fixados entram na checagem de colisão: um novo nó não nasce sobre a caixa de um fixado', () => {
-    const cy = buildCy(
-      [
-        { id: 'root', label: 'Raiz' },
-        { id: 'fixedNeighbor', label: 'Vizinho fixado com rótulo bem longo' },
-        { id: 'n1', label: 'Novo' },
-      ],
-      [['root', 'n1']],
+  it('mantém a distribuição radial e aumenta o raio depois de seis nós', () => {
+    const fresh = Array.from({ length: 7 }, (_, index) =>
+      fakeNode(`n${index}`, `Nó ${index}`),
     );
-    // `fixedNeighbor` fica deliberadamente na posição onde a primeira
-    // tentativa de `n1` cairia (ângulo 0, raio 130 a partir da raiz),
-    // forçando a checagem de colisão a descartar esse candidato.
-    const pinned: Positions = {
-      root: { x: 0, y: 0 },
-      fixedNeighbor: { x: 130, y: 0 },
-    };
-    arrangeNew(cy, pinned);
-    const newBox = box('Novo', cy.getElementById('n1').position());
-    const fixedBox = box(
-      'Vizinho fixado com rótulo bem longo',
-      pinned.fixedNeighbor as { x: number; y: number },
-    );
-    expect(overlaps(newBox, fixedBox)).toBe(false);
+    const cy = {
+      nodes: () => fresh.map(({ node }) => node),
+      zoom: () => 1,
+      pan: () => ({ x: 0, y: 0 }),
+      width: () => 600,
+      height: () => 440,
+    } as unknown as Core;
+
+    arrangeNew(cy, {});
+
+    const seventhAngle = 6 * 2.399963;
+    expect(fresh[0]?.position).toHaveBeenCalledWith({ x: 430, y: 220 });
+    expect(fresh[6]?.position).toHaveBeenCalledWith({
+      x: expect.closeTo(300 + Math.cos(seventhAngle) * 166, 8),
+      y: expect.closeTo(220 + Math.sin(seventhAngle) * 166, 8),
+    });
   });
 
-  it('um rótulo bem mais longo produz uma caixa mais larga que um rótulo curto', () => {
-    const shortBox = box('Oi', { x: 0, y: 0 });
-    const longBox = box(
-      'Um rótulo bastante mais longo do que o anterior, de verdade',
-      { x: 0, y: 0 },
-    );
-    expect(longBox.w).toBeGreaterThan(shortBox.w);
+  it('evita sobreposição entre novos nós e caixas dos nós já fixados', () => {
+    const root = fakeNode('root', 'Raiz', [], { width: 60, height: 34 });
+    const fixed = fakeNode('fixed', 'Vizinho fixado', [], {
+      width: 250,
+      height: 50,
+    });
+    const first = fakeNode('n1', 'Novo ponto um', [root.node], {
+      width: 160,
+      height: 34,
+    });
+    const second = fakeNode('n2', 'Novo ponto dois', [root.node], {
+      width: 160,
+      height: 34,
+    });
+    const cy = {
+      nodes: () => [root.node, fixed.node, first.node, second.node],
+      zoom: () => 1,
+      pan: () => ({ x: 0, y: 0 }),
+      width: () => 600,
+      height: () => 440,
+    } as unknown as Core;
+    const pinned = { root: { x: 0, y: 0 }, fixed: { x: 130, y: 0 } };
+
+    arrangeNew(cy, pinned);
+
+    const firstPosition = first.position.mock.calls[0]?.[0];
+    const secondPosition = second.position.mock.calls[0]?.[0];
+    const fixedPosition = pinned.fixed;
+    expect(firstPosition).toBeDefined();
+    expect(secondPosition).toBeDefined();
+    if (!firstPosition || !secondPosition) throw new Error('posição ausente');
+    const box = (center: { x: number; y: number }, w: number, h: number) => ({
+      x: center.x - w / 2,
+      y: center.y - h / 2,
+      w,
+      h,
+    });
+    expect(
+      overlaps(box(firstPosition, 160, 34), box(fixedPosition, 250, 50)),
+    ).toBe(false);
+    expect(
+      overlaps(box(firstPosition, 160, 34), box(secondPosition, 160, 34)),
+    ).toBe(false);
   });
 });
