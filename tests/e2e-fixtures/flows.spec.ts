@@ -188,9 +188,21 @@ test('formulários de fonte, contexto histórico e relação validam evidências
     'Uma fonte é obrigatória',
   );
   await page.getByRole('button', { name: 'Adicionar evidência' }).click();
-  await page
-    .getByRole('combobox', { name: 'Fonte', exact: true })
-    .selectOption({ label: 'Fonte fictícia E2E · Autoria sintética' });
+  const evidenceSource = page.getByRole('group', {
+    name: 'Fonte',
+    exact: true,
+  });
+  await evidenceSource
+    .getByRole('textbox', { name: 'Buscar candidato' })
+    .fill('Fonte fictícia E2E');
+  await evidenceSource
+    .getByRole('radio', { name: 'Fonte fictícia E2E · Autoria sintética' })
+    .check();
+  await expect(
+    evidenceSource.getByText(
+      'Selecionado: Fonte fictícia E2E · Autoria sintética',
+    ),
+  ).toBeVisible();
   await page.getByLabel('Localizador / página').fill('p. 1');
   await page
     .getByLabel('Explicação da evidência')

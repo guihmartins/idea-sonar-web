@@ -453,6 +453,13 @@ function buildFixtureServices(
     if ('title' in entity) return entity.title;
     return 'label' in entity ? entity.label : '';
   }
+  // Como a API: arquivados nunca saem; pendentes só com includePending=true.
+  function visibleStatus(entity: Entity, params: URLSearchParams) {
+    return (
+      entity.status === 'active' ||
+      (entity.status === 'pending' && params.get('includePending') === 'true')
+    );
+  }
   function readCollection(
     type: string,
     id: string,
@@ -463,6 +470,7 @@ function buildFixtureServices(
     const q = (url.searchParams.get('q') ?? '').toLocaleLowerCase('pt-BR');
     const items = collection.filter(
       (entity) =>
+        visibleStatus(entity, url.searchParams) &&
         searchText(entity).toLocaleLowerCase('pt-BR').includes(q) &&
         (type !== 'nodes' || matches(entity as Node, url.searchParams)),
     );

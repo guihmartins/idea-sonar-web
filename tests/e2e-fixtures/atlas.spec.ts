@@ -202,7 +202,13 @@ test('filtros do mapa cabem na viewport e são operáveis no mobile, com o paine
     await page.getByText('Filtros do mapa', { exact: true }).click();
     const panel = page.locator('.filters-panel');
     const kindSelect = panel.getByLabel('Tipo');
-    const contextSelect = panel.getByLabel('Contexto');
+    const contextGroup = panel.getByRole('group', {
+      name: 'Contexto',
+      exact: true,
+    });
+    const contextSearch = contextGroup.getByRole('textbox', {
+      name: 'Buscar candidato',
+    });
     const startYear = panel.getByLabel('Ano inicial (astronômico)', {
       exact: true,
     });
@@ -217,7 +223,7 @@ test('filtros do mapa cabem na viewport e são operáveis no mobile, com o paine
     });
     const controls = [
       kindSelect,
-      contextSelect,
+      contextSearch,
       startYear,
       endYear,
       includeUnknown,
@@ -240,9 +246,16 @@ test('filtros do mapa cabem na viewport e são operáveis no mobile, com o paine
     await assertRealHitTarget(kindSelect, width);
     await kindSelect.selectOption('person');
     await expect(kindSelect).toHaveValue('person');
-    await assertRealHitTarget(contextSelect, width);
-    await contextSelect.selectOption({ label: 'Contexto fictício' });
-    await expect(contextSelect).not.toHaveValue('');
+    await assertRealHitTarget(contextSearch, width);
+    await contextSearch.fill('fict');
+    const contextOption = contextGroup.getByRole('radio', {
+      name: 'Contexto fictício',
+    });
+    await assertRealHitTarget(contextOption, width);
+    await contextOption.check();
+    await expect(
+      contextGroup.getByText('Selecionado: Contexto fictício'),
+    ).toBeVisible();
     await assertRealHitTarget(startYear, width);
     await startYear.fill('100');
     await expect(startYear).toHaveValue('100');

@@ -1,15 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { FormEvent } from 'react';
-import {
-  useInfiniteQuery,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { useServices } from '../app/services';
 import { isVersionConflict } from '../api/client';
-import { defaultFilters } from '../api/domain';
-import type { Entity, EntityType, Node, Context, Source } from '../api/domain';
+import type { Entity, EntityType, Context } from '../api/domain';
 import { Failure } from '../components/Feedback';
 import {
   conceptScopeLabels,
@@ -25,6 +20,7 @@ import {
   formatAliases,
 } from './editor/payload';
 import type { Editable, EvidenceDraft } from './editor/payload';
+import { CandidatePicker, NodePicker } from './editor/pickers';
 import { typeLabels } from './RecordsPage';
 const editable = ['nodes', 'relations', 'sources', 'contexts'] as const;
 const isEditable = (type: string | undefined): type is Editable =>
@@ -109,25 +105,6 @@ function useEditorForm(type: Editable, initial: Entity | undefined) {
   const catalog = useQuery({
     queryKey: ['catalog'],
     queryFn: ({ signal }) => api.catalog(signal),
-  });
-  const options = useQuery({
-    queryKey: ['editor-options'],
-    queryFn: async ({ signal }) => {
-      async function all(type: 'sources' | 'contexts') {
-        const items: Entity[] = [];
-        let cursor: string | null = null;
-        do {
-          const p = await api.list(type, cursor, signal);
-          items.push(...p.items);
-          cursor = p.nextCursor;
-        } while (cursor);
-        return items;
-      }
-      return {
-        sources: (await all('sources')) as Source[],
-        contexts: (await all('contexts')) as Context[],
-      };
-    },
   });
   function update(key: string, value: string) {
     setFields((current) => ({ ...current, [key]: value }));
@@ -230,7 +207,6 @@ function useEditorForm(type: Editable, initial: Entity | undefined) {
     conflict,
     archive,
     catalog,
-    options,
     update,
     text,
     submit,
@@ -292,11 +268,7 @@ function EditorForm({
 
           <button
             className="primary"
-            disabled={
-              model.catalog.isPending ||
-              !!model.catalog.error ||
-              !!model.options.error
-            }
+            disabled={model.catalog.isPending || !!model.catalog.error}
           >
             Salvar registro
           </button>
@@ -310,74 +282,23 @@ function EditorForm({
   );
 }
 
-function NodePicker({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (id: string) => void;
-}) {
-  const { api } = useServices();
-  const [text, setText] = useState('');
-  const [q, setQ] = useState('');
-  useEffect(() => {
-    const timer = setTimeout(() => setQ(text.trim()), 250);
-    return () => clearTimeout(timer);
-  }, [text]);
-  const selected = useQuery({
-    queryKey: ['node', value],
-    queryFn: ({ signal }) => api.node(value, signal),
-    enabled: !!value,
-  });
-  return (
-    <fieldset>
-      <legend>{label}</legend>
-      <label>
-        Buscar candidato
-        <input value={text} onChange={(e) => setText(e.target.value)} />
-      </label>
-      {value && <p>Selecionado: {selected.data?.label ?? value}</p>}
-      {selected.error && (
-        <Failure error={selected.error} retry={() => void selected.refetch()} />
-      )}
-      <NodeSearchResults
-        q={q}
-        value={value}
-        label={label}
-        onChange={onChange}
-      />
-    </fieldset>
-  );
-}
 function EvidenceFields({
   entry,
-  sources,
   onChange,
   onRemove,
 }: {
   entry: EvidenceDraft;
-  sources: Source[];
   onChange: (entry: EvidenceDraft) => void;
   onRemove: () => void;
 }) {
   return (
     <div className="evidence">
-      <label>
-        Fonte
-        <select
-          value={entry.sourceId}
-          onChange={(e) => onChange({ ...entry, sourceId: e.target.value })}
-        >
-          <option value="">Sem fonte cadastrada</option>
-          {sources.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.title} · {s.authorText}
-            </option>
-          ))}
-        </select>
-      </label>
+      <CandidatePicker
+        type="sources"
+        label="Fonte"
+        values={entry.sourceId ? [entry.sourceId] : []}
+        onChange={(ids) => onChange({ ...entry, sourceId: ids[0] ?? '' })}
+      />
       <label>
         Papel da evidência
         <select
@@ -527,29 +448,16 @@ function NodeFields({ model }: { model: EditorModel }) {
         'aliases',
         'Outros nomes (separados por vírgula; idioma opcional, ex.: Jung (de))',
       )}
-      <fieldset>
-        <legend>Contextos</legend>
-        {model.options.data?.contexts.length === 0 && (
-          <p className="muted">Nenhum contexto cadastrado.</p>
-        )}
-        {model.options.data?.contexts.map((c) => (
-          <label className="check" key={c.id}>
-            <input
-              type="checkbox"
-              checked={model.contexts.includes(c.id)}
-              onChange={(e) => {
-                model.setContexts(
-                  e.target.checked
-                    ? [...model.contexts, c.id]
-                    : model.contexts.filter((id) => id !== c.id),
-                );
-                model.setActionKey(crypto.randomUUID());
-              }}
-            />
-            {c.label}
-          </label>
-        ))}
-      </fieldset>
+      <CandidatePicker
+        type="contexts"
+        label="Contextos"
+        multiple
+        values={model.contexts}
+        onChange={(ids) => {
+          model.setContexts(ids);
+          model.setActionKey(crypto.randomUUID());
+        }}
+      />
     </>
   );
 }
@@ -688,20 +596,12 @@ function RelationFields({ model }: { model: EditorModel }) {
       </label>
       {model.text('claim', 'Afirmação', true, true)}
       {model.text('justification', 'Justificativa', true, true)}
-      <label>
-        Contexto
-        <select
-          value={model.fields.contextId}
-          onChange={(e) => model.update('contextId', e.target.value)}
-        >
-          <option value="">Sem contexto</option>
-          {model.options.data?.contexts.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <CandidatePicker
+        type="contexts"
+        label="Contexto"
+        values={model.fields.contextId ? [model.fields.contextId] : []}
+        onChange={(ids) => model.update('contextId', ids[0] ?? '')}
+      />
       <RelationClassification model={model} />
       <fieldset>
         <legend>Evidências</legend>
@@ -710,7 +610,6 @@ function RelationFields({ model }: { model: EditorModel }) {
           <EvidenceFields
             key={i}
             entry={entry}
-            sources={model.options.data?.sources ?? []}
             onChange={(next) => {
               model.setEvidence((values) =>
                 values.map((v, index) => (index === i ? next : v)),
@@ -749,15 +648,7 @@ function EditorOptionsFeedback({ model }: { model: EditorModel }) {
           retry={() => void model.catalog.refetch()}
         />
       )}
-      {model.options.error && (
-        <Failure
-          error={model.options.error}
-          retry={() => void model.options.refetch()}
-        />
-      )}
-      {(model.catalog.isPending || model.options.isPending) && (
-        <p role="status">Carregando catálogos…</p>
-      )}
+      {model.catalog.isPending && <p role="status">Carregando catálogos…</p>}
     </>
   );
 }
@@ -917,67 +808,5 @@ function Difference({ label, draft, latest, multiline }: FieldChange) {
         )}
       </dd>
     </div>
-  );
-}
-
-function NodeSearchResults({
-  q,
-  value,
-  label,
-  onChange,
-}: {
-  q: string;
-  value: string;
-  label: string;
-  onChange: (id: string) => void;
-}) {
-  const { api } = useServices();
-  const search = useInfiniteQuery({
-    queryKey: ['picker', q],
-    initialPageParam: null as string | null,
-    queryFn: ({ pageParam, signal }) =>
-      api.search(
-        q,
-        { ...defaultFilters, includePending: true },
-        pageParam,
-        signal,
-      ),
-    getNextPageParam: (p) => p.nextCursor,
-    enabled: !!q,
-  });
-
-  return (
-    <>
-      {' '}
-      {search.isFetching && <p role="status">Buscando candidatos…</p>}
-      {search.error && (
-        <Failure error={search.error} retry={() => void search.refetch()} />
-      )}
-      {search.data?.pages
-        .flatMap((p) => p.items)
-        .map((n: Node) => (
-          <label className="check" key={n.id}>
-            <input
-              type="radio"
-              name={label}
-              checked={value === n.id}
-              onChange={() => onChange(n.id)}
-            />
-            {n.label} · {kindLabels[n.kind]} · {n.description} · ID {n.id}
-          </label>
-        ))}
-      {q && search.data?.pages[0]?.items.length === 0 && (
-        <p>Nenhum candidato.</p>
-      )}
-      {search.hasNextPage && (
-        <button
-          type="button"
-          disabled={search.isFetchingNextPage}
-          onClick={() => void search.fetchNextPage()}
-        >
-          Mais candidatos
-        </button>
-      )}
-    </>
   );
 }
