@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApiError, createTransport } from '../../src/api/client';
+import {
+  ApiError,
+  createTransport,
+  isVersionConflict,
+} from '../../src/api/client';
 import type { Session } from '../../src/auth/session';
 function setup(responses: Response[]) {
   const session: Session = {
@@ -236,6 +240,74 @@ describe('integridade, cancelamento e erros do transporte', () => {
       });
     },
   );
+  it.each([
+    ['BATCH_UNDONE', 'Lote desfeito; a pendência não pode ser resolvida'],
+    ['DEPENDENCIES', 'Ponto tem relações ativas'],
+    ['CONTEXT_DEPENDENCY', 'Conceito ativo perderia contextualização'],
+    ['IMMUTABLE_CLASSIFICATION', 'Tipo e escopo não podem mudar após criação'],
+    ['IDEMPOTENCY_CONFLICT', 'Chave usada para outro conteúdo'],
+    ['UNDO_CONFLICT', 'Lote alterado ou já desfeito'],
+  ])('409 %s mostra a mensagem da API, não a de versão', async (code, text) => {
+    const { send } = setup([
+      Response.json(
+        { error: { code, message: text, details: [], requestId: 'r' } },
+        { status: 409 },
+      ),
+    ]);
+    const error = await send('/pending/p/resolve', {
+      method: 'POST',
+      body: {},
+      idempotencyKey: 'k',
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 409, message: text, code });
+    expect(isVersionConflict(error)).toBe(false);
+  });
+  it('409 VERSION_CONFLICT mantém a mensagem de versão e abre a comparação', async () => {
+    const { send } = setup([
+      Response.json(
+        {
+          error: {
+            code: 'VERSION_CONFLICT',
+            message: 'Versão foi alterada',
+            details: [],
+            requestId: 'r',
+          },
+        },
+        { status: 409 },
+      ),
+    ]);
+    const error = await send('/nodes/x', {
+      method: 'PATCH',
+      body: {},
+      version: '1',
+    }).catch((e: unknown) => e);
+    expect(error).toMatchObject({
+      status: 409,
+      code: 'VERSION_CONFLICT',
+      message:
+        'O registro mudou. Compare a versão atual antes de editar novamente.',
+    });
+    expect(isVersionConflict(error)).toBe(true);
+  });
+  it('isVersionConflict só vale para 409/412 sem código próprio', () => {
+    expect(isVersionConflict(new ApiError(409, 'x'))).toBe(true);
+    expect(isVersionConflict(new ApiError(412, 'x'))).toBe(true);
+    expect(isVersionConflict(new ApiError(422, 'x'))).toBe(false);
+    expect(isVersionConflict(new ApiError(500, 'x'))).toBe(false);
+    expect(isVersionConflict(new Error('x'))).toBe(false);
+    expect(isVersionConflict(null)).toBe(false);
+    expect(
+      isVersionConflict(new ApiError(409, 'x', { code: 'DEPENDENCIES' })),
+    ).toBe(false);
+  });
+  it('code é vazio sem envelope de erro ou com código que não é texto', () => {
+    expect(new ApiError(500, 'x').code).toBe('');
+    expect(new ApiError(500, 'x', 'texto').code).toBe('');
+    expect(new ApiError(500, 'x', {}).code).toBe('');
+    expect(new ApiError(500, 'x', { code: 7 }).code).toBe('');
+    expect(new ApiError(500, 'x', { code: 'ABC' }).code).toBe('ABC');
+  });
   it('aceita 204 sem tentar ler JSON e tolera erro não JSON', async () => {
     const noContent = new Response(null, { status: 204 });
     const parse = vi.spyOn(noContent, 'json');

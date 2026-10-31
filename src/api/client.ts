@@ -9,6 +9,35 @@ export class ApiError extends Error {
   ) {
     super(message);
   }
+  // Código estável da API (`VERSION_CONFLICT`, `BATCH_UNDONE`…); vazio se ausente.
+  get code(): string {
+    return codeOf(this.details);
+  }
+}
+function codeOf(details: unknown): string {
+  const code =
+    details && typeof details === 'object' && 'code' in details
+      ? details.code
+      : '';
+  return typeof code === 'string' ? code : '';
+}
+// Conflitos 409 que não são de versão: a mensagem da API explica melhor que o
+// texto genérico de "o registro mudou".
+const ownMessageConflicts = new Set([
+  'BATCH_UNDONE',
+  'DEPENDENCIES',
+  'CONTEXT_DEPENDENCY',
+  'IMMUTABLE_CLASSIFICATION',
+  'IDEMPOTENCY_CONFLICT',
+  'UNDO_CONFLICT',
+]);
+// 409/412 por versão desatualizada: só neles vale comparar com a versão atual.
+export function isVersionConflict(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    [409, 412].includes(error.status) &&
+    !ownMessageConflicts.has(error.code)
+  );
 }
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH';
@@ -111,12 +140,18 @@ function apiMessage(details: object): string | undefined {
   const message = 'message' in details ? details.message : undefined;
   return typeof message === 'string' && message.trim() ? message : undefined;
 }
+function ownConflictMessage(status: number, code: string, fromApi?: string) {
+  return status === 409 && ownMessageConflicts.has(code) ? fromApi : undefined;
+}
 function responseMessage(
   status: number,
   authenticated: boolean,
   seconds: number,
   fromApi?: string,
+  code = '',
 ) {
+  const own = ownConflictMessage(status, code, fromApi);
+  if (own) return own;
   if (status === 401)
     return authenticated
       ? 'Sua sessão expirou. Entre novamente.'
@@ -141,7 +176,13 @@ async function parseResponse(
     const details = errorDetails(payload);
     throw new ApiError(
       response.status,
-      responseMessage(response.status, !!session, seconds, apiMessage(details)),
+      responseMessage(
+        response.status,
+        !!session,
+        seconds,
+        apiMessage(details),
+        codeOf(details),
+      ),
       details,
       response.headers.get('X-Request-Id') ?? '',
       seconds,

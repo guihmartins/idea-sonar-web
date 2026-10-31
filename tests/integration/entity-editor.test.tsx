@@ -1091,6 +1091,41 @@ describe('EntityEditor — conflito de edição', () => {
     );
   });
 
+  it('409 por dependências mostra a mensagem da API sem abrir a comparação', async () => {
+    const services = createFixtureServices();
+    await services.session.login();
+    const { ApiError } = await import('../../src/api/client');
+    const detail = vi.spyOn(services.api, 'detail');
+    vi.spyOn(services.api, 'save').mockRejectedValueOnce(
+      new ApiError(409, 'Ponto tem relações ativas', {
+        code: 'DEPENDENCIES',
+        message: 'Ponto tem relações ativas',
+        details: [{ path: 'relations', message: ids.relation }],
+        requestId: 'req-dep',
+      }),
+    );
+    renderEditor(`/edit/nodes/${ids.jung}`, services);
+    const user = userEvent.setup();
+    await user.selectOptions(
+      await screen.findByRole('combobox', { name: 'Estado editorial' }),
+      'pending',
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Salvar registro' }),
+      ).not.toBeDisabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'Salvar registro' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Ponto tem relações ativas',
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(ids.relation);
+    expect(
+      screen.queryByRole('group', { name: 'Conflito de edição' }),
+    ).not.toBeInTheDocument();
+    expect(detail).toHaveBeenCalledTimes(1);
+  });
+
   it('descarta o rascunho e usa os dados atuais ao escolher a opção', async () => {
     const services = createFixtureServices();
     await services.session.login();

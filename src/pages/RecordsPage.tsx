@@ -6,6 +6,7 @@ import {
 } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { useServices } from '../app/services';
+import { ApiError } from '../api/client';
 import { Failure, editorialLabels } from '../components/Feedback';
 import type { CandidateType } from '../api/adapter';
 import type {
@@ -306,6 +307,9 @@ export function PendingPage() {
       await cache.invalidateQueries();
     } catch (e) {
       setError(e);
+      // Lote desfeito depois de a lista carregar: a API já não lista a pendência.
+      if (e instanceof ApiError && e.code === 'BATCH_UNDONE')
+        await cache.invalidateQueries();
     } finally {
       setBusy('');
     }

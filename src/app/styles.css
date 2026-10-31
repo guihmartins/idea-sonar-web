@@ -648,6 +648,14 @@ ol > .card time {
   margin: 0.3rem 0.5rem 0.3rem 0;
   border-color: var(--warning-line);
 }
+.field-issues {
+  margin: 0 0 0.5rem;
+  padding-left: 1.1rem;
+}
+.field-issues code {
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+}
 .error-details {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

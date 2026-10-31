@@ -17,6 +17,8 @@ Nenhuma rota ou campo foi removido; o que mudou é o comportamento e alguns limi
 - Um ponto não sai de `active` com relações ativas (409 `DEPENDENCIES`), e relação ativa exige ponto de atribuição ativo (422 `INACTIVE_ATTRIBUTION`, que no lote vira pendência). Origem igual ao destino é rejeitada.
 - Anos de contexto e dos filtros ficam entre -100000 e 3000 (astronômicos).
 
+No web, `ApiError.code` expõe o código do envelope e `Failure` lista cada `details[].path` com a mensagem. Os 409 `BATCH_UNDONE`, `DEPENDENCIES`, `CONTEXT_DEPENDENCY`, `IMMUTABLE_CLASSIFICATION`, `IDEMPOTENCY_CONFLICT` e `UNDO_CONFLICT` mostram a mensagem da API e não abrem a comparação de versão do editor (só 409/412 de versão abrem). `BATCH_UNDONE` na tela de pendências também recarrega a lista.
+
 Conceito contextual ativo exige contexto e uma relação `contextualizes` ativa com um conceito amplo ativo, e a relação ativa exige os dois pontos ativos: pelo REST um não ativa antes do outro. Só o lote cria ou atualiza os dois na mesma transação (o escopo contextual só é conferido no fim do lote).
 
 ## Importar versão publicada

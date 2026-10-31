@@ -7,7 +7,7 @@ import {
 } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { useServices } from '../app/services';
-import { ApiError } from '../api/client';
+import { isVersionConflict } from '../api/client';
 import { defaultFilters } from '../api/domain';
 import type { Entity, EntityType, Node, Context, Source } from '../api/domain';
 import { Failure } from '../components/Feedback';
@@ -181,7 +181,7 @@ function useEditorForm(type: Editable, initial: Entity | undefined) {
       await cache.invalidateQueries();
     } catch (e) {
       setError(e);
-      if (e instanceof ApiError && [409, 412].includes(e.status) && baseline) {
+      if (isVersionConflict(e) && baseline) {
         try {
           setConflict(await api.detail(type, baseline.id));
         } catch {

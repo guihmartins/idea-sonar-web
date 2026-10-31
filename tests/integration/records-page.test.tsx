@@ -4,6 +4,7 @@ import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import type { ReactElement } from 'react';
+import { ApiError } from '../../src/api/client';
 import { createQueryClient } from '../../src/app/queryClient';
 import { ServicesProvider } from '../../src/app/services';
 import { createFixtureServices, ids } from '../../src/dev/fixtures';
@@ -612,6 +613,68 @@ describe('PendingPage', () => {
       await screen.findByText('Pendência resolvida pela API.'),
     ).toBeInTheDocument();
     expect(resolve.mock.calls[1]?.[3]).not.toBe(firstKey);
+  });
+
+  it('mostra a mensagem da API e recarrega a lista quando o lote foi desfeito', async () => {
+    const services = createFixtureServices();
+    await services.session.login();
+    const pending = vi.spyOn(services.api, 'pending');
+    vi.spyOn(services.api, 'resolve').mockRejectedValue(
+      new ApiError(
+        409,
+        'Lote desfeito; a pendência não pode ser resolvida',
+        { code: 'BATCH_UNDONE' },
+        'req-undone',
+      ),
+    );
+    renderAt('/pending', <PendingPage />, services);
+    await screen.findByRole('heading', {
+      level: 2,
+      name: 'Jung (exemplo fictício)',
+    });
+    await screen.findByRole('option', { name: /Jung \(exemplo fictício\)/ });
+    const user = userEvent.setup();
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Candidato' }),
+      ids.jung,
+    );
+    await user.type(
+      screen.getByRole('textbox', { name: 'Justificativa da resolução' }),
+      'Tentativa em lote desfeito',
+    );
+    expect(pending).toHaveBeenCalledTimes(1);
+    await user.click(
+      screen.getByRole('button', { name: 'Resolver pendência' }),
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Lote desfeito; a pendência não pode ser resolvida',
+    );
+    await waitFor(() => expect(pending).toHaveBeenCalledTimes(2));
+  });
+
+  it('não recarrega a lista em outros erros de resolução', async () => {
+    const services = createFixtureServices();
+    await services.session.login();
+    const pending = vi.spyOn(services.api, 'pending');
+    vi.spyOn(services.api, 'resolve').mockRejectedValue(
+      new ApiError(409, 'Conflito', { code: 'VERSION_CONFLICT' }),
+    );
+    renderAt('/pending', <PendingPage />, services);
+    await screen.findByRole('option', { name: /Jung \(exemplo fictício\)/ });
+    const user = userEvent.setup();
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Candidato' }),
+      ids.jung,
+    );
+    await user.type(
+      screen.getByRole('textbox', { name: 'Justificativa da resolução' }),
+      'Tentativa com versão antiga',
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Resolver pendência' }),
+    );
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(pending).toHaveBeenCalledTimes(1);
   });
 
   it('mostra que não há candidatos semelhantes com a proposta original', async () => {
