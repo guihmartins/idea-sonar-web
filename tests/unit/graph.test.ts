@@ -302,7 +302,7 @@ it('mapeia todos os tipos, preserva identidade/direção e usa catálogo por ID'
     id: '0',
     label: 'Ponto 0',
     size: 30,
-    color: neutralColor,
+    color: '#7b8772',
   });
   expect(dataAt(result, 3).size).toBe(68);
   expect(dataAt(result, 1).size).toBeGreaterThan(30);
@@ -341,6 +341,8 @@ it('cores de contexto são estáveis com ordem diferente dos pontos', () => {
   const reversed = elements([b, a], [], catalog);
   expect(first[0]?.data.color).toBe(reversed[1]?.data.color);
   expect(first[1]?.data.color).toBe(reversed[0]?.data.color);
+  expect(first[0]?.data.color).toBe('#f0a074');
+  expect(first[1]?.data.color).toBe('#b9d99b');
   expect(first[0]?.data.color).not.toBe(first[1]?.data.color);
   expect(first[0]?.data.color).not.toBe(neutralColor);
 });

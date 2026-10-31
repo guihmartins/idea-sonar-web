@@ -81,3 +81,88 @@ it('resposta tardia após cancelamento não conclui restauração', async () => 
     restoreView(api, 'view', controller.signal, () => 0),
   ).rejects.toMatchObject({ name: 'AbortError' });
 });
+
+it('rejeita uma view sem ponto raiz', async () => {
+  const { api, view } = await setup();
+  vi.spyOn(api, 'detail').mockResolvedValue({ ...view, rootNodeId: null });
+  const node = vi.spyOn(api, 'node');
+
+  await expect(
+    restoreView(api, 'view', new AbortController().signal, () => 0),
+  ).rejects.toThrow('Esta view não tem ponto raiz. Escolha um ponto no mapa.');
+  expect(node).not.toHaveBeenCalled();
+});
+
+it('rejeita uma raiz arquivada antes de restaurar as expansões', async () => {
+  const { api } = await setup();
+  const root = await api.node(ids.jung, new AbortController().signal);
+  vi.spyOn(api, 'node').mockResolvedValue({ ...root, status: 'archived' });
+  const neighbors = vi.spyOn(api, 'neighbors');
+
+  await expect(
+    restoreView(api, 'view', new AbortController().signal, () => 0),
+  ).rejects.toThrow(
+    'A raiz desta view foi arquivada. Escolha outro ponto para iniciar um recorte.',
+  );
+  expect(neighbors).not.toHaveBeenCalled();
+});
+
+it('marca como parcial a expansão de um ponto que não está visível', async () => {
+  const { api, view } = await setup();
+  vi.spyOn(api, 'detail').mockResolvedValue({
+    ...view,
+    expandedNodes: ['ponto-ausente'],
+  });
+  const neighbors = vi.spyOn(api, 'neighbors');
+
+  const restored = await restoreView(
+    api,
+    'view',
+    new AbortController().signal,
+    () => 0,
+  );
+
+  expect(restored.partial).toBe(true);
+  expect(visible(restored.ledger).nodes.map((node) => node.id)).toEqual([
+    ids.jung,
+  ]);
+  expect(neighbors).not.toHaveBeenCalled();
+});
+
+it('marca limite de expansão como restauração parcial', async () => {
+  const { api } = await setup();
+  const root = await api.node(ids.jung, new AbortController().signal);
+  const firstPage = Array.from({ length: 500 }, (_, index) => ({
+    ...root,
+    id: index === 0 ? root.id : `restored-${index}`,
+    label: `Ponto ${index}`,
+  }));
+  const neighbors = vi
+    .spyOn(api, 'neighbors')
+    .mockResolvedValueOnce({
+      nodes: firstPage,
+      relations: [],
+      nextCursor: 'next-page',
+      truncated: false,
+    })
+    .mockResolvedValueOnce({
+      nodes: [{ ...root, id: 'overflow', label: 'Ponto excedente' }],
+      relations: [],
+      nextCursor: null,
+      truncated: false,
+    });
+
+  const restored = await restoreView(
+    api,
+    'view',
+    new AbortController().signal,
+    () => 0,
+  );
+
+  expect(neighbors).toHaveBeenCalledTimes(2);
+  expect(restored.partial).toBe(true);
+  expect(visible(restored.ledger).nodes).toHaveLength(500);
+  expect(
+    visible(restored.ledger).nodes.some((node) => node.id === 'overflow'),
+  ).toBe(false);
+});

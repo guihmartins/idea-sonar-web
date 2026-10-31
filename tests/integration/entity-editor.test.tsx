@@ -33,6 +33,16 @@ describe('EntityEditor — roteamento', () => {
     ).toBeInTheDocument();
   });
 
+  it('não consulta registros para tipo inválido mesmo com identificador', async () => {
+    const services = createFixtureServices();
+    const detail = vi.spyOn(services.api, 'detail');
+    renderEditor('/edit/imports/id-inválido', services);
+    expect(
+      await screen.findByText('Tipo de cadastro inválido'),
+    ).toBeInTheDocument();
+    expect(detail).not.toHaveBeenCalled();
+  });
+
   it('mostra falha ao carregar o registro existente', async () => {
     const services = createFixtureServices();
     await services.session.login();
@@ -43,6 +53,29 @@ describe('EntityEditor — roteamento', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Falha ao carregar registro',
     );
+  });
+
+  it('mostra erro comum de salvamento sem abrir o painel de conflito', async () => {
+    const services = createFixtureServices();
+    await services.session.login();
+    vi.spyOn(services.api, 'save').mockRejectedValue(
+      new Error('Falha interna ao salvar'),
+    );
+    renderEditor(`/edit/nodes/${ids.jung}`, services);
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Salvar registro' }),
+      ).not.toBeDisabled(),
+    );
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('button', { name: 'Salvar registro' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Falha interna ao salvar',
+    );
+    expect(
+      screen.queryByRole('group', { name: 'Conflito de edição' }),
+    ).not.toBeInTheDocument();
   });
 
   it('mostra carregamento inicial de catálogos', () => {
@@ -86,6 +119,26 @@ describe('EntityEditor — roteamento', () => {
 });
 
 describe('EntityEditor — pontos', () => {
+  it('inicia o cadastro de ponto com os valores padrão seguros', async () => {
+    renderEditor('/edit/nodes');
+    await screen.findByRole('option', { name: 'Pessoa' });
+    expect(
+      screen.getByRole('combobox', { name: 'Estado editorial' }),
+    ).toHaveValue('active');
+    expect(screen.getByRole('combobox', { name: 'Tipo' })).toHaveValue(
+      'person',
+    );
+    expect(screen.getByRole('textbox', { name: 'Nome' })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: 'Nome' })).toBeRequired();
+    expect(screen.getByRole('textbox', { name: 'Descrição' })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: 'Descrição' })).toBeRequired();
+    expect(
+      screen.getByRole('textbox', {
+        name: 'Outros nomes (separados por vírgula; idioma opcional, ex.: Jung (de))',
+      }),
+    ).toHaveValue('');
+  });
+
   it('cadastra um ponto do tipo conceito com escopo e contexto', async () => {
     const services = createFixtureServices();
     const save = vi.spyOn(services.api, 'save');
@@ -105,6 +158,12 @@ describe('EntityEditor — pontos', () => {
     );
     expect(
       screen.getByRole('combobox', { name: 'Escopo do conceito' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('combobox', { name: 'Escopo do conceito' }),
+    ).toHaveValue('');
+    expect(
+      screen.getByRole('option', { name: 'Selecione' }),
     ).toBeInTheDocument();
     await user.selectOptions(
       screen.getByRole('combobox', { name: 'Escopo do conceito' }),
@@ -172,6 +231,42 @@ describe('EntityEditor — pontos', () => {
 });
 
 describe('EntityEditor — fontes', () => {
+  it('inicia o cadastro de fonte com campos opcionais vazios', async () => {
+    renderEditor('/edit/sources');
+    expect(await screen.findByRole('textbox', { name: 'Título' })).toHaveValue(
+      '',
+    );
+    expect(screen.getByRole('textbox', { name: 'Título' })).toBeRequired();
+    expect(screen.getByRole('textbox', { name: 'Autor da fonte' })).toHaveValue(
+      '',
+    );
+    expect(
+      screen.getByRole('textbox', { name: 'Autor da fonte' }),
+    ).toBeRequired();
+    expect(
+      screen.getByRole('textbox', { name: 'URL da fonte (HTTP/HTTPS)' }),
+    ).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: 'Publicação' })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: 'DOI' })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: 'Notas' })).toHaveValue('');
+  });
+
+  it('preenche os dados recuperáveis da fonte ao editar', async () => {
+    renderEditor(`/edit/sources/${ids.source}`);
+    expect(await screen.findByRole('textbox', { name: 'Título' })).toHaveValue(
+      'Fonte sintética de demonstração',
+    );
+    expect(screen.getByRole('textbox', { name: 'Autor da fonte' })).toHaveValue(
+      'Autor fictício',
+    );
+    expect(
+      screen.getByRole('textbox', { name: 'URL da fonte (HTTP/HTTPS)' }),
+    ).toHaveValue('https://example.com/fonte-ficticia');
+    expect(screen.getByRole('textbox', { name: 'Publicação' })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: 'DOI' })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: 'Notas' })).toHaveValue('');
+  });
+
   it('rejeita fonte sem referência recuperável', async () => {
     renderEditor('/edit/sources');
     const user = userEvent.setup();
@@ -210,6 +305,33 @@ describe('EntityEditor — fontes', () => {
 });
 
 describe('EntityEditor — contextos', () => {
+  it('inicia o período de contexto como desconhecido, em era comum', async () => {
+    renderEditor('/edit/contexts');
+    expect(await screen.findByRole('textbox', { name: 'Nome' })).toHaveValue(
+      '',
+    );
+    expect(screen.getByRole('textbox', { name: 'Nome' })).toBeRequired();
+    expect(screen.getByRole('textbox', { name: 'Região' })).toHaveValue('');
+    expect(
+      screen.getByRole('textbox', { name: 'Rótulo do período' }),
+    ).toHaveValue('');
+    expect(screen.getByRole('spinbutton', { name: 'Ano inicial' })).toHaveValue(
+      null,
+    );
+    expect(screen.getByRole('spinbutton', { name: 'Ano final' })).toHaveValue(
+      null,
+    );
+    expect(screen.getByRole('combobox', { name: 'Era do início' })).toHaveValue(
+      'ce',
+    );
+    expect(screen.getByRole('combobox', { name: 'Era do fim' })).toHaveValue(
+      'ce',
+    );
+    expect(
+      screen.getByRole('combobox', { name: 'Precisão do período' }),
+    ).toHaveValue('unknown');
+  });
+
   it('rejeita período com fim antes do início', async () => {
     renderEditor('/edit/contexts');
     const user = userEvent.setup();
@@ -262,6 +384,44 @@ describe('EntityEditor — contextos', () => {
     expect(screen.getByRole('spinbutton', { name: 'Ano final' })).toHaveValue(
       100,
     );
+    expect(screen.getByRole('combobox', { name: 'Era do início' })).toHaveValue(
+      'bce',
+    );
+    expect(screen.getByRole('combobox', { name: 'Era do fim' })).toHaveValue(
+      'ce',
+    );
+    expect(screen.getByRole('textbox', { name: 'Região' })).toHaveValue(
+      'Região de teste',
+    );
+    expect(
+      screen.getByRole('textbox', { name: 'Rótulo do período' }),
+    ).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: 'Notas' })).toHaveValue('');
+  });
+
+  it('converte anos astronômicos negativos para anos a.C. no formulário', async () => {
+    const services = createFixtureServices();
+    await services.session.login();
+    const context = await services.api.detail('contexts', ids.context);
+    vi.spyOn(services.api, 'detail').mockResolvedValue({
+      ...context,
+      startYear: -99,
+      endYear: -1,
+    });
+    renderEditor(`/edit/contexts/${ids.context}`, services);
+
+    expect(
+      await screen.findByRole('spinbutton', { name: 'Ano inicial' }),
+    ).toHaveValue(100);
+    expect(screen.getByRole('spinbutton', { name: 'Ano final' })).toHaveValue(
+      2,
+    );
+    expect(screen.getByRole('combobox', { name: 'Era do início' })).toHaveValue(
+      'bce',
+    );
+    expect(screen.getByRole('combobox', { name: 'Era do fim' })).toHaveValue(
+      'bce',
+    );
   });
 });
 
@@ -280,6 +440,87 @@ describe('EntityEditor — relações', () => {
     );
     await user.click(option);
   }
+
+  it('mostra os valores iniciais seguros para uma relação nova', async () => {
+    renderEditor('/edit/relations');
+    await screen.findByRole('group', { name: 'Ponto de origem' });
+    expect(
+      screen.getAllByRole('textbox', { name: 'Buscar candidato' }),
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByRole('textbox', { name: 'Buscar candidato' })[0],
+    ).toHaveValue('');
+    expect(
+      screen.getAllByRole('textbox', { name: 'Buscar candidato' })[1],
+    ).toHaveValue('');
+    expect(screen.getByRole('combobox', { name: 'Predicado' })).toHaveValue('');
+    expect(screen.getByRole('combobox', { name: 'Predicado' })).toBeRequired();
+    expect(screen.getByRole('textbox', { name: 'Afirmação' })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: 'Afirmação' })).toBeRequired();
+    expect(screen.getByRole('textbox', { name: 'Justificativa' })).toHaveValue(
+      '',
+    );
+    expect(
+      screen.getByRole('textbox', { name: 'Justificativa' }),
+    ).toBeRequired();
+    expect(screen.getByRole('combobox', { name: 'Contexto' })).toHaveValue('');
+    expect(
+      screen.getByRole('combobox', { name: 'Classificação da evidência' }),
+    ).toHaveValue('inference');
+    expect(
+      screen.getByRole('textbox', { name: 'Autoria da inferência' }),
+    ).toHaveValue('');
+    expect(
+      screen.queryByRole('textbox', { name: 'Atribuição (quem interpreta)' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Intensidade' })).toHaveValue(
+      '',
+    );
+    expect(
+      screen.getByRole('checkbox', { name: 'Relação contestada' }),
+    ).not.toBeChecked();
+    expect(
+      screen.queryByRole('textbox', { name: 'Nota de contestação' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Adicionar uma URL não promove a classificação automaticamente.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('gera nova chave de idempotência após editar um envio que falhou', async () => {
+    const services = createFixtureServices();
+    const save = vi
+      .spyOn(services.api, 'save')
+      .mockRejectedValueOnce(new Error('Falha transitória ao salvar'));
+    renderEditor('/edit/sources', services);
+    const user = userEvent.setup();
+    await user.type(
+      await screen.findByRole('textbox', { name: 'Título' }),
+      'Fonte recuperável',
+    );
+    await user.type(
+      screen.getByRole('textbox', { name: 'Autor da fonte' }),
+      'Autoria de teste',
+    );
+    await user.type(
+      screen.getByRole('textbox', { name: 'DOI' }),
+      '10.1234/teste',
+    );
+    await user.click(screen.getByRole('button', { name: 'Salvar registro' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Falha transitória ao salvar',
+    );
+    const firstKey = save.mock.calls[0]?.[2];
+
+    await user.type(screen.getByRole('textbox', { name: 'Notas' }), 'Nota');
+    await user.click(screen.getByRole('button', { name: 'Salvar registro' }));
+
+    expect(await screen.findByText('Registro salvo.')).toBeInTheDocument();
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[1]?.[2]).not.toBe(firstKey);
+  });
 
   it('cadastra uma relação completa com evidência documentada', async () => {
     const services = createFixtureServices();
@@ -308,6 +549,24 @@ describe('EntityEditor — relações', () => {
     await user.click(
       screen.getByRole('button', { name: 'Adicionar evidência' }),
     );
+    expect(screen.getByRole('combobox', { name: 'Fonte' })).toHaveValue('');
+    expect(
+      screen.getByRole('combobox', { name: 'Papel da evidência' }),
+    ).toHaveValue('supports');
+    expect(screen.getByRole('combobox', { name: 'Tipo de fonte' })).toHaveValue(
+      'secondary',
+    );
+    expect(
+      screen.getByRole('textbox', { name: 'Localizador / página' }),
+    ).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: 'Trecho' })).toHaveValue('');
+    expect(
+      screen.getByRole('textbox', { name: 'Explicação da evidência' }),
+    ).toHaveValue('');
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Papel da evidência' }),
+      'supports',
+    );
     await user.selectOptions(
       screen.getByRole('combobox', { name: 'Fonte' }),
       ids.source,
@@ -320,6 +579,23 @@ describe('EntityEditor — relações', () => {
       screen.getAllByRole('textbox', { name: 'Explicação da evidência' })[0]!,
       'Explicação de teste',
     );
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Tipo de fonte' }),
+      'secondary',
+    );
+    await user.type(screen.getByRole('textbox', { name: 'Trecho' }), 'Trecho');
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Contexto' }),
+      ids.context,
+    );
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Intensidade' }),
+      '2',
+    );
+    await user.type(
+      screen.getByRole('textbox', { name: 'Justificativa da intensidade' }),
+      'Relevância do vínculo',
+    );
     await user.click(screen.getByRole('button', { name: 'Salvar registro' }));
     expect(await screen.findByText('Registro salvo.')).toBeInTheDocument();
     expect(save).toHaveBeenCalledWith(
@@ -328,6 +604,143 @@ describe('EntityEditor — relações', () => {
         sourceId: ids.jung,
         targetId: ids.gnosis,
         type: 'influenced',
+        contextId: ids.context,
+        evidenceStatus: 'documented',
+        intensity: 2,
+        intensityReason: 'Relevância do vínculo',
+        contested: false,
+        contestationNote: null,
+        evidence: [
+          {
+            sourceId: ids.source,
+            sourceKind: 'secondary',
+            stance: 'supports',
+            locator: 'p. 10',
+            excerpt: 'Trecho',
+            explanation: 'Explicação de teste',
+            conversationReference: null,
+          },
+        ],
+      }),
+      expect.any(String),
+      undefined,
+    );
+  });
+
+  it('salva atribuição e contestação com evidências nos dois sentidos', async () => {
+    const services = createFixtureServices();
+    const save = vi.spyOn(services.api, 'save');
+    renderEditor('/edit/relations', services);
+    await screen.findByRole('group', { name: 'Ponto de origem' });
+    await pickNode('Ponto de origem', 'Jung', 'Jung');
+    await pickNode('Ponto de destino', 'Gnosticismo', 'Gnosticismo');
+    const user = userEvent.setup();
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Predicado' }),
+      'influenced',
+    );
+    await user.type(
+      screen.getByRole('textbox', { name: 'Afirmação' }),
+      'Afirmação atribuída',
+    );
+    await user.type(
+      screen.getByRole('textbox', { name: 'Justificativa' }),
+      'Justificativa completa',
+    );
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Classificação da evidência' }),
+      'attributed_interpretation',
+    );
+    await user.type(
+      screen.getByRole('textbox', { name: 'Atribuição (quem interpreta)' }),
+      'Pesquisadora de exemplo',
+    );
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Intensidade' }),
+      '1',
+    );
+    await user.type(
+      screen.getByRole('textbox', { name: 'Justificativa da intensidade' }),
+      'Relação pontual',
+    );
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Relação contestada' }),
+    );
+    await user.type(
+      screen.getByRole('textbox', { name: 'Nota de contestação' }),
+      'Há leituras divergentes.',
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Adicionar evidência' }),
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Adicionar evidência' }),
+    );
+    await user.selectOptions(
+      screen.getAllByRole('combobox', { name: 'Fonte' })[0]!,
+      ids.source,
+    );
+    await user.selectOptions(
+      screen.getAllByRole('combobox', { name: 'Papel da evidência' })[0]!,
+      'supports',
+    );
+    await user.type(
+      screen.getAllByRole('textbox', { name: 'Localizador / página' })[0]!,
+      'p. 2',
+    );
+    await user.type(
+      screen.getAllByRole('textbox', { name: 'Explicação da evidência' })[0]!,
+      'A fonte sustenta a afirmação.',
+    );
+    await user.selectOptions(
+      screen.getAllByRole('combobox', { name: 'Fonte' })[1]!,
+      ids.source,
+    );
+    await user.selectOptions(
+      screen.getAllByRole('combobox', { name: 'Papel da evidência' })[1]!,
+      'challenges',
+    );
+    await user.type(
+      screen.getAllByRole('textbox', { name: 'Localizador / página' })[1]!,
+      'p. 8',
+    );
+    await user.type(
+      screen.getAllByRole('textbox', { name: 'Explicação da evidência' })[1]!,
+      'A fonte questiona a afirmação.',
+    );
+    await user.click(screen.getByRole('button', { name: 'Salvar registro' }));
+
+    expect(await screen.findByText('Registro salvo.')).toBeInTheDocument();
+    expect(save).toHaveBeenCalledWith(
+      'relations',
+      expect.objectContaining({
+        evidenceStatus: 'attributed_interpretation',
+        attributionText: 'Pesquisadora de exemplo',
+        inferenceAuthor: null,
+        intensity: 1,
+        intensityReason: 'Relação pontual',
+        contested: true,
+        contestationNote: 'Há leituras divergentes.',
+        evidence: [
+          {
+            sourceId: ids.source,
+            sourceKind: 'secondary',
+            stance: 'supports',
+            locator: 'p. 2',
+            excerpt: null,
+            explanation: 'A fonte sustenta a afirmação.',
+            conversationReference: null,
+          },
+          {
+            sourceId: ids.source,
+            sourceKind: 'secondary',
+            stance: 'challenges',
+            locator: 'p. 8',
+            excerpt: null,
+            explanation: 'A fonte questiona a afirmação.',
+            conversationReference: null,
+          },
+        ],
       }),
       expect.any(String),
       undefined,
@@ -344,14 +757,18 @@ describe('EntityEditor — relações', () => {
     );
     expect(
       screen.getByRole('textbox', { name: 'Atribuição (quem interpreta)' }),
-    ).toBeInTheDocument();
+    ).toBeRequired();
     await user.selectOptions(
       screen.getByRole('combobox', { name: 'Classificação da evidência' }),
       'inference',
     );
+    await user.type(
+      screen.getByRole('textbox', { name: 'Autoria da inferência' }),
+      'Autoria de teste',
+    );
     expect(
       screen.getByRole('textbox', { name: 'Autoria da inferência' }),
-    ).toBeInTheDocument();
+    ).toBeRequired();
   });
 
   it('mostra campo de nota ao marcar contestação e referência de conversa para evidência de conversa', async () => {
@@ -363,7 +780,7 @@ describe('EntityEditor — relações', () => {
     );
     expect(
       screen.getByRole('textbox', { name: 'Nota de contestação' }),
-    ).toBeInTheDocument();
+    ).toBeRequired();
     await user.click(
       screen.getByRole('button', { name: 'Adicionar evidência' }),
     );
@@ -385,12 +802,71 @@ describe('EntityEditor — relações', () => {
     await screen.findByRole('group', { name: 'Ponto de origem' });
     const user = userEvent.setup();
     const fieldset = screen.getByRole('group', { name: 'Ponto de origem' });
+    expect(within(fieldset).queryByText('Nenhum candidato.')).toBeNull();
     await user.type(
       within(fieldset).getByRole('textbox', { name: 'Buscar candidato' }),
       'zzz-nenhum',
     );
     expect(
       await within(fieldset).findByText('Nenhum candidato.'),
+    ).toBeInTheDocument();
+  });
+
+  it('mostra carregamento enquanto a busca de candidato está pendente', async () => {
+    const services = createFixtureServices();
+    await services.session.login();
+    vi.spyOn(services.api, 'search').mockReturnValue(new Promise(() => {}));
+    renderEditor('/edit/relations', services);
+    const origin = await screen.findByRole('group', {
+      name: 'Ponto de origem',
+    });
+    await userEvent
+      .setup()
+      .type(
+        within(origin).getByRole('textbox', { name: 'Buscar candidato' }),
+        'pesquisa pendente',
+      );
+    expect(
+      await within(origin).findByText('Buscando candidatos…'),
+    ).toBeInTheDocument();
+  });
+
+  it('carrega a próxima página e seleciona um candidato encontrado', async () => {
+    const services = createFixtureServices();
+    await services.session.login();
+    const jung = await services.api.node(ids.jung);
+    const gnosis = await services.api.node(ids.gnosis);
+    const search = vi
+      .spyOn(services.api, 'search')
+      .mockResolvedValueOnce({ items: [jung], nextCursor: 'cursor-2' })
+      .mockResolvedValueOnce({ items: [gnosis], nextCursor: null });
+    renderEditor('/edit/relations', services);
+    const user = userEvent.setup();
+    const origin = screen.getByRole('group', { name: 'Ponto de origem' });
+    await user.type(
+      within(origin).getByRole('textbox', { name: 'Buscar candidato' }),
+      'candidato',
+    );
+
+    await user.click(await within(origin).findByText(/Jung/));
+    expect(
+      within(origin).queryByText('Nenhum candidato.'),
+    ).not.toBeInTheDocument();
+    expect(within(origin).getByRole('radio', { name: /Jung/ })).toBeChecked();
+    expect(
+      await within(origin).findByText(/Selecionado: Jung \(exemplo fictício\)/),
+    ).toBeInTheDocument();
+    await user.click(
+      within(origin).getByRole('button', { name: 'Mais candidatos' }),
+    );
+
+    expect(await within(origin).findByText(/Gnosticismo/)).toBeInTheDocument();
+    expect(
+      within(origin).queryByRole('button', { name: 'Mais candidatos' }),
+    ).not.toBeInTheDocument();
+    expect(search).toHaveBeenCalledTimes(2);
+    expect(
+      within(origin).getByRole('radio', { name: /Gnosticismo/ }),
     ).toBeInTheDocument();
   });
 
@@ -433,6 +909,40 @@ describe('EntityEditor — relações', () => {
       'Falha ao carregar ponto',
     );
   });
+
+  it('remove evidência da relação editada antes de salvar', async () => {
+    const services = createFixtureServices();
+    const save = vi.spyOn(services.api, 'save');
+    renderEditor(`/edit/relations/${ids.relation}`, services);
+    await screen.findByRole('heading', {
+      level: 1,
+      name: 'Editar relação',
+    });
+    const user = userEvent.setup();
+    const remove = await screen.findAllByRole('button', {
+      name: 'Remover evidência',
+    });
+    await user.click(remove[0]!);
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Classificação da evidência' }),
+      'inference',
+    );
+    await user.type(
+      screen.getByRole('textbox', { name: 'Autoria da inferência' }),
+      'Autoria de teste',
+    );
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Relação contestada' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Salvar registro' }));
+    expect(await screen.findByText('Registro salvo.')).toBeInTheDocument();
+    expect(save).toHaveBeenCalledWith(
+      'relations',
+      expect.objectContaining({ evidence: [] }),
+      expect.any(String),
+      expect.any(Object),
+    );
+  });
 });
 
 describe('EntityEditor — arquivamento e histórico', () => {
@@ -452,7 +962,9 @@ describe('EntityEditor — arquivamento e histórico', () => {
   });
 
   it('arquiva um registro após confirmação', async () => {
-    renderEditor(`/edit/nodes/${ids.jung}`);
+    const services = createFixtureServices();
+    const save = vi.spyOn(services.api, 'save');
+    renderEditor(`/edit/nodes/${ids.jung}`, services);
     const user = userEvent.setup();
     await user.click(
       await screen.findByRole('button', { name: 'Arquivar registro' }),
@@ -469,6 +981,20 @@ describe('EntityEditor — arquivamento e histórico', () => {
     expect(
       screen.getByRole('button', { name: 'Arquivar registro' }),
     ).toBeDisabled();
+    expect(
+      screen.getByRole('combobox', { name: 'Estado editorial' }),
+    ).toHaveValue('archived');
+    expect(
+      within(
+        screen.getByRole('combobox', { name: 'Estado editorial' }),
+      ).getByRole('option', { name: 'Arquivado' }),
+    ).toBeInTheDocument();
+    expect(save).toHaveBeenCalledWith(
+      'nodes',
+      { status: 'archived' },
+      expect.any(String),
+      expect.objectContaining({ id: ids.jung }),
+    );
   });
 
   it('cancela a confirmação de arquivamento', async () => {
@@ -507,6 +1033,64 @@ describe('EntityEditor — arquivamento e histórico', () => {
 });
 
 describe('EntityEditor — conflito de edição', () => {
+  it('mantém rascunho ao continuar sobre a versão atual', async () => {
+    const services = createFixtureServices();
+    await services.session.login();
+    const { ApiError } = await import('../../src/api/client');
+    const original = {
+      ...(await services.api.detail('nodes', ids.jung)),
+      contexts: [ids.context, 'contexto-secundario'],
+    };
+    const latest = {
+      ...original,
+      version: 2,
+      label: 'Versão atual da API',
+      contexts: [],
+    };
+    const detail = vi
+      .spyOn(services.api, 'detail')
+      .mockResolvedValueOnce(original)
+      .mockResolvedValueOnce(latest);
+    const save = vi
+      .spyOn(services.api, 'save')
+      .mockRejectedValueOnce(new ApiError(409, 'Conflito de edição'))
+      .mockResolvedValueOnce({ ...latest, label: 'Rascunho preservado' });
+    renderEditor(`/edit/nodes/${ids.jung}`, services);
+    const user = userEvent.setup();
+    const name = await screen.findByRole('textbox', { name: 'Nome' });
+    await user.clear(name);
+    await user.type(name, 'Rascunho preservado');
+    await user.click(screen.getByRole('button', { name: 'Salvar registro' }));
+    expect(
+      await screen.findByRole('group', { name: 'Conflito de edição' }),
+    ).toBeInTheDocument();
+    const comparison = screen.getByRole('group', {
+      name: 'Conflito de edição',
+    });
+    expect(comparison).toHaveTextContent('Contextos');
+    expect(comparison).toHaveTextContent(
+      `Seu rascunho: ${ids.context}, contexto-secundario`,
+    );
+    expect(comparison).toHaveTextContent('Versão atual: (vazio)');
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Continuar editando sobre a versão atual',
+      }),
+    );
+    expect(name).toHaveValue('Rascunho preservado');
+    await user.click(screen.getByRole('button', { name: 'Salvar registro' }));
+
+    expect(await screen.findByText('Registro salvo.')).toBeInTheDocument();
+    expect(detail).toHaveBeenNthCalledWith(2, 'nodes', ids.jung);
+    expect(save).toHaveBeenLastCalledWith(
+      'nodes',
+      expect.objectContaining({ label: 'Rascunho preservado' }),
+      expect.any(String),
+      expect.objectContaining({ version: 2 }),
+    );
+  });
+
   it('descarta o rascunho e usa os dados atuais ao escolher a opção', async () => {
     const services = createFixtureServices();
     await services.session.login();
@@ -556,6 +1140,12 @@ describe('EntityEditor — conflito de edição', () => {
       name: 'Conflito de edição',
     });
     expect(comparison).toHaveTextContent('Contexto atualizado em outra sessão');
+    expect(comparison).toHaveTextContent('Seu rascunho: Meu rascunho de nome');
+    expect(comparison).toHaveTextContent(
+      'Versão atual: Contexto atualizado em outra sessão',
+    );
+    expect(comparison).toHaveTextContent('Seu rascunho: Região de teste');
+    expect(comparison).toHaveTextContent('Versão atual: Outra região');
     await user.click(
       within(comparison).getByRole('button', {
         name: 'Usar dados atuais e descartar rascunho',
@@ -565,6 +1155,90 @@ describe('EntityEditor — conflito de edição', () => {
       screen.queryByRole('group', { name: 'Conflito de edição' }),
     ).not.toBeInTheDocument();
     expect(nameField).toHaveValue('Contexto atualizado em outra sessão');
+  });
+
+  it('compara evidências e contestação no conflito de uma relação', async () => {
+    const services = createFixtureServices();
+    await services.session.login();
+    const { ApiError } = await import('../../src/api/client');
+    const original = await services.api.relation(ids.relation);
+    const contestedEvidence = [
+      {
+        sourceId: null,
+        sourceKind: 'conversation' as const,
+        stance: 'supports' as const,
+        excerpt: null,
+        locator: 'mensagem 7',
+        explanation: 'Evidência favorável do rascunho.',
+        conversationReference: 'conversa original, mensagem 7',
+      },
+      {
+        sourceId: null,
+        sourceKind: 'conversation' as const,
+        stance: 'challenges' as const,
+        excerpt: null,
+        locator: 'mensagem 8',
+        explanation: 'Evidência contrária do rascunho.',
+        conversationReference: 'conversa original, mensagem 8',
+      },
+    ];
+    const draft = {
+      ...original,
+      evidenceStatus: 'inference' as const,
+      inferenceAuthor: 'Autoria do rascunho',
+      evidence: contestedEvidence,
+      contested: true,
+      contestationNote: 'Contestação do rascunho.',
+    };
+    const latest = {
+      ...draft,
+      version: 2,
+      evidence: [
+        {
+          sourceId: null,
+          sourceKind: 'conversation' as const,
+          stance: 'supports' as const,
+          excerpt: null,
+          locator: 'mensagem 8',
+          explanation: 'Evidência da versão atual.',
+          conversationReference: 'conversa atual',
+        },
+      ],
+      contested: false,
+      contestationNote: 'Nota da versão atual.',
+    };
+    vi.spyOn(services.api, 'detail')
+      .mockResolvedValueOnce(draft)
+      .mockResolvedValue(latest);
+    vi.spyOn(services.api, 'save').mockRejectedValueOnce(
+      new ApiError(409, 'Conflito de edição'),
+    );
+    renderEditor(`/edit/relations/${ids.relation}`, services);
+    const user = userEvent.setup();
+    const claim = await screen.findByRole('textbox', { name: 'Afirmação' });
+    await user.clear(claim);
+    await user.type(claim, 'Afirmação do rascunho');
+    await user.click(screen.getByRole('button', { name: 'Salvar registro' }));
+
+    const comparison = await screen.findByRole('group', {
+      name: 'Conflito de edição',
+    });
+    expect(
+      within(comparison).queryByText('Estado editorial'),
+    ).not.toBeInTheDocument();
+    expect(within(comparison).getByText('Evidências')).toBeInTheDocument();
+    expect(within(comparison).getByText('Contestação')).toBeInTheDocument();
+    expect(
+      within(comparison).getByText(/Evidência da versão atual\./, {
+        selector: 'pre',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(comparison).getByText(/Versão atual:/, { selector: 'pre' }),
+    ).toBeInTheDocument();
+    expect(comparison).toHaveTextContent('Nota da versão atual.');
+    expect(comparison).toHaveTextContent('Seu rascunho: Sim');
+    expect(comparison).toHaveTextContent('Versão atual: Não');
   });
 
   it('mostra mensagem quando não é possível recarregar o conflito', async () => {

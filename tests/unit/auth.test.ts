@@ -107,3 +107,17 @@ it('delega login e estado real da sessão, validando o access token retornado', 
   sdk.token.mockResolvedValueOnce('');
   await expect(session.token()).rejects.toThrow('Access token indisponível');
 });
+
+it('remove todos os separadores finais do domínio do issuer', () => {
+  createSession({
+    ...config,
+    oidc: {
+      issuer: 'https://identity.example.com///',
+      clientId: 'public-spa',
+      audience: 'api-audience',
+    },
+  });
+  expect(sdk.init).toHaveBeenCalledWith(
+    expect.objectContaining({ domain: 'https://identity.example.com' }),
+  );
+});

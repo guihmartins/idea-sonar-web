@@ -2,6 +2,8 @@ import { act, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Catalog, Node, Relation } from '../../src/api/domain';
 
+const cytoscapeState = vi.hoisted(() => ({ style: null as unknown }));
+
 interface ElementState {
   id: string;
   data: Record<string, unknown>;
@@ -108,8 +110,10 @@ class FakeCore {
   panValue = { x: 0, y: 0 };
   destroyedFlag = false;
   handlers = new Map<string, (event: unknown) => void>();
+  styleUpdate = vi.fn();
   center = vi.fn();
   fit = vi.fn();
+  resize = vi.fn();
   add(item: { group: 'nodes' | 'edges'; data: Record<string, unknown> }) {
     const id = String(item.data.id);
     const state: ElementState = {
@@ -141,7 +145,7 @@ class FakeCore {
     fn();
   }
   style() {
-    return { update: vi.fn() };
+    return { update: this.styleUpdate };
   }
   on(event: string, selector: string, handler: (event: unknown) => void) {
     this.handlers.set(`${event}:${selector}`, handler);
@@ -192,7 +196,8 @@ class FakeCore {
 }
 let fakeCore: FakeCore | null = null;
 vi.mock('cytoscape', () => ({
-  default: vi.fn(() => {
+  default: vi.fn((options: { style: unknown }) => {
+    cytoscapeState.style = options.style;
     fakeCore = new FakeCore();
     return fakeCore;
   }),
@@ -263,9 +268,16 @@ const catalog: Catalog = {
   intensities: [{ value: 1, label: 'pontual' }],
 };
 class FakeResizeObserver {
-  observe() {}
+  static instances: FakeResizeObserver[] = [];
+  observe = vi.fn();
   unobserve() {}
-  disconnect() {}
+  disconnect = vi.fn();
+  constructor(private readonly callback: ResizeObserverCallback) {
+    FakeResizeObserver.instances.push(this);
+  }
+  trigger() {
+    this.callback([], this as unknown as ResizeObserver);
+  }
 }
 
 function baseProps() {
@@ -286,6 +298,7 @@ function baseProps() {
 
 describe('GraphCanvas', () => {
   beforeEach(() => {
+    FakeResizeObserver.instances = [];
     vi.stubGlobal('ResizeObserver', FakeResizeObserver);
     vi.stubGlobal('document', document);
     Object.defineProperty(document, 'fonts', {
@@ -296,6 +309,74 @@ describe('GraphCanvas', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     fakeCore = null;
+    cytoscapeState.style = null;
+  });
+
+  it('configura as cores e os estilos acessíveis do grafo no Cytoscape', () => {
+    render(<GraphCanvas {...baseProps()} />);
+    const styles = cytoscapeState.style as {
+      selector: string;
+      style: Record<string, unknown>;
+    }[];
+    expect(styles.map(({ selector }) => selector)).toEqual([
+      'node',
+      'edge',
+      ':selected',
+      '.neighbor',
+      'edge[?contested]',
+    ]);
+    expect(styles[0]?.style).toMatchObject({
+      label: 'data(label)',
+      color: '#dfe5d8',
+      'font-family': 'IBM Plex Mono',
+      'text-wrap': 'ellipsis',
+    });
+    expect(styles[1]?.style).toMatchObject({
+      'line-color': '#6d7a64',
+      'target-arrow-color': '#6d7a64',
+    });
+    expect(styles[2]?.style).toMatchObject({
+      'border-color': '#e76732',
+      'line-color': '#e76732',
+    });
+    expect(styles[3]?.style['border-color']).toBe('#c3cabc');
+    expect(styles[4]?.style['line-color']).toBe('#f08a9b');
+  });
+
+  it('redesenha após carregar fontes enquanto o Cytoscape continua ativo', async () => {
+    render(<GraphCanvas {...baseProps()} />);
+    const core = fakeCore;
+    await act(async () => {
+      await document.fonts.ready;
+      await Promise.resolve();
+    });
+    expect(core?.styleUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('não atualiza os estilos se o Cytoscape foi destruído antes da fonte', async () => {
+    let resolveFonts = () => {};
+    const ready = new Promise<void>((resolve) => {
+      resolveFonts = resolve;
+    });
+    Object.defineProperty(document, 'fonts', {
+      value: { ready },
+      configurable: true,
+    });
+    const { unmount } = render(<GraphCanvas {...baseProps()} />);
+    const core = fakeCore;
+    unmount();
+    resolveFonts();
+    await act(async () => ready);
+    expect(core?.styleUpdate).not.toHaveBeenCalled();
+  });
+
+  it('continua montando quando a API de fontes do documento não existe', () => {
+    Object.defineProperty(document, 'fonts', {
+      value: undefined,
+      configurable: true,
+    });
+    expect(() => render(<GraphCanvas {...baseProps()} />)).not.toThrow();
+    expect(fakeCore).not.toBeNull();
   });
 
   it('renderiza o rótulo acessível com as contagens atuais', () => {
@@ -341,13 +422,21 @@ describe('GraphCanvas', () => {
   });
 
   it('seleciona o elemento e marca vizinhos ao mudar a seleção', () => {
-    const props = baseProps();
+    const props = {
+      ...baseProps(),
+      nodes: [...baseProps().nodes, makeNode('n3')],
+    };
     const { rerender } = render(<GraphCanvas {...props} />);
     rerender(<GraphCanvas {...props} selected="n1" />);
     const n1 = fakeCore?.elementsMap.get('n1');
     const n2 = fakeCore?.elementsMap.get('n2');
+    const n3 = fakeCore?.elementsMap.get('n3');
     expect(n1?.selected).toBe(true);
     expect(n2?.classes.has('neighbor')).toBe(true);
+    rerender(<GraphCanvas {...props} selected="n3" />);
+    expect(n1?.selected).toBe(false);
+    expect(n2?.classes.has('neighbor')).toBe(false);
+    expect(n3?.selected).toBe(true);
   });
 
   it('centraliza no nó em foco quando a revisão de foco muda', () => {
@@ -393,9 +482,18 @@ describe('GraphCanvas', () => {
     render(<GraphCanvas {...props} />);
     fakeCore?.triggerTap('n1', false);
     expect(props.onSelect).toHaveBeenCalledWith('n1', false);
+    fakeCore?.getElementById('n1').position({ x: 8, y: 10 });
+    fakeCore!.zoomValue = 2;
+    fakeCore!.panValue = { x: 3, y: 4 };
+    const n2Position = fakeCore?.elementsMap.get('n2')?.position;
+    if (!n2Position) throw new Error('posição do segundo nó não encontrada');
     fakeCore?.triggerDragfree();
+    expect(props.onSnapshot).toHaveBeenLastCalledWith(
+      { n1: { x: 8, y: 10 }, n2: n2Position },
+      { zoom: 2, pan: { x: 3, y: 4 } },
+    );
     fakeCore?.triggerZoomPan();
-    expect(props.onSnapshot).toHaveBeenCalled();
+    expect(props.onSnapshot).toHaveBeenCalledTimes(2);
   });
 
   it('remove elementos que deixaram de ser visíveis', () => {
@@ -412,5 +510,17 @@ describe('GraphCanvas', () => {
     const core = fakeCore;
     unmount();
     expect(core?.destroyedFlag).toBe(true);
+  });
+
+  it('redimensiona o canvas e desconecta o observer ao desmontar', () => {
+    const { unmount } = render(<GraphCanvas {...baseProps()} />);
+    const observer = FakeResizeObserver.instances[0];
+    expect(observer?.observe).toHaveBeenCalledOnce();
+    act(() => observer?.trigger());
+    expect(fakeCore?.resize).toHaveBeenCalledOnce();
+
+    unmount();
+
+    expect(observer?.disconnect).toHaveBeenCalledOnce();
   });
 });
