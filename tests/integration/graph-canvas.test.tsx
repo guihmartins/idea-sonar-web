@@ -147,8 +147,17 @@ class FakeCore {
   style() {
     return { update: this.styleUpdate };
   }
-  on(event: string, selector: string, handler: (event: unknown) => void) {
-    this.handlers.set(`${event}:${selector}`, handler);
+  on(
+    event: string,
+    selectorOrHandler: string | ((event: unknown) => void),
+    handler?: (event: unknown) => void,
+  ) {
+    const selector =
+      typeof selectorOrHandler === 'string' ? selectorOrHandler : null;
+    const callback =
+      typeof selectorOrHandler === 'function' ? selectorOrHandler : handler;
+    if (!callback) throw new Error(`handler ausente para ${event}`);
+    this.handlers.set(selector ? `${event}:${selector}` : event, callback);
   }
   zoom() {
     return this.zoomValue;
@@ -191,7 +200,7 @@ class FakeCore {
     this.handlers.get('dragfree:node')?.({});
   }
   triggerZoomPan() {
-    this.handlers.get('zoom pan:undefined')?.({});
+    this.handlers.get('zoom pan')?.({});
   }
 }
 let fakeCore: FakeCore | null = null;
@@ -492,8 +501,15 @@ describe('GraphCanvas', () => {
       { n1: { x: 8, y: 10 }, n2: n2Position },
       { zoom: 2, pan: { x: 3, y: 4 } },
     );
+    const snapshotsBeforeZoomPan = props.onSnapshot.mock.calls.length;
+    fakeCore!.zoomValue = 3;
+    fakeCore!.panValue = { x: 5, y: 6 };
     fakeCore?.triggerZoomPan();
-    expect(props.onSnapshot).toHaveBeenCalledTimes(2);
+    expect(props.onSnapshot).toHaveBeenCalledTimes(snapshotsBeforeZoomPan + 1);
+    expect(props.onSnapshot).toHaveBeenLastCalledWith(
+      { n1: { x: 8, y: 10 }, n2: n2Position },
+      { zoom: 3, pan: { x: 5, y: 6 } },
+    );
   });
 
   it('remove elementos que deixaram de ser visíveis', () => {
