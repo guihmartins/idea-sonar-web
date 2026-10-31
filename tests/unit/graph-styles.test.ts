@@ -24,9 +24,7 @@ describe('graphStyle', () => {
       'line-style': (ele: unknown) => string;
       'target-arrow-shape': (ele: unknown) => string;
     };
-    expect(style['line-style'](fakeElement({ line: 'dashed' }))).toBe(
-      'dashed',
-    );
+    expect(style['line-style'](fakeElement({ line: 'dashed' }))).toBe('dashed');
     expect(
       style['target-arrow-shape'](fakeElement({ arrow: 'triangle' })),
     ).toBe('triangle');

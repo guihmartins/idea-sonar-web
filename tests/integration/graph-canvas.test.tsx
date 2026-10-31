@@ -131,9 +131,7 @@ class FakeCore {
     );
   }
   elements() {
-    return new FakeCollection(
-      [...this.elementsMap.values()].map(makeHandle),
-    );
+    return new FakeCollection([...this.elementsMap.values()].map(makeHandle));
   }
   getElementById(id: string) {
     const state = this.elementsMap.get(id);
@@ -335,9 +333,7 @@ describe('GraphCanvas', () => {
   it('aplica posições fornecidas quando o snapshot muda', () => {
     const props = baseProps();
     const { rerender } = render(<GraphCanvas {...props} />);
-    rerender(
-      <GraphCanvas {...props} positions={{ n1: { x: 99, y: 88 } }} />,
-    );
+    rerender(<GraphCanvas {...props} positions={{ n1: { x: 99, y: 88 } }} />);
     expect(fakeCore?.elementsMap.get('n1')?.position).toEqual({
       x: 99,
       y: 88,
@@ -386,10 +382,7 @@ describe('GraphCanvas', () => {
     const props = baseProps();
     const { rerender } = render(<GraphCanvas {...props} />);
     rerender(
-      <GraphCanvas
-        {...props}
-        viewport={{ zoom: 2, pan: { x: 5, y: 6 } }}
-      />,
+      <GraphCanvas {...props} viewport={{ zoom: 2, pan: { x: 5, y: 6 } }} />,
     );
     expect(fakeCore?.zoomValue).toBe(2);
     expect(fakeCore?.panValue).toEqual({ x: 5, y: 6 });
@@ -409,9 +402,7 @@ describe('GraphCanvas', () => {
     const props = baseProps();
     const { rerender } = render(<GraphCanvas {...props} />);
     expect(fakeCore?.elementsMap.has('r1')).toBe(true);
-    rerender(
-      <GraphCanvas {...props} nodes={props.nodes} relations={[]} />,
-    );
+    rerender(<GraphCanvas {...props} nodes={props.nodes} relations={[]} />);
     expect(fakeCore?.elementsMap.has('r1')).toBe(false);
   });
 
