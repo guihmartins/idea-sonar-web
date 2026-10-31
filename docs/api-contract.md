@@ -2,9 +2,22 @@
 
 ## Situação
 
-Em 29/10/2026 foi importado o snapshot de `contracts/openapi.json` da API (commit `d0119459e99e806fb0c55d1a1df33643099e0f3c`, `info.version` 1.0.0). `contracts/source.json` registra origem, commit e SHA-256; `src/api/generated/` contém tipos e cliente gerados.
+Em 31/10/2026 o snapshot de `contracts/openapi.json` da API foi atualizado para o commit `e27da26a162755707edfc4bf9e53306ba25e8ca8` (`info.version` 1.1.0); a primeira importação, de 29/10/2026, era do commit `d0119459e99e806fb0c55d1a1df33643099e0f3c` (1.0.0). `contracts/source.json` registra origem, commit e SHA-256; `src/api/generated/` contém tipos e cliente gerados.
 
 `src/api/domain.ts` valida por Zod os formatos de resposta do contrato; o tipo `ContractCheck` falha a compilação se o modelo divergir dos tipos gerados. `src/api/adapter.ts` usa as rotas, filtros (`contextId`, `includePending`, `startYear`, `endYear`, `includeUnknownPeriod`), `If-Match` com a versão inteira e os corpos de undo/resolve do contrato. Respostas fora do contrato mostram erro explícito; produção nunca troca para mocks.
+
+## Contrato 1.1.0
+
+Nenhuma rota ou campo foi removido; o que mudou é o comportamento e alguns limites:
+
+- `op: "update"` no lote (`ImportBatchV1`, `POST /api/v1/imports`) é parcial: campo omitido é preservado, uma lista enviada substitui a lista inteira, `null` explícito limpa o campo e um update sem campo nenhum é rejeitado.
+- Erros de validação trazem `details: [{ path, message }]` com o caminho do campo (`relations.0.claim`).
+- `viewUrl` do resultado do lote aponta para `/imports/{batchId}` do web.
+- Pendências de lote desfeito saem de `GET /pending`; resolver uma retorna 409 `BATCH_UNDONE`.
+- Um ponto não sai de `active` com relações ativas (409 `DEPENDENCIES`), e relação ativa exige ponto de atribuição ativo (422 `INACTIVE_ATTRIBUTION`, que no lote vira pendência). Origem igual ao destino é rejeitada.
+- Anos de contexto e dos filtros ficam entre -100000 e 3000 (astronômicos).
+
+Conceito contextual ativo exige contexto e uma relação `contextualizes` ativa com um conceito amplo ativo, e a relação ativa exige os dois pontos ativos: pelo REST um não ativa antes do outro. Só o lote cria ou atualiza os dois na mesma transação (o escopo contextual só é conferido no fim do lote).
 
 ## Importar versão publicada
 

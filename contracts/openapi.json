@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Idea Sonar API",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "API privada de conhecimento, relações contextualizadas e ingestão auditada."
   },
   "components": {
@@ -446,13 +446,17 @@
             "type": [
               "integer",
               "null"
-            ]
+            ],
+            "minimum": -100000,
+            "maximum": 3000
           },
           "endYear": {
             "type": [
               "integer",
               "null"
-            ]
+            ],
+            "minimum": -100000,
+            "maximum": 3000
           },
           "precision": {
             "type": "string",
@@ -539,13 +543,17 @@
             "type": [
               "integer",
               "null"
-            ]
+            ],
+            "minimum": -100000,
+            "maximum": 3000
           },
           "endYear": {
             "type": [
               "integer",
               "null"
-            ]
+            ],
+            "minimum": -100000,
+            "maximum": 3000
           },
           "precision": {
             "type": "string",
@@ -1250,10 +1258,14 @@
                 "format": "uuid"
               },
               "startYear": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -100000,
+                "maximum": 3000
               },
               "endYear": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -100000,
+                "maximum": 3000
               },
               "includeUnknownPeriod": {
                 "type": "boolean"
@@ -1474,7 +1486,7 @@
           "nodes": {
             "type": "array",
             "items": {
-              "anyOf": [
+              "oneOf": [
                 {
                   "type": "object",
                   "properties": {
@@ -1653,8 +1665,7 @@
                         ],
                         "additionalProperties": false
                       },
-                      "maxItems": 100,
-                      "default": []
+                      "maxItems": 100
                     },
                     "contexts": {
                       "type": "array",
@@ -1688,8 +1699,7 @@
                             "additionalProperties": false
                           }
                         ]
-                      },
-                      "default": []
+                      }
                     },
                     "status": {
                       "type": "string",
@@ -1697,8 +1707,7 @@
                         "active",
                         "pending",
                         "archived"
-                      ],
-                      "default": "active"
+                      ]
                     },
                     "clientRef": {
                       "type": "string",
@@ -1721,9 +1730,6 @@
                     }
                   },
                   "required": [
-                    "kind",
-                    "label",
-                    "description",
                     "clientRef",
                     "op",
                     "id",
@@ -1765,7 +1771,7 @@
           "contexts": {
             "type": "array",
             "items": {
-              "anyOf": [
+              "oneOf": [
                 {
                   "type": "object",
                   "properties": {
@@ -1821,13 +1827,17 @@
                       "type": [
                         "integer",
                         "null"
-                      ]
+                      ],
+                      "minimum": -100000,
+                      "maximum": 3000
                     },
                     "endYear": {
                       "type": [
                         "integer",
                         "null"
-                      ]
+                      ],
+                      "minimum": -100000,
+                      "maximum": 3000
                     },
                     "precision": {
                       "type": "string",
@@ -1891,8 +1901,7 @@
                         "active",
                         "pending",
                         "archived"
-                      ],
-                      "default": "active"
+                      ]
                     },
                     "label": {
                       "type": "string",
@@ -1937,13 +1946,17 @@
                       "type": [
                         "integer",
                         "null"
-                      ]
+                      ],
+                      "minimum": -100000,
+                      "maximum": 3000
                     },
                     "endYear": {
                       "type": [
                         "integer",
                         "null"
-                      ]
+                      ],
+                      "minimum": -100000,
+                      "maximum": 3000
                     },
                     "precision": {
                       "type": "string",
@@ -1952,8 +1965,7 @@
                         "approximate",
                         "range",
                         "exact"
-                      ],
-                      "default": "unknown"
+                      ]
                     },
                     "periodLabel": {
                       "type": [
@@ -2000,7 +2012,6 @@
                     }
                   },
                   "required": [
-                    "label",
                     "clientRef",
                     "op",
                     "id",
@@ -2042,7 +2053,7 @@
           "sources": {
             "type": "array",
             "items": {
-              "anyOf": [
+              "oneOf": [
                 {
                   "type": "object",
                   "properties": {
@@ -2166,8 +2177,7 @@
                         "active",
                         "pending",
                         "archived"
-                      ],
-                      "default": "active"
+                      ]
                     },
                     "workNodeId": {
                       "anyOf": [
@@ -2272,8 +2282,6 @@
                     }
                   },
                   "required": [
-                    "title",
-                    "authorText",
                     "clientRef",
                     "op",
                     "id",
@@ -2315,7 +2323,7 @@
           "relations": {
             "type": "array",
             "items": {
-              "anyOf": [
+              "oneOf": [
                 {
                   "type": "object",
                   "properties": {
@@ -2741,8 +2749,7 @@
                         "null"
                       ],
                       "minimum": 1,
-                      "maximum": 3,
-                      "default": null
+                      "maximum": 3
                     },
                     "intensityReason": {
                       "type": [
@@ -2803,8 +2810,7 @@
                       "maxLength": 20000
                     },
                     "contested": {
-                      "type": "boolean",
-                      "default": false
+                      "type": "boolean"
                     },
                     "contestationNote": {
                       "type": [
@@ -2820,8 +2826,7 @@
                         "active",
                         "pending",
                         "archived"
-                      ],
-                      "default": "active"
+                      ]
                     },
                     "evidence": {
                       "type": "array",
@@ -2913,8 +2918,7 @@
                           "explanation"
                         ],
                         "additionalProperties": false
-                      },
-                      "default": []
+                      }
                     },
                     "source": {
                       "anyOf": [
@@ -2999,12 +3003,6 @@
                     }
                   },
                   "required": [
-                    "type",
-                    "claim",
-                    "justification",
-                    "evidenceStatus",
-                    "source",
-                    "target",
                     "clientRef",
                     "op",
                     "id",
@@ -3242,7 +3240,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "startYear",
@@ -3253,7 +3253,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "endYear",
@@ -3955,7 +3957,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "startYear",
@@ -3966,7 +3970,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "endYear",
@@ -4437,13 +4443,17 @@
                     "type": [
                       "integer",
                       "null"
-                    ]
+                    ],
+                    "minimum": -100000,
+                    "maximum": 3000
                   },
                   "endYear": {
                     "type": [
                       "integer",
                       "null"
-                    ]
+                    ],
+                    "minimum": -100000,
+                    "maximum": 3000
                   },
                   "precision": {
                     "type": "string",
@@ -4663,7 +4673,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "startYear",
@@ -4674,7 +4686,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "endYear",
@@ -5369,7 +5383,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "startYear",
@@ -5380,7 +5396,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "endYear",
@@ -6190,7 +6208,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "startYear",
@@ -6201,7 +6221,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "endYear",
@@ -6691,10 +6713,14 @@
                         "format": "uuid"
                       },
                       "startYear": {
-                        "type": "integer"
+                        "type": "integer",
+                        "minimum": -100000,
+                        "maximum": 3000
                       },
                       "endYear": {
-                        "type": "integer"
+                        "type": "integer",
+                        "minimum": -100000,
+                        "maximum": 3000
                       },
                       "includeUnknownPeriod": {
                         "type": "boolean"
@@ -6953,7 +6979,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "startYear",
@@ -6964,7 +6992,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "endYear",
@@ -7221,7 +7251,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "startYear",
@@ -7232,7 +7264,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "endYear",
@@ -7479,7 +7513,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "startYear",
@@ -7490,7 +7526,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "endYear",
@@ -7859,7 +7897,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "startYear",
@@ -7870,7 +7910,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "endYear",
@@ -8398,7 +8440,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "startYear",
@@ -8409,7 +8453,9 @@
               "type": [
                 "integer",
                 "null"
-              ]
+              ],
+              "minimum": -100000,
+              "maximum": 3000
             },
             "required": false,
             "name": "endYear",

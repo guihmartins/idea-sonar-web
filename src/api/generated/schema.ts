@@ -4276,28 +4276,23 @@ export interface components {
                 op: "create";
             } | {
                 /** @enum {string} */
-                kind: "person" | "tradition" | "concept" | "work";
-                label: string;
-                description: string;
+                kind?: "person" | "tradition" | "concept" | "work";
+                label?: string;
+                description?: string;
                 /** @enum {string|null} */
                 conceptScope?: "broad" | "contextual" | null;
-                /** @default [] */
-                aliases: {
+                aliases?: {
                     alias: string;
                     language: string;
                 }[];
-                /** @default [] */
-                contexts: ({
+                contexts?: ({
                     /** Format: uuid */
                     id: string;
                 } | {
                     clientRef: string;
                 })[];
-                /**
-                 * @default active
-                 * @enum {string}
-                 */
-                status: "active" | "pending" | "archived";
+                /** @enum {string} */
+                status?: "active" | "pending" | "archived";
                 clientRef: string;
                 /** @enum {string} */
                 op: "update";
@@ -4339,12 +4334,9 @@ export interface components {
                 /** @enum {string} */
                 op: "create";
             } | {
-                /**
-                 * @default active
-                 * @enum {string}
-                 */
-                status: "active" | "pending" | "archived";
-                label: string;
+                /** @enum {string} */
+                status?: "active" | "pending" | "archived";
+                label?: string;
                 traditionNodeId?: {
                     /** Format: uuid */
                     id: string;
@@ -4353,11 +4345,8 @@ export interface components {
                 } | null;
                 startYear?: number | null;
                 endYear?: number | null;
-                /**
-                 * @default unknown
-                 * @enum {string}
-                 */
-                precision: "unknown" | "approximate" | "range" | "exact";
+                /** @enum {string} */
+                precision?: "unknown" | "approximate" | "range" | "exact";
                 periodLabel?: string | null;
                 regionLabel?: string | null;
                 notes?: string | null;
@@ -4400,19 +4389,16 @@ export interface components {
                 /** @enum {string} */
                 op: "create";
             } | {
-                /**
-                 * @default active
-                 * @enum {string}
-                 */
-                status: "active" | "pending" | "archived";
+                /** @enum {string} */
+                status?: "active" | "pending" | "archived";
                 workNodeId?: {
                     /** Format: uuid */
                     id: string;
                 } | {
                     clientRef: string;
                 } | null;
-                title: string;
-                authorText: string;
+                title?: string;
+                authorText?: string;
                 /** Format: uri */
                 canonicalUrl?: string | null;
                 publicationLabel?: string | null;
@@ -4500,19 +4486,18 @@ export interface components {
                 op: "create";
             } | {
                 /** @enum {string} */
-                type: "influenced" | "formulated" | "developed" | "studied" | "used" | "adhered_to" | "transmitted" | "reinterpreted" | "incorporated_from" | "criticized" | "part_of" | "type_of" | "contextualizes" | "appears_in" | "parallel_to" | "differs_from";
+                type?: "influenced" | "formulated" | "developed" | "studied" | "used" | "adhered_to" | "transmitted" | "reinterpreted" | "incorporated_from" | "criticized" | "part_of" | "type_of" | "contextualizes" | "appears_in" | "parallel_to" | "differs_from";
                 contextId?: {
                     /** Format: uuid */
                     id: string;
                 } | {
                     clientRef: string;
                 } | null;
-                claim: string;
-                justification: string;
+                claim?: string;
+                justification?: string;
                 /** @enum {string} */
-                evidenceStatus: "documented" | "attributed_interpretation" | "inference";
-                /** @default null */
-                intensity: number | null;
+                evidenceStatus?: "documented" | "attributed_interpretation" | "inference";
+                intensity?: number | null;
                 intensityReason?: string | null;
                 attributionNodeId?: {
                     /** Format: uuid */
@@ -4522,16 +4507,11 @@ export interface components {
                 } | null;
                 attributionText?: string | null;
                 inferenceAuthor?: string | null;
-                /** @default false */
-                contested: boolean;
+                contested?: boolean;
                 contestationNote?: string | null;
-                /**
-                 * @default active
-                 * @enum {string}
-                 */
-                status: "active" | "pending" | "archived";
-                /** @default [] */
-                evidence: {
+                /** @enum {string} */
+                status?: "active" | "pending" | "archived";
+                evidence?: {
                     sourceId?: {
                         /** Format: uuid */
                         id: string;
@@ -4547,13 +4527,13 @@ export interface components {
                     explanation: string;
                     conversationReference?: string | null;
                 }[];
-                source: {
+                source?: {
                     /** Format: uuid */
                     id: string;
                 } | {
                     clientRef: string;
                 };
-                target: {
+                target?: {
                     /** Format: uuid */
                     id: string;
                 } | {
