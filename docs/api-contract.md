@@ -23,3 +23,11 @@ Atualização de 25/10/2026: sem sessão em VITE_AUTH_MODE=none (padrão), Autho
 URL absoluta configurada + `/api/v1`. Token só em Authorization para caminhos internos validados. GET sem Content-Type; request ID, AbortSignal e timeout. 401 renova uma vez; 403 não repete login. GET 429 permite uma repetição curta (até 2s) respeitando Retry-After; demais casos informam espera. Mutações não repetem em 429/falha de rede. POST exige chave estável por ação, conservada em retry. PATCH exige versão If-Match; 409/412 carrega dados atuais e preserva o rascunho para comparação explícita.
 
 API deve permitir origens específicas por CORS, Authorization/Content-Type/Idempotency-Key/If-Match/X-Request-Id e expor ETag/X-Request-Id/Retry-After. Falhas CORS são reportadas, sem desativar segurança do navegador. Links externos são HTTP(S), sem token, com noopener/noreferrer.
+
+## Cadastro assistido por IA
+
+Guia prático de consulta e registro de dados pela REST ou pelo MCP (sem
+sessão de navegador) no [guia de cadastro por IA](https://github.com/guihmartins/idea-sonar-api/blob/main/docs/ai-registration.md).
+No workspace com os dois repositórios lado a lado, o arquivo fica em
+`../../idea-sonar-api/docs/ai-registration.md`; o ambiente local é descrito
+em `../../AGENTS.md`.
