@@ -31,7 +31,9 @@ fato sem a evidência exibida junto.
 1. Evidência primeiro: a proveniência de uma relação nunca fica escondida atrás de cor ou ícone.
 2. Escaneabilidade: listas em linhas com fios finos, hierarquia clara, poucos pesos.
 3. Restrição: uma cor de destaque, sombras quase nulas, sem decoração que não informe.
-4. O mapa é um instrumento: janela escura própria; o restante fica no papel claro.
+4. O mapa é o instrumento central: tela editorial própria (Atlas — marfim,
+   ultramarino, serifa; ver DESIGN.md), acessada a partir do app em papel
+   claro. Ainda em experimentação.
 
 ## Acessibilidade
 

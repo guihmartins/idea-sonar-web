@@ -3,6 +3,7 @@
 import { createApi } from '../api/adapter';
 import { ApiError } from '../api/client';
 import type { RequestOptions } from '../api/client';
+import { defaultFilters, toStoredFilters } from '../api/domain';
 import type {
   Catalog,
   Context,
@@ -216,6 +217,75 @@ const contexts: Context[] = [
     notes: null,
   },
 ];
+const baseImports: ImportDetail[] = [
+  {
+    id: ids.import,
+    origin: 'chat',
+    inputSummary: 'Importação fictícia',
+    status: 'committed_with_pending',
+    version: 1,
+    createdAt: at,
+    updatedAt: at,
+    result: {
+      created: 1,
+      updated: 1,
+      reused: 1,
+      pending: 1,
+      items: [
+        {
+          clientRef: 'jung',
+          entityType: 'nodes',
+          entityId: ids.jung,
+          outcome: 'created',
+          reason: null,
+        },
+        {
+          clientRef: 'gnose',
+          entityType: 'nodes',
+          entityId: ids.gnosis,
+          outcome: 'updated',
+          reason: null,
+        },
+        {
+          clientRef: 'fonte',
+          entityType: 'sources',
+          entityId: ids.source,
+          outcome: 'reused',
+          reason: null,
+        },
+        {
+          clientRef: 'homonimo',
+          entityType: 'nodes',
+          entityId: null,
+          outcome: 'pending',
+          reason: 'Nome já existente; selecionar ID explicitamente',
+        },
+      ],
+    },
+  },
+];
+const basePending: PendingItem[] = [
+  {
+    id: ids.pending,
+    batchId: ids.import,
+    batchVersion: 1,
+    clientRef: 'homonimo',
+    entityType: 'nodes',
+    reason: 'Nome já existente; selecionar ID explicitamente',
+    dependencies: [],
+    payload: {
+      nodes: [
+        {
+          clientRef: 'homonimo',
+          op: 'create',
+          kind: 'person',
+          label: 'Jung (exemplo fictício)',
+          description: 'Homônimo fictício.',
+        },
+      ],
+    },
+  },
+];
 // Campos que a API preenche ao criar cada tipo de registro.
 const createDefaults: Record<string, Record<string, unknown>> = {
   nodes: { degreeTotal: 0, archivedAt: null, aliases: [], contexts: [] },
@@ -224,87 +294,36 @@ const createDefaults: Record<string, Record<string, unknown>> = {
   contexts: {},
   views: {},
 };
-export function createFixtureServices(): Services & {
-  session: NonNullable<Services['session']>;
-} {
+interface FixtureDataset {
+  nodes: Node[];
+  relations: Relation[];
+  sources: Source[];
+  contexts: Context[];
+  views: SavedView[];
+  catalog: Catalog;
+  imports: ImportDetail[];
+  pending: PendingItem[];
+}
+/**
+ * Infraestrutura de roteamento fictícia compartilhada: `createFixtureServices`
+ * (dataset base dos 161 testes) e `createAtlasPreviewServices` (cenário
+ * isolado de fidelidade visual, rodada 3) são a MESMA máquina, só com dados
+ * diferentes — nenhuma rota ou formato muda entre as duas.
+ */
+function buildFixtureServices(
+  seed: FixtureDataset,
+): Services & { session: NonNullable<Services['session']> } {
   if (import.meta.env.PROD) throw new Error('Fixtures proibidas em produção.');
   let logged = false;
   const db: Record<string, Entity[]> = structuredClone({
-    nodes,
-    relations,
-    sources,
-    contexts,
-    views: [] as SavedView[],
+    nodes: seed.nodes,
+    relations: seed.relations,
+    sources: seed.sources,
+    contexts: seed.contexts,
+    views: seed.views,
   });
-  const imports: ImportDetail[] = [
-    {
-      id: ids.import,
-      origin: 'chat',
-      inputSummary: 'Importação fictícia',
-      status: 'committed_with_pending',
-      version: 1,
-      createdAt: at,
-      updatedAt: at,
-      result: {
-        created: 1,
-        updated: 1,
-        reused: 1,
-        pending: 1,
-        items: [
-          {
-            clientRef: 'jung',
-            entityType: 'nodes',
-            entityId: ids.jung,
-            outcome: 'created',
-            reason: null,
-          },
-          {
-            clientRef: 'gnose',
-            entityType: 'nodes',
-            entityId: ids.gnosis,
-            outcome: 'updated',
-            reason: null,
-          },
-          {
-            clientRef: 'fonte',
-            entityType: 'sources',
-            entityId: ids.source,
-            outcome: 'reused',
-            reason: null,
-          },
-          {
-            clientRef: 'homonimo',
-            entityType: 'nodes',
-            entityId: null,
-            outcome: 'pending',
-            reason: 'Nome já existente; selecionar ID explicitamente',
-          },
-        ],
-      },
-    },
-  ];
-  const pending: PendingItem[] = [
-    {
-      id: ids.pending,
-      batchId: ids.import,
-      batchVersion: 1,
-      clientRef: 'homonimo',
-      entityType: 'nodes',
-      reason: 'Nome já existente; selecionar ID explicitamente',
-      dependencies: [],
-      payload: {
-        nodes: [
-          {
-            clientRef: 'homonimo',
-            op: 'create',
-            kind: 'person',
-            label: 'Jung (exemplo fictício)',
-            description: 'Homônimo fictício.',
-          },
-        ],
-      },
-    },
-  ];
+  const imports: ImportDetail[] = structuredClone(seed.imports);
+  const pending: PendingItem[] = structuredClone(seed.pending);
   const history = new Map<string, HistoryEntry[]>();
   const actions = new Map<string, unknown>();
   function page<T>(items: T[], cursor: string | null) {
@@ -500,7 +519,7 @@ export function createFixtureServices(): Services & {
         subject: 'fixture-user',
         scopes: ['idea-sonar:read', 'idea-sonar:write', 'idea-sonar:undo'],
       }),
-      catalog: () => catalog,
+      catalog: () => seed.catalog,
       export: () => ({
         contractVersion: '1',
         exportedAt: new Date().toISOString(),
@@ -554,6 +573,20 @@ export function createFixtureServices(): Services & {
     },
   };
 }
+export function createFixtureServices(): Services & {
+  session: NonNullable<Services['session']>;
+} {
+  return buildFixtureServices({
+    nodes,
+    relations,
+    sources,
+    contexts,
+    views: [],
+    catalog,
+    imports: baseImports,
+    pending: basePending,
+  });
+}
 
 function fixtureRequest(path: string, options: RequestOptions) {
   const url = new URL(path, 'https://fixture.invalid');
@@ -564,4 +597,626 @@ function fixtureRequest(path: string, options: RequestOptions) {
   const actionKey = `${path}:${options.idempotencyKey ?? ''}`;
 
   return { url, type, id, operation, method, actionKey };
+}
+
+// ===== Cenário isolado de aceitação visual (rodada 3, fidelidade ao Atlas) =====
+// Reproduz EXATAMENTE os 12 nós/16 relações/fontes ilustrativos do protótipo
+// aprovado (direcoes-visuais-rodada-2, opção A — ver `NOS`/`RELS`/`FONTES` no
+// HTML original), para comparar fidelidade de renderização e layout com a
+// MESMA composição e o mesmo conteúdo, sem tocar no dataset base acima
+// (usado pelos testes unitários/integração/E2E). Só é alcançado por
+// `/map?atlas=preview&view=<atlasPreviewViewId>`; nunca é lido no fluxo
+// normal da demonstração fictícia nem entra no bundle de produção (mesma
+// guarda `import.meta.env.DEV && VITE_ENABLE_FIXTURES` de main.tsx).
+const atlasIds = {
+  plotino: '00000000-0000-4000-a000-000000000001',
+  ficino: '00000000-0000-4000-a000-000000000002',
+  pico: '00000000-0000-4000-a000-000000000003',
+  jung: '00000000-0000-4000-a000-000000000004',
+  bohme: '00000000-0000-4000-a000-000000000005',
+  emanacao: '00000000-0000-4000-a000-000000000006',
+  almaDoMundo: '00000000-0000-4000-a000-000000000007',
+  inconscienteColetivo: '00000000-0000-4000-a000-000000000008',
+  corpusHermeticum: '00000000-0000-4000-a000-000000000009',
+  hermetismo: '00000000-0000-4000-a000-000000000010',
+  teosofia: '00000000-0000-4000-a000-000000000011',
+  cabalaCrista: '00000000-0000-4000-a000-000000000012',
+  antiguidadeTardia: '00000000-0000-4000-a000-000000000020',
+  renascimentoFlorentino: '00000000-0000-4000-a000-000000000021',
+  modernidade: '00000000-0000-4000-a000-000000000022',
+  view: '00000000-0000-4000-a000-000000000099',
+  srcFicino1: '00000000-0000-4000-a000-000000000201',
+  srcFicino2: '00000000-0000-4000-a000-000000000202',
+  srcFicino3: '00000000-0000-4000-a000-000000000203',
+  srcJung1: '00000000-0000-4000-a000-000000000204',
+  srcJung2: '00000000-0000-4000-a000-000000000205',
+  srcPlotino1: '00000000-0000-4000-a000-000000000206',
+  srcPlotino2: '00000000-0000-4000-a000-000000000207',
+  srcGenerico1: '00000000-0000-4000-a000-000000000208',
+  srcGenerico2: '00000000-0000-4000-a000-000000000209',
+};
+export const atlasPreviewViewId = atlasIds.view;
+const ilustrativo =
+  'Ponto ilustrativo do protótipo aprovado (direcoes-visuais-rodada-2), reaproveitado só nesta fixture isolada de comparação visual — não é uma afirmação histórica.';
+const atlasResumos: Partial<Record<string, string>> = {
+  [atlasIds.ficino]:
+    'Tradutor e comentador que reintroduz Platão e o corpo hermético no latim florentino, organizando em torno da Academia uma leitura contínua entre filosofia antiga e teologia cristã.',
+  [atlasIds.plotino]:
+    'Centro da leitura neoplatônica que Ficino traduz e comenta; a doutrina da emanação chega ao Renascimento sobretudo por esse caminho.',
+  [atlasIds.jung]:
+    'Lê a tradição hermética e a teosofia como documentos psicológicos; a leitura é interpretativa e aparece no atlas com essa classificação.',
+  [atlasIds.corpusHermeticum]:
+    'Conjunto de tratados atribuídos a Hermes Trismegisto, traduzido em 1471 e lido no Renascimento como anterior a Platão.',
+};
+function atlasNode(
+  id: string,
+  label: string,
+  kind: Node['kind'],
+  degreeTotal: number,
+  contextId: string,
+): Node {
+  return node(id, label, kind, {
+    description: atlasResumos[id] ?? ilustrativo,
+    contexts: [contextId],
+    degreeTotal,
+  });
+}
+const atlasNodes: Node[] = [
+  atlasNode(
+    atlasIds.plotino,
+    'Plotino',
+    'person',
+    2,
+    atlasIds.antiguidadeTardia,
+  ),
+  atlasNode(
+    atlasIds.emanacao,
+    'Emanação',
+    'concept',
+    2,
+    atlasIds.antiguidadeTardia,
+  ),
+  atlasNode(
+    atlasIds.corpusHermeticum,
+    'Corpus Hermeticum',
+    'work',
+    2,
+    atlasIds.antiguidadeTardia,
+  ),
+  atlasNode(
+    atlasIds.hermetismo,
+    'Hermetismo',
+    'tradition',
+    3,
+    atlasIds.antiguidadeTardia,
+  ),
+  atlasNode(
+    atlasIds.pico,
+    'Pico della Mirandola',
+    'person',
+    3,
+    atlasIds.renascimentoFlorentino,
+  ),
+  atlasNode(
+    atlasIds.ficino,
+    'Marsílio Ficino',
+    'person',
+    5,
+    atlasIds.renascimentoFlorentino,
+  ),
+  atlasNode(
+    atlasIds.almaDoMundo,
+    'Alma do mundo',
+    'concept',
+    3,
+    atlasIds.renascimentoFlorentino,
+  ),
+  atlasNode(
+    atlasIds.cabalaCrista,
+    'Cabala cristã',
+    'tradition',
+    2,
+    atlasIds.renascimentoFlorentino,
+  ),
+  atlasNode(atlasIds.jung, 'C. G. Jung', 'person', 3, atlasIds.modernidade),
+  atlasNode(
+    atlasIds.inconscienteColetivo,
+    'Inconsciente coletivo',
+    'concept',
+    2,
+    atlasIds.modernidade,
+  ),
+  atlasNode(atlasIds.bohme, 'Jakob Böhme', 'person', 3, atlasIds.modernidade),
+  atlasNode(
+    atlasIds.teosofia,
+    'Teosofia',
+    'tradition',
+    2,
+    atlasIds.modernidade,
+  ),
+];
+const atlasSources: Source[] = [
+  {
+    ...base,
+    id: atlasIds.srcFicino1,
+    title: 'A tradição hermética no Renascimento florentino',
+    authorText: 'Autoria ilustrativa',
+    canonicalUrl: null,
+    workNodeId: null,
+    publicationLabel: '1964',
+    doi: null,
+    accessedAt: null,
+    notes: null,
+  },
+  {
+    ...base,
+    id: atlasIds.srcFicino2,
+    title: 'Notas sobre a Academia e seus tradutores',
+    authorText: 'Autoria ilustrativa',
+    canonicalUrl: null,
+    workNodeId: null,
+    publicationLabel: '1943',
+    doi: null,
+    accessedAt: null,
+    notes: null,
+  },
+  {
+    ...base,
+    id: atlasIds.srcFicino3,
+    title: 'Prefácio ao Pimander (edição ilustrativa)',
+    authorText: 'Fonte primária ilustrativa',
+    canonicalUrl: null,
+    workNodeId: null,
+    publicationLabel: '1471',
+    doi: null,
+    accessedAt: null,
+    notes: null,
+  },
+  {
+    ...base,
+    id: atlasIds.srcJung1,
+    title: 'Leituras psicológicas da tradição hermética',
+    authorText: 'Autoria ilustrativa',
+    canonicalUrl: null,
+    workNodeId: null,
+    publicationLabel: '1944',
+    doi: null,
+    accessedAt: null,
+    notes: null,
+  },
+  {
+    ...base,
+    id: atlasIds.srcJung2,
+    title: 'Correspondência comentada, vol. II (ilustrativo)',
+    authorText: 'Autoria ilustrativa',
+    canonicalUrl: null,
+    workNodeId: null,
+    publicationLabel: '1953',
+    doi: null,
+    accessedAt: null,
+    notes: null,
+  },
+  {
+    ...base,
+    id: atlasIds.srcPlotino1,
+    title: 'Comentário às Enéadas (edição ilustrativa)',
+    authorText: 'Autoria ilustrativa',
+    canonicalUrl: null,
+    workNodeId: null,
+    publicationLabel: '1958',
+    doi: null,
+    accessedAt: null,
+    notes: null,
+  },
+  {
+    ...base,
+    id: atlasIds.srcPlotino2,
+    title: 'Notas de recepção latina',
+    authorText: 'Autoria ilustrativa',
+    canonicalUrl: null,
+    workNodeId: null,
+    publicationLabel: '1971',
+    doi: null,
+    accessedAt: null,
+    notes: null,
+  },
+  {
+    ...base,
+    id: atlasIds.srcGenerico1,
+    title: 'Verbete ilustrativo do acervo',
+    authorText: 'Autoria ilustrativa',
+    canonicalUrl: null,
+    workNodeId: null,
+    publicationLabel: 's.d.',
+    doi: null,
+    accessedAt: null,
+    notes: null,
+  },
+  {
+    ...base,
+    id: atlasIds.srcGenerico2,
+    title: 'Nota de leitura (ilustrativa)',
+    authorText: 'Autoria ilustrativa',
+    canonicalUrl: null,
+    workNodeId: null,
+    publicationLabel: 's.d.',
+    doi: null,
+    accessedAt: null,
+    notes: null,
+  },
+];
+function atlasEvidence(sourceId: string, excerpt: string) {
+  return {
+    sourceId,
+    sourceKind: 'secondary' as const,
+    stance: 'contextualizes' as const,
+    locator: '',
+    excerpt,
+    explanation: '',
+    conversationReference: null,
+  };
+}
+const ficinoEvidence = [
+  atlasEvidence(
+    atlasIds.srcFicino1,
+    'A encomenda de Cosimo interrompe a tradução de Platão: o corpo hermético é vertido primeiro, por ser julgado mais antigo.',
+  ),
+  atlasEvidence(
+    atlasIds.srcFicino2,
+    'A noção de alma do mundo aparece comentada, não declarada: por isso a relação entra como interpretação atribuída.',
+  ),
+  atlasEvidence(
+    atlasIds.srcFicino3,
+    'Dedica a tradução ao mecenas e descreve a ordem em que os tratados foram vertidos.',
+  ),
+];
+const jungEvidence = [
+  atlasEvidence(
+    atlasIds.srcJung1,
+    'A leitura é declaradamente interpretativa: o próprio autor a apresenta como analogia, não como filiação histórica.',
+  ),
+  atlasEvidence(
+    atlasIds.srcJung2,
+    'Menciona a leitura dos tratados e o interesse pela teosofia alemã em dois momentos distintos.',
+  ),
+];
+const plotinoEvidence = [
+  atlasEvidence(
+    atlasIds.srcPlotino1,
+    'A doutrina da emanação aparece sistematizada nos tratados centrais, sem a terminologia posterior.',
+  ),
+  atlasEvidence(
+    atlasIds.srcPlotino2,
+    'A circulação no Renascimento depende da tradução florentina; antes dela, as cópias são raras.',
+  ),
+];
+const genericEvidence = [
+  atlasEvidence(
+    atlasIds.srcGenerico1,
+    'Registro sintético criado para demonstrar a hierarquia de publicação no painel de evidências.',
+  ),
+  atlasEvidence(
+    atlasIds.srcGenerico2,
+    'Segunda entrada sintética, para mostrar como duas fontes convivem sem virar caixas repetidas.',
+  ),
+];
+function evidenceFor(sourceId: string) {
+  if (sourceId === atlasIds.ficino) return ficinoEvidence;
+  if (sourceId === atlasIds.jung) return jungEvidence;
+  if (sourceId === atlasIds.plotino) return plotinoEvidence;
+  return genericEvidence;
+}
+function atlasRelation(
+  id: string,
+  sourceId: string,
+  targetId: string,
+  type: string,
+  label: string,
+  evidenceStatus: Relation['evidenceStatus'],
+  intensity: Relation['intensity'],
+  contested: boolean,
+): Relation {
+  return {
+    ...base,
+    id,
+    sourceId,
+    targetId,
+    type,
+    contextId: null,
+    claim: `${label} (cenário ilustrativo, protótipo aprovado).`,
+    justification:
+      'Justificativa sintética: reproduz a relação do protótipo aprovado para comparação visual.',
+    evidenceStatus,
+    intensity,
+    intensityReason: null,
+    attributionNodeId: null,
+    attributionText: null,
+    inferenceAuthor:
+      evidenceStatus === 'inference' ? 'Autoria ilustrativa' : null,
+    contested,
+    contestationNote: contested
+      ? 'Relação contestada no protótipo aprovado (cenário ilustrativo).'
+      : null,
+    evidence: evidenceFor(sourceId),
+    archivedAt: null,
+  };
+}
+// Mesmas 16 relações do HTML de referência (`RELS`), mesma ordem, mesmos
+// verbos/classificações/intensidades/contestação — nenhuma adicionada,
+// nenhuma omitida.
+const atlasRelations: Relation[] = [
+  atlasRelation(
+    '00000000-0000-4000-a000-000000000101',
+    atlasIds.plotino,
+    atlasIds.emanacao,
+    'formulated',
+    'Plotino formula a emanação',
+    'documented',
+    3,
+    false,
+  ),
+  atlasRelation(
+    '00000000-0000-4000-a000-000000000102',
+    atlasIds.corpusHermeticum,
+    atlasIds.hermetismo,
+    'founded',
+    'Corpus Hermeticum funda o Hermetismo',
+    'documented',
+    3,
+    false,
+  ),
+  atlasRelation(
+    '00000000-0000-4000-a000-000000000103',
+    atlasIds.ficino,
+    atlasIds.corpusHermeticum,
+    'translates',
+    'Ficino traduz o Corpus Hermeticum',
+    'documented',
+    3,
+    false,
+  ),
+  atlasRelation(
+    '00000000-0000-4000-a000-000000000104',
+    atlasIds.ficino,
+    atlasIds.plotino,
+    'translates',
+    'Ficino traduz Plotino',
+    'documented',
+    3,
+    false,
+  ),
+  atlasRelation(
+    '00000000-0000-4000-a000-000000000105',
+    atlasIds.ficino,
+    atlasIds.almaDoMundo,
+    'formulated',
+    'Ficino formula a alma do mundo',
+    'attributed_interpretation',
+    2,
+    false,
+  ),
+  atlasRelation(
+    '00000000-0000-4000-a000-000000000106',
+    atlasIds.ficino,
+    atlasIds.pico,
+    'influenced',
+    'Ficino influencia Pico della Mirandola',
+    'documented',
+    2,
+    false,
+  ),
+  atlasRelation(
+    '00000000-0000-4000-a000-000000000107',
+    atlasIds.ficino,
+    atlasIds.hermetismo,
+    'transmitted',
+    'Ficino difunde o Hermetismo',
+    'attributed_interpretation',
+    2,
+    false,
+  ),
+  atlasRelation(
+    '00000000-0000-4000-a000-000000000108',
+    atlasIds.pico,
+    atlasIds.cabalaCrista,
+    'founded',
+    'Pico della Mirandola funda a cabala cristã',
+    'documented',
+    3,
+    false,
+  ),
+  atlasRelation(
+    '00000000-0000-4000-a000-000000000109',
+    atlasIds.pico,
+    atlasIds.almaDoMundo,
+    'commented_on',
+    'Pico della Mirandola comenta a alma do mundo',
+    'attributed_interpretation',
+    1,
+    false,
+  ),
+  atlasRelation(
+    '00000000-0000-4000-a000-000000000110',
+    atlasIds.bohme,
+    atlasIds.teosofia,
+    'founded',
+    'Böhme funda a teosofia',
+    'documented',
+    3,
+    false,
+  ),
+  atlasRelation(
+    '00000000-0000-4000-a000-000000000111',
+    atlasIds.bohme,
+    atlasIds.almaDoMundo,
+    'resumed',
+    'Böhme retoma a alma do mundo',
+    'attributed_interpretation',
+    1,
+    false,
+  ),
+  atlasRelation(
+    '00000000-0000-4000-a000-000000000112',
+    atlasIds.jung,
+    atlasIds.bohme,
+    'read',
+    'Jung lê Jakob Böhme',
+    'documented',
+    2,
+    false,
+  ),
+  atlasRelation(
+    '00000000-0000-4000-a000-000000000113',
+    atlasIds.jung,
+    atlasIds.inconscienteColetivo,
+    'formulated',
+    'Jung formula o inconsciente coletivo',
+    'documented',
+    3,
+    false,
+  ),
+  atlasRelation(
+    '00000000-0000-4000-a000-000000000114',
+    atlasIds.jung,
+    atlasIds.hermetismo,
+    'studied',
+    'Jung estuda o Hermetismo',
+    'documented',
+    2,
+    false,
+  ),
+  atlasRelation(
+    '00000000-0000-4000-a000-000000000115',
+    atlasIds.inconscienteColetivo,
+    atlasIds.emanacao,
+    'echoed',
+    'Inconsciente coletivo ecoa a emanação',
+    'inference',
+    1,
+    true,
+  ),
+  atlasRelation(
+    '00000000-0000-4000-a000-000000000116',
+    atlasIds.cabalaCrista,
+    atlasIds.teosofia,
+    'preceded',
+    'Cabala cristã antecede a teosofia',
+    'inference',
+    1,
+    false,
+  ),
+];
+const atlasCatalog: Catalog = {
+  nodeKinds: [...kinds],
+  relationTypes: [
+    { code: 'formulated', label: 'formula' },
+    { code: 'founded', label: 'funda' },
+    { code: 'translates', label: 'traduz' },
+    { code: 'influenced', label: 'influencia' },
+    { code: 'transmitted', label: 'difunde' },
+    { code: 'commented_on', label: 'comenta' },
+    { code: 'read', label: 'lê' },
+    { code: 'resumed', label: 'retoma' },
+    { code: 'echoed', label: 'ecoa' },
+    { code: 'preceded', label: 'antecede' },
+    { code: 'studied', label: 'estuda' },
+  ].map((t) => ({
+    ...t,
+    inverseLabel: `leitura inversa: ${t.label}`,
+    symmetric: false,
+    allowedEndpoints: kinds.flatMap((source) =>
+      kinds.map((target) => ({ source, target })),
+    ),
+  })),
+  evidenceStatuses: ['documented', 'attributed_interpretation', 'inference'],
+  editorialStatuses: ['active', 'pending', 'archived'],
+  intensities: [
+    { value: 1, label: 'pontual' },
+    { value: 2, label: 'relevante' },
+    { value: 3, label: 'central' },
+    { value: null, label: 'não avaliada' },
+  ],
+};
+const atlasContexts: Context[] = [
+  {
+    ...base,
+    id: atlasIds.antiguidadeTardia,
+    label: 'Antiguidade tardia',
+    regionLabel: 'Mediterrâneo oriental (ilustrativo)',
+    startYear: 200,
+    endYear: 600,
+    precision: 'approximate',
+    periodLabel: 'séc. III – VI',
+    traditionNodeId: null,
+    notes: null,
+  },
+  {
+    ...base,
+    id: atlasIds.renascimentoFlorentino,
+    label: 'Renascimento florentino',
+    regionLabel: 'Florença (ilustrativo)',
+    startYear: 1400,
+    endYear: 1600,
+    precision: 'approximate',
+    periodLabel: 'séc. XV – XVI',
+    traditionNodeId: null,
+    notes: null,
+  },
+  {
+    ...base,
+    id: atlasIds.modernidade,
+    label: 'Modernidade',
+    regionLabel: 'Europa (ilustrativo)',
+    startYear: 1600,
+    endYear: 2000,
+    precision: 'approximate',
+    periodLabel: 'séc. XVII – XX',
+    traditionNodeId: null,
+    notes: null,
+  },
+];
+// Posições convertidas das coordenadas percentuais `NOS` do protótipo
+// (left/top em % do palco) para o espaço de modelo do Cytoscape:
+// model = (percentual − 50) × 10 — escala uniforme nos dois eixos para
+// preservar a proporção/relação espacial real do layout de referência.
+const atlasPositions: Record<string, { x: number; y: number }> = {
+  [atlasIds.plotino]: { x: -380, y: -230 },
+  [atlasIds.emanacao]: { x: -405, y: -90 },
+  [atlasIds.corpusHermeticum]: { x: -350, y: 50 },
+  [atlasIds.hermetismo]: { x: -390, y: 190 },
+  [atlasIds.pico]: { x: -40, y: -260 },
+  [atlasIds.ficino]: { x: -90, y: -70 },
+  [atlasIds.almaDoMundo]: { x: -20, y: 90 },
+  [atlasIds.cabalaCrista]: { x: -65, y: 230 },
+  [atlasIds.jung]: { x: 280, y: -200 },
+  [atlasIds.inconscienteColetivo]: { x: 320, y: -40 },
+  [atlasIds.bohme]: { x: 240, y: 100 },
+  [atlasIds.teosofia]: { x: 290, y: 240 },
+};
+const atlasView: SavedView = {
+  ...base,
+  id: atlasIds.view,
+  name: 'Atlas — cenário de aceitação visual (ilustrativo)',
+  rootNodeId: atlasIds.jung,
+  filters: toStoredFilters(defaultFilters),
+  expandedNodes: atlasNodes.map((n) => n.id),
+  positions: atlasPositions,
+  // zoom/pan medidos no app real a 1440×960 (ver fidelidade-atlas): ajusta o
+  // bbox completo dos 12 nós + títulos de contexto no canvas disponível,
+  // sem cortar nada. Recalcular aqui se `atlasPositions` mudar de escala.
+  viewport: { zoom: 1, pan: { x: 520, y: 420 } },
+};
+export function createAtlasPreviewServices(): Services & {
+  session: NonNullable<Services['session']>;
+} {
+  return buildFixtureServices({
+    nodes: atlasNodes,
+    relations: atlasRelations,
+    sources: atlasSources,
+    contexts: atlasContexts,
+    views: [atlasView],
+    catalog: atlasCatalog,
+    imports: [],
+    pending: [],
+  });
 }
