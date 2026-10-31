@@ -12,13 +12,20 @@ import {
   pendingSchema,
   importSummarySchema,
   importDetailSchema,
+  importResultSchema,
   undoResultSchema,
   resolveResultSchema,
   historySchema,
   identitySchema,
   pageSchema,
 } from './domain';
-import type { EntityType, Filters, Entity, PendingItem } from './domain';
+import type {
+  EntityType,
+  Filters,
+  Entity,
+  ImportBatch,
+  PendingItem,
+} from './domain';
 import type { RequestOptions, Transport } from './client';
 const entitySchemas = {
   nodes: nodeSchema,
@@ -73,6 +80,13 @@ export function createApi(send: Transport) {
         `/${type}${query({ q, includePending: true, limit: 20 })}`,
         withSignal(signal),
       ),
+    // Relações de um ponto, pendentes inclusive, de um predicado só.
+    nodeRelations: (nodeId: string, type: string, signal?: AbortSignal) =>
+      read(
+        pageSchema(relationSchema),
+        `/relations${query({ nodeId, type, includePending: true, limit: 50 })}`,
+        withSignal(signal),
+      ),
     node: (id: string, signal?: AbortSignal) =>
       read(nodeSchema, `/nodes/${encodeURIComponent(id)}`, withSignal(signal)),
     relation: (id: string, signal?: AbortSignal) =>
@@ -125,6 +139,13 @@ export function createApi(send: Transport) {
     import: (id: string, signal: AbortSignal) =>
       read(importDetailSchema, `/imports/${encodeURIComponent(id)}`, {
         signal,
+      }),
+    // A chave do cabeçalho Idempotency-Key tem de ser a idempotencyKey do corpo.
+    importBatch: (body: ImportBatch, key: string) =>
+      read(importResultSchema, '/imports', {
+        method: 'POST',
+        body,
+        idempotencyKey: key,
       }),
     undo: (id: string, expectedVersion: number, reason: string, key: string) =>
       read(undoResultSchema, `/imports/${encodeURIComponent(id)}/undo`, {
