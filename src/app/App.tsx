@@ -21,35 +21,40 @@ import {
 export function App() {
   const location = useLocation();
   const main = useRef<HTMLElement>(null);
+  const isMapRoute = location.pathname === '/map';
   useEffect(() => {
     main.current?.focus();
   }, [location.pathname]);
   return (
-    <>
+    <div className="app-frame">
       <a className="skip-link" href="#conteudo">
         Pular para o conteúdo
       </a>
-      <header className="header">
-        <Link className="brand" to="/map">
-          <span className="brand-mark" aria-hidden="true" />
-          Idea Sonar
-        </Link>
-        <span className="badge">Conhecimento em perspectiva</span>
-      </header>
+      {!isMapRoute && (
+        <header className="header">
+          <Link className="brand" to="/map">
+            <span className="brand-mark" aria-hidden="true" />
+            Idea Sonar
+          </Link>
+          <span className="badge">Conhecimento em perspectiva</span>
+        </header>
+      )}
       <SessionGate>
-        <div className="shell">
-          <nav aria-label="Navegação principal">
-            <p className="eyebrow">Seu mapa de ideias</p>
-            <NavLink to="/map">Explorar mapa</NavLink>
-            <NavLink to="/nodes">Pontos</NavLink>
-            <NavLink to="/relations">Relações</NavLink>
-            <NavLink to="/sources">Fontes</NavLink>
-            <NavLink to="/contexts">Contextos</NavLink>
-            <NavLink to="/imports">Importações</NavLink>
-            <NavLink to="/pending">Pendências</NavLink>
-            <NavLink to="/views">Views salvas</NavLink>
-            <NavLink to="/export">Exportar dados</NavLink>
-          </nav>
+        <div className={isMapRoute ? 'shell shell--atlas' : 'shell'}>
+          {!isMapRoute && (
+            <nav aria-label="Navegação principal">
+              <p className="eyebrow">Seu mapa de ideias</p>
+              <NavLink to="/map">Explorar mapa</NavLink>
+              <NavLink to="/nodes">Pontos</NavLink>
+              <NavLink to="/relations">Relações</NavLink>
+              <NavLink to="/sources">Fontes</NavLink>
+              <NavLink to="/contexts">Contextos</NavLink>
+              <NavLink to="/imports">Importações</NavLink>
+              <NavLink to="/pending">Pendências</NavLink>
+              <NavLink to="/views">Views salvas</NavLink>
+              <NavLink to="/export">Exportar dados</NavLink>
+            </nav>
+          )}
           <main ref={main} id="conteudo" tabIndex={-1}>
             <Routes>
               <Route path="/" element={<Navigate to="/map" replace />} />
@@ -97,6 +102,6 @@ export function App() {
           </main>
         </div>
       </SessionGate>
-    </>
+    </div>
   );
 }

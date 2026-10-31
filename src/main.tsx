@@ -12,14 +12,24 @@ import { env } from './config/env';
 import '@fontsource-variable/dm-sans';
 import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
+import '@fontsource/source-serif-4/400.css';
+import '@fontsource/source-serif-4/400-italic.css';
+import '@fontsource/source-serif-4/600.css';
 import './app/styles.css';
 async function bootstrap() {
   const root = document.getElementById('root');
   if (!root) throw new Error('Elemento raiz ausente.');
   let services: Services;
   if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_FIXTURES === 'true') {
-    const { createFixtureServices } = await import('./dev/fixtures');
-    services = createFixtureServices();
+    const { createFixtureServices, createAtlasPreviewServices } =
+      await import('./dev/fixtures');
+    // Cenário isolado de aceitação visual (rodada 3, fidelidade ao Atlas):
+    // só ativo com a flag explícita na URL, nunca no fluxo normal da
+    // demonstração fictícia. Ver docs/decisions.md e dev/fixtures.ts.
+    services =
+      new URLSearchParams(location.search).get('atlas') === 'preview'
+        ? createAtlasPreviewServices()
+        : createFixtureServices();
   } else if (env.authMode === 'none') {
     services = {
       session: null,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 describe('valores estáticos do estilo do grafo', () => {
-  it('preserva regras visuais e cores ao carregar os módulos', async () => {
+  it('preserva regras visuais do Atlas ao carregar os módulos', async () => {
     const [{ graphStyle }, palette] = await Promise.all([
       import('../../src/graph/styles'),
       import('../../src/graph/styles/palette'),
@@ -14,50 +14,42 @@ describe('valores estáticos do estilo do grafo', () => {
     expect(graphStyle.map((rule) => rule.selector)).toEqual([
       'node',
       'edge',
-      ':selected',
       '.neighbor',
-      'edge[?contested]',
+      '.faded',
+      'node:selected',
+      'edge.selected-edge',
     ]);
     expect(style('node')).toMatchObject({
-      label: 'data(label)',
-      width: 'data(size)',
-      height: 'data(size)',
-      'background-color': 'data(color)',
-      color: '#dfe5d8',
-      'font-family': 'IBM Plex Mono',
+      label: expect.any(Function),
+      shape: 'rectangle',
+      width: 'label',
+      height: 'label',
+      'background-color': '#efebdf',
+      color: '#172034',
+      'font-family': 'DM Sans Variable, DM Sans, system-ui, sans-serif',
       'text-wrap': 'ellipsis',
-      'text-max-width': '130px',
+      'text-max-width': '180px',
     });
     expect(style('edge')).toMatchObject({
-      width: 'data(width)',
-      'curve-style': 'bezier',
-      'line-color': '#6d7a64',
-      'target-arrow-color': '#6d7a64',
+      'curve-style': 'unbundled-bezier',
+      'line-color': '#8b8f7f',
+      'target-arrow-color': '#8b8f7f',
+      'arrow-scale': 0.7,
     });
-    expect(style(':selected')).toEqual({
-      'border-width': 3,
-      'border-color': '#e76732',
-      'line-color': '#e76732',
-      'target-arrow-color': '#e76732',
-      label: 'data(label)',
+    expect(style('node:selected')).toMatchObject({
+      'border-color': '#2145d8',
+      'background-color': '#2145d8',
+      color: '#f5f2e9',
     });
-    expect(style('.neighbor')).toEqual({
-      'border-width': 1,
-      'border-color': '#c3cabc',
+    expect(style('.neighbor')).toEqual({ 'border-width': 1.5 });
+    expect(style('.faded')).toEqual({ opacity: 0.58 });
+    expect(style('edge.selected-edge')).toMatchObject({
+      'line-color': '#2145d8',
+      'target-arrow-color': '#2145d8',
     });
-    expect(style('edge[?contested]')).toEqual({
-      'line-color': '#f08a9b',
-      'target-arrow-color': '#f08a9b',
-    });
-    expect(palette.contextColors).toEqual([
-      '#b9d99b',
-      '#f0a074',
-      '#8fb8e8',
-      '#b8a4e0',
-    ]);
-    expect(palette.neutralColor).toBe('#7b8772');
-    expect(palette.highlightColor).toBe('#e76732');
-    expect(palette.neighborColor).toBe('#c3cabc');
-    expect(palette.contestedColor).toBe('#f08a9b');
+    expect(palette.highlightColor).toBe('#2145d8');
+    expect(palette.labelColor).toBe('#172034');
+    expect(palette.nodeFillColor).toBe('#efebdf');
+    expect(palette.surfaceColor).toBe('#f5f2e9');
   });
 });

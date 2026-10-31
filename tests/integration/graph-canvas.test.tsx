@@ -14,7 +14,9 @@ interface ElementState {
 }
 interface ElementHandle {
   id: () => string;
-  data: (d?: Record<string, unknown>) => Record<string, unknown> | undefined;
+  data: (
+    d?: Record<string, unknown> | string,
+  ) => Record<string, unknown> | unknown;
   position: (p?: {
     x: number;
     y: number;
@@ -25,11 +27,17 @@ interface ElementHandle {
   addClass: (c: string) => void;
   removeClass: (c: string) => void;
   neighborhood: (kind: string) => FakeCollection;
+  closedNeighborhood: () => FakeCollection;
+  connectedEdges: () => FakeCollection;
+  outerWidth: () => number;
+  outerHeight: () => number;
   length: number;
 }
 const emptyHandle: ElementHandle = {
   id: () => '',
   data: () => undefined,
+  outerWidth: () => 0,
+  outerHeight: () => 0,
   position: () => ({ x: 0, y: 0 }),
   isEdge: () => false,
   select: () => {},
@@ -37,6 +45,8 @@ const emptyHandle: ElementHandle = {
   addClass: () => {},
   removeClass: () => {},
   neighborhood: () => new FakeCollection([]),
+  closedNeighborhood: () => new FakeCollection([emptyHandle]),
+  connectedEdges: () => new FakeCollection([]),
   length: 0,
 };
 class FakeCollection {
@@ -46,6 +56,9 @@ class FakeCollection {
   }
   get length() {
     return this.items.length;
+  }
+  toArray() {
+    return [...this.items];
   }
   forEach(cb: (h: ElementHandle, i: number) => void) {
     this.items.forEach(cb);
@@ -59,6 +72,13 @@ class FakeCollection {
   nodes() {
     return this;
   }
+  map<T>(cb: (h: ElementHandle, i: number) => T) {
+    return this.items.map(cb);
+  }
+  difference(other: FakeCollection) {
+    const ids = new Set(other.items.map((item) => item.id()));
+    return new FakeCollection(this.items.filter((item) => !ids.has(item.id())));
+  }
   remove() {
     this.items.forEach((h) => fakeCore?.elementsMap.delete(h.id()));
   }
@@ -67,11 +87,15 @@ class FakeCollection {
     return this;
   }
   removeClass(c: string) {
-    this.items.forEach((h) => h.removeClass(c));
+    c.split(/\s+/).forEach((name) =>
+      this.items.forEach((h) => h.removeClass(name)),
+    );
     return this;
   }
   addClass(c: string) {
-    this.items.forEach((h) => h.addClass(c));
+    c.split(/\s+/).forEach((name) =>
+      this.items.forEach((h) => h.addClass(name)),
+    );
     return this;
   }
   select() {
@@ -83,9 +107,12 @@ function makeHandle(state: ElementState): ElementHandle {
     id: () => state.id,
     data: (d) => {
       if (d === undefined) return state.data;
+      if (typeof d === 'string') return state.data[d];
       Object.assign(state.data, d);
       return undefined;
     },
+    outerWidth: () => 100,
+    outerHeight: () => 34,
     position: (p) => {
       if (p === undefined) return { ...state.position };
       state.position = { ...p };
@@ -101,12 +128,29 @@ function makeHandle(state: ElementState): ElementHandle {
     addClass: (c) => state.classes.add(c),
     removeClass: (c) => state.classes.delete(c),
     neighborhood: (kind) => fakeCore!.neighborhoodOf(state, kind),
+    closedNeighborhood: () =>
+      new FakeCollection([
+        makeHandle(state),
+        ...fakeCore!.neighborhoodOf(state, 'node').items,
+      ]),
+    connectedEdges: () =>
+      new FakeCollection(
+        [...fakeCore!.elementsMap.values()]
+          .filter(
+            (edge) =>
+              edge.group === 'edges' &&
+              (edge.data.source === state.id || edge.data.target === state.id),
+          )
+          .map(makeHandle),
+      ),
     length: 1,
   };
 }
 class FakeCore {
   elementsMap = new Map<string, ElementState>();
   zoomValue = 1;
+  canvasWidth = 800;
+  canvasHeight = 600;
   panValue = { x: 0, y: 0 };
   destroyedFlag = false;
   handlers = new Map<string, (event: unknown) => void>();
@@ -161,6 +205,12 @@ class FakeCore {
   }
   zoom() {
     return this.zoomValue;
+  }
+  width() {
+    return this.canvasWidth;
+  }
+  height() {
+    return this.canvasHeight;
   }
   pan() {
     return { ...this.panValue };
@@ -302,6 +352,9 @@ function baseProps() {
     focus: '',
     focusRevision: 0,
     fitRevision: 0,
+    zoomCommand: { revision: 0, factor: 1 },
+    flowEnabled: false,
+    groups: [],
   };
 }
 
@@ -330,26 +383,39 @@ describe('GraphCanvas', () => {
     expect(styles.map(({ selector }) => selector)).toEqual([
       'node',
       'edge',
-      ':selected',
       '.neighbor',
-      'edge[?contested]',
+      '.faded',
+      'node:selected',
+      'edge.selected-edge',
     ]);
     expect(styles[0]?.style).toMatchObject({
-      label: 'data(label)',
-      color: '#dfe5d8',
-      'font-family': 'IBM Plex Mono',
+      label: expect.any(Function),
+      shape: 'rectangle',
+      width: 'label',
+      height: 'label',
+      'background-color': '#efebdf',
+      color: '#172034',
+      'font-family': 'DM Sans Variable, DM Sans, system-ui, sans-serif',
+      'text-halign': 'center',
+      'text-valign': 'center',
       'text-wrap': 'ellipsis',
     });
     expect(styles[1]?.style).toMatchObject({
-      'line-color': '#6d7a64',
-      'target-arrow-color': '#6d7a64',
+      'curve-style': 'unbundled-bezier',
+      'line-color': '#8b8f7f',
+      'target-arrow-color': '#8b8f7f',
     });
-    expect(styles[2]?.style).toMatchObject({
-      'border-color': '#e76732',
-      'line-color': '#e76732',
+    expect(styles[2]?.style).toEqual({ 'border-width': 1.5 });
+    expect(styles[3]?.style).toEqual({ opacity: 0.58 });
+    expect(styles[4]?.style).toMatchObject({
+      'border-color': '#2145d8',
+      'background-color': '#2145d8',
+      color: '#f5f2e9',
     });
-    expect(styles[3]?.style['border-color']).toBe('#c3cabc');
-    expect(styles[4]?.style['line-color']).toBe('#f08a9b');
+    expect(styles[5]?.style).toMatchObject({
+      'line-color': '#2145d8',
+      'target-arrow-color': '#2145d8',
+    });
   });
 
   it('redesenha após carregar fontes enquanto o Cytoscape continua ativo', async () => {

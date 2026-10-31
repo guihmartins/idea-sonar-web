@@ -1,15 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { graphStyle } from '../../src/graph/styles';
 import {
-  contestedColor,
-  contextColors,
-  edgeColor,
   highlightColor,
   labelColor,
-  neighborColor,
-  neutralColor,
+  nodeFillColor,
+  surfaceColor,
 } from '../../src/graph/styles/palette';
-import type { Css } from 'cytoscape';
 
 function rule(selector: string): { style: Record<string, unknown> } {
   const found = graphStyle.find((r) => r.selector === selector);
@@ -21,73 +17,71 @@ function fakeElement(data: Record<string, unknown>) {
 }
 
 describe('graphStyle', () => {
-  it('resolve o formato do nó a partir dos dados do elemento', () => {
+  it('constrói os rótulos dos nós com glifo e texto', () => {
     const style = rule('node').style as unknown as {
-      shape: (ele: unknown) => Css.NodeShape;
+      label: (ele: unknown) => string;
     };
-    expect(style.shape(fakeElement({ shape: 'hexagon' }))).toBe('hexagon');
+    expect(style.label(fakeElement({ shape: 'hexagon', label: 'Raiz' }))).toBe(
+      '≡ Raiz',
+    );
   });
 
   it('resolve estilo e seta da aresta a partir dos dados do elemento', () => {
     const style = rule('edge').style as unknown as {
       'line-style': (ele: unknown) => string;
       'target-arrow-shape': (ele: unknown) => string;
+      width: (ele: unknown) => number;
     };
     expect(style['line-style'](fakeElement({ line: 'dashed' }))).toBe('dashed');
     expect(
       style['target-arrow-shape'](fakeElement({ arrow: 'triangle' })),
     ).toBe('triangle');
+    expect(style.width(fakeElement({ width: 2 }))).toBeCloseTo(1.08);
   });
 
-  it('define regras de seleção, vizinhança e contestação', () => {
-    expect(rule(':selected').style).toEqual({
-      'border-width': 3,
+  it('define regras de seleção, vizinhança e esmaecimento', () => {
+    expect(rule('node:selected').style).toMatchObject({
       'border-color': highlightColor,
+      'background-color': highlightColor,
+      color: surfaceColor,
+      'z-index': 10,
+    });
+    expect(rule('.neighbor').style).toEqual({ 'border-width': 1.5 });
+    expect(rule('.faded').style).toEqual({ opacity: 0.58 });
+    expect(rule('edge.selected-edge').style).toMatchObject({
       'line-color': highlightColor,
       'target-arrow-color': highlightColor,
-      label: 'data(label)',
-    });
-    expect(rule('.neighbor').style).toEqual({
-      'border-width': 1,
-      'border-color': neighborColor,
-    });
-    expect(rule('edge[?contested]').style).toEqual({
-      'line-color': contestedColor,
-      'target-arrow-color': contestedColor,
     });
   });
 
-  it('mantém regras, propriedades e paleta completas', () => {
+  it('mantém a escala visual Atlas e as propriedades de desenho', () => {
     expect(graphStyle.map(({ selector }) => selector)).toEqual([
       'node',
       'edge',
-      ':selected',
       '.neighbor',
-      'edge[?contested]',
+      '.faded',
+      'node:selected',
+      'edge.selected-edge',
     ]);
     expect(rule('node').style).toMatchObject({
-      label: 'data(label)',
-      width: 'data(size)',
-      height: 'data(size)',
-      'background-color': 'data(color)',
+      label: expect.any(Function),
+      width: 'label',
+      height: 'label',
+      'background-color': nodeFillColor,
       color: labelColor,
-      'font-family': 'IBM Plex Mono',
-      'font-size': 10,
-      'text-valign': 'bottom',
-      'text-margin-y': 8,
+      'font-family': 'DM Sans Variable, DM Sans, system-ui, sans-serif',
+      'font-size': 13,
+      'text-valign': 'center',
+      'text-halign': 'center',
       'text-wrap': 'ellipsis',
-      'text-max-width': '130px',
-      'min-zoomed-font-size': 9,
+      'text-max-width': '180px',
     });
     expect(rule('edge').style).toMatchObject({
-      width: 'data(width)',
-      'curve-style': 'bezier',
-      'control-point-step-size': 50,
-      'line-color': edgeColor,
-      'target-arrow-color': edgeColor,
-      'arrow-scale': 1,
+      width: expect.any(Function),
+      'curve-style': 'unbundled-bezier',
+      'line-color': '#8b8f7f',
+      'target-arrow-color': '#8b8f7f',
+      'arrow-scale': 0.7,
     });
-    expect(contextColors).toEqual(['#b9d99b', '#f0a074', '#8fb8e8', '#b8a4e0']);
-    expect(neutralColor).toBe('#7b8772');
   });
 });

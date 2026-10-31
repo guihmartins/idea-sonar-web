@@ -45,6 +45,8 @@ export function elements(
           width: r.intensity === null ? 1 : r.intensity * 1.5,
           arrow: type?.symmetric ? 'none' : 'triangle',
           contested: r.contested,
+          // Só relações direcionais recebem o fluxo origem → destino do Atlas.
+          symmetric: !!type?.symmetric,
         },
       };
     }),

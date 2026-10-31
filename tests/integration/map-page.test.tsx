@@ -142,13 +142,14 @@ describe('MapPage — painel de detalhes', () => {
       }),
     ).toBeInTheDocument();
     expect(screen.getByText('Também chamado: Jung')).toBeInTheDocument();
+    const details = screen.getByRole('complementary', {
+      name: 'Detalhes e evidências',
+    });
     expect(
-      screen.getByText(
-        /Contexto fictício Aproximadamente 1 a\.C\. — 100 d\.C\./,
-      ),
+      within(details).getByText('Contexto fictício', { selector: 'p' }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Estado editorial: Ativo · 3 conexões no total/),
+      screen.getByText(/Pessoa · Ativo · 3 conexões no total/),
     ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Editar ponto' })).toHaveAttribute(
       'href',
@@ -338,7 +339,33 @@ describe('MapPage — painel de detalhes', () => {
   );
 
   it('seleciona uma relação pelo grafo e mostra o painel de evidências', async () => {
-    const { user } = await withRoot();
+    const services = createFixtureServices();
+    await services.session.login();
+    const [catalog, jung, gnosis, relation] = await Promise.all([
+      services.api.catalog(),
+      services.api.node(ids.jung),
+      services.api.node(ids.gnosis),
+      services.api.relation(ids.relation),
+    ]);
+    const studied = catalog.relationTypes.find(
+      (type) => type.code === relation.type,
+    );
+    if (!studied) throw new Error('tipo studied ausente do catálogo');
+    vi.spyOn(services.api, 'relation').mockResolvedValue({
+      ...relation,
+      evidence: [
+        {
+          sourceId: ids.source,
+          sourceKind: 'secondary',
+          stance: 'contextualizes',
+          excerpt: 'Trecho fictício: este material existe apenas para teste.',
+          locator: 'Página fictícia 12',
+          explanation: 'Explicação fictícia da evidência.',
+          conversationReference: null,
+        },
+      ],
+    });
+    const { user } = await withRoot(services);
     await user.click(screen.getByRole('button', { name: /Expandir conexões/ }));
     await screen.findByText('Conexões carregadas.');
     const relationButton = screen.getAllByRole('button', {
@@ -357,7 +384,9 @@ describe('MapPage — painel de detalhes', () => {
         'Contestação: Contestação fictícia do cenário de teste.',
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText('Interpretação atribuída')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Relação · .* · Interpretação atribuída/),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(
         'Intensidade: 2 · Relevância fictícia no cenário de teste.',
@@ -367,20 +396,31 @@ describe('MapPage — painel de detalhes', () => {
       screen.getByText('Atribuição: Autoria de demonstração'),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(
-        `Direção: ${ids.jung} → ${ids.gnosis}. leitura inversa: estudou`,
-      ),
+      screen.getByText((_content, element) => {
+        if (element?.tagName !== 'P') return false;
+        const text = element.textContent?.replace(/\s+/g, ' ').trim();
+        return (
+          text ===
+          `Direção: ${jung.label} ${studied.label} → ${gnosis.label}. Leitura inversa: ${gnosis.label} ${studied.inverseLabel} ${jung.label}.`
+        );
+      }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(
-        'Trecho fictício: este material existe apenas para teste.',
+      await screen.findByText(
+        (_content, element) =>
+          element?.tagName === 'BLOCKQUOTE' &&
+          element.textContent?.includes(
+            'Trecho fictício: este material existe apenas para teste.',
+          ) === true,
       ),
     ).toBeInTheDocument();
     expect(
       await screen.findByText(/Fonte sintética de demonstração/),
     ).toBeInTheDocument();
     expect(
-      await screen.findByText(/Contexto: Contexto fictício/),
+      await screen.findByText(
+        'Contexto: Contexto fictício · Região de teste · Aproximadamente 1 a.C. — 100 d.C.',
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -407,7 +447,9 @@ describe('MapPage — painel de detalhes', () => {
     await screen.findByText('Conexões carregadas.');
     await user.click(screen.getAllByRole('button', { name: /^relação / })[0]!);
 
-    expect(await screen.findByText('Relação simétrica')).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Relação simétrica entre .* e .*/),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/Direção:/)).not.toBeInTheDocument();
   });
 
@@ -440,7 +482,9 @@ describe('MapPage — painel de detalhes', () => {
     expect(
       await screen.findByText('Conversa: sessão de teste, mensagem 42'),
     ).toBeInTheDocument();
-    expect(screen.getByText('mensagem 42')).toBeInTheDocument();
+    expect(
+      screen.getByText('Sustenta · Conversa · mensagem 42'),
+    ).toBeInTheDocument();
     expect(
       screen.getByText('Registro de teste da conversa.'),
     ).toBeInTheDocument();
@@ -496,7 +540,9 @@ describe('MapPage — painel de detalhes', () => {
     expect(screen.getByText('Intensidade: Não avaliada')).toBeInTheDocument();
     expect(screen.getByText('Atribuição: Não informada')).toBeInTheDocument();
     expect(
-      screen.getByText('Relação · tipo-ausente-no-catálogo'),
+      screen.getByText(
+        /Relação · tipo-ausente-no-catálogo · Interpretação atribuída/,
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText('Contestada')).not.toBeInTheDocument();
     expect(screen.queryByText(/Contexto:/)).not.toBeInTheDocument();
@@ -516,10 +562,16 @@ describe('MapPage — painel de detalhes', () => {
     await user.click(screen.getByRole('button', { name: /Expandir conexões/ }));
     await screen.findByText('Conexões carregadas.');
     await user.click(screen.getAllByRole('button', { name: /^relação / })[0]!);
-    const citation = await screen.findByText(
-      /Fonte sintética de demonstração · .* · 10\.5555\/fonte-teste/,
-    );
-    expect(citation.closest('a')).toBeNull();
+    expect(
+      await screen.findByText(
+        (_content, element) =>
+          element?.classList.contains('evidence-author') === true &&
+          element.textContent?.includes('10.5555/fonte-teste') === true,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Fonte sintética de demonstração').closest('a'),
+    ).toBeNull();
   });
 
   it('mostra falha ao carregar contextos e permite tentar novamente', async () => {
@@ -615,7 +667,9 @@ describe('MapPage — modo lista e grafo', () => {
     expect(
       screen.getByRole('button', { name: 'Mostrar grafo' }),
     ).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText('Pontos')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Pontos' }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText('Expanda um ponto para encontrar relações.'),
     ).not.toBeInTheDocument();
@@ -675,6 +729,15 @@ describe('MapPage — filtros', () => {
     const services = createFixtureServices();
     const { user } = await withRoot(services);
     const search = vi.spyOn(services.api, 'search');
+    await user.type(
+      screen.getByRole('textbox', { name: 'Buscar ponto' }),
+      'Jung',
+    );
+    await user.click(screen.getByRole('button', { name: 'Buscar' }));
+    await within(screen.getByLabelText('Resultados da busca')).findByRole(
+      'button',
+      { name: /Jung \(exemplo fictício\)/ },
+    );
     await user.click(screen.getByText('Filtros do mapa'));
     const kindSelect = screen.getByRole('combobox', { name: 'Tipo' });
     await user.selectOptions(kindSelect, 'tradition');
@@ -731,7 +794,9 @@ describe('MapPage — filtros', () => {
         expect.anything(),
       ),
     );
-    expect(screen.getByRole('listitem')).toHaveTextContent('Contexto fictício');
+    expect(
+      screen.getByText('Contexto fictício', { selector: '.legend-dots li' }),
+    ).toBeInTheDocument();
   });
 
   it('reseta a seleção quando não há raiz ao mudar filtros', async () => {

@@ -9,7 +9,7 @@ import {
   useState,
 } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, NavLink, useSearchParams } from 'react-router-dom';
 import { useServices } from '../app/services';
 import { Failure, SafeLink, editorialLabels } from '../components/Feedback';
 const GraphCanvas = lazy(() =>
@@ -38,8 +38,14 @@ import {
 import type { Positions, Viewport } from '../graph/layout/positions';
 import { restoreView } from '../graph/restore';
 import { formatPeriod } from '../components/period';
-import { contextColors } from '../graph/styles/palette';
+import { contextColors, neutralColor } from '../graph/styles/palette';
 const initialViewport: Viewport = { zoom: 1, pan: { x: 0, y: 0 } };
+function prefersReducedMotion() {
+  // jsdom (Vitest) não implementa matchMedia; trate como "sem preferência".
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function')
+    return false;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 function useMapController() {
   const { api } = useServices();
   const [params] = useSearchParams();
@@ -56,8 +62,10 @@ function useMapController() {
   });
   const [list, setList] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
+  const [flowEnabled, setFlowEnabled] = useState(() => !prefersReducedMotion());
   const [focusRevision, setFocusRevision] = useState(0);
   const [fitRevision, setFitRevision] = useState(0);
+  const [zoomCommand, setZoomCommand] = useState({ revision: 0, factor: 1 });
   const [message, setMessage] = useState('');
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState<string[]>([]);
@@ -305,6 +313,8 @@ function useMapController() {
     data,
     fitRevision,
     setFitRevision,
+    zoomCommand,
+    setZoomCommand,
     selection,
     setSelection,
     setPanelOpen,
@@ -313,6 +323,8 @@ function useMapController() {
     snapshot,
     focusRevision,
     panelOpen,
+    flowEnabled,
+    setFlowEnabled,
     ledger,
     busy,
     expand,
@@ -330,41 +342,159 @@ function useMapController() {
   };
 }
 type MapModel = ReturnType<typeof useMapController>;
+const railSections: {
+  to: string;
+  label: string;
+  icon: React.ReactNode;
+}[] = [
+  {
+    to: '/map',
+    label: 'Explorar mapa',
+    icon: (
+      <>
+        <path d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20z" />
+        <path d="M9 4v13.5M15 6.5V20" />
+      </>
+    ),
+  },
+  {
+    to: '/nodes',
+    label: 'Pontos',
+    icon: (
+      <>
+        <circle cx="7" cy="7" r="2.2" />
+        <circle cx="17" cy="7" r="2.2" />
+        <circle cx="12" cy="17" r="2.2" />
+      </>
+    ),
+  },
+  {
+    to: '/relations',
+    label: 'Relações',
+    icon: (
+      <>
+        <circle cx="5" cy="12" r="2" />
+        <circle cx="19" cy="12" r="2" />
+        <path d="M7 12h10" />
+        <path d="M14 9l3 3-3 3" />
+      </>
+    ),
+  },
+  {
+    to: '/sources',
+    label: 'Fontes',
+    icon: (
+      <>
+        <path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H20v15H7.5A3.5 3.5 0 0 0 4 20.5z" />
+        <path d="M8 7h8M8 11h6" />
+      </>
+    ),
+  },
+  {
+    to: '/contexts',
+    label: 'Contextos',
+    icon: <path d="M3 7h18M3 12h12M3 17h8" />,
+  },
+  {
+    to: '/imports',
+    label: 'Importações',
+    icon: (
+      <>
+        <path d="M12 3v11" />
+        <path d="M8 10l4 4 4-4" />
+        <path d="M4 17h16v4H4z" />
+      </>
+    ),
+  },
+  {
+    to: '/pending',
+    label: 'Pendências',
+    icon: <path d="M6 3v18M6 4h11l-3 4 3 4H6" />,
+  },
+  {
+    to: '/views',
+    label: 'Views salvas',
+    icon: <path d="M6 3h12v18l-6-4-6 4z" />,
+  },
+  {
+    to: '/export',
+    label: 'Exportar dados',
+    icon: (
+      <>
+        <path d="M12 16V5" />
+        <path d="M8 9l4-4 4 4" />
+        <path d="M4 17h16v4H4z" />
+      </>
+    ),
+  },
+];
+function AtlasRail() {
+  return (
+    <nav className="map-rail" aria-label="Seções">
+      {railSections.map((item) => (
+        <NavLink key={item.to} to={item.to} end aria-label={item.label}>
+          <svg
+            width="19"
+            height="19"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            {item.icon}
+          </svg>
+          <span className="rail-tip" aria-hidden="true">
+            {item.label}
+          </span>
+        </NavLink>
+      ))}
+    </nav>
+  );
+}
 export function MapPage() {
   const model = useMapController();
   return (
     <section className="map-page">
-      <div className="page-heading">
-        <h1>Explorar mapa</h1>
-        <Link className="button primary" to="/edit/nodes">
+      <div className="map-top">
+        <Link className="map-brand" to="/map">
+          <span className="map-brand-mark" aria-hidden="true" />
+          <span className="map-brand-name">Idea Sonar</span>
+        </Link>
+        <h1 aria-label="Explorar mapa">atlas de influência</h1>
+        <div className="map-search">
+          <form
+            className="search-bar"
+            onSubmit={(e) => {
+              e.preventDefault();
+              model.setTerm(model.search.trim());
+            }}
+          >
+            <label>
+              Buscar ponto
+              <input
+                value={model.search}
+                onChange={(e) => model.setSearch(e.target.value)}
+                placeholder="Autor, tradição, conceito ou obra"
+              />
+            </label>
+            <button className="primary">Buscar</button>
+          </form>
+          <SearchResults model={model} />
+        </div>
+        <FilterControls model={model} />
+        <Link className="button" to="/edit/nodes">
           Novo ponto
         </Link>
       </div>
-      <form
-        className="search-bar"
-        onSubmit={(e) => {
-          e.preventDefault();
-          model.setTerm(model.search.trim());
-        }}
-      >
-        <label>
-          Buscar ponto
-          <input
-            value={model.search}
-            onChange={(e) => model.setSearch(e.target.value)}
-            placeholder="Autor, tradição, conceito ou obra"
-          />
-        </label>
-        <button className="primary">Buscar</button>
-      </form>
-      <FilterControls model={model} />
       {model.contexts.error && (
         <Failure
           error={model.contexts.error}
           retry={() => void model.contexts.refetch()}
         />
       )}
-      <SearchResults model={model} />
       {model.error !== null && <Failure error={model.error} />}
       {model.message && (
         <p role="status" className="status">
@@ -388,8 +518,141 @@ export const evidenceLabels = {
   attributed_interpretation: 'Interpretação atribuída',
   inference: 'Inferência / hipótese',
 };
-function NodePanel({ id, contexts }: { id: string; contexts: Context[] }) {
+const evidenceBadges = {
+  documented: 'DOC',
+  attributed_interpretation: 'ATR',
+  inference: 'INF',
+};
+function relationRowLabel(
+  nodeId: string,
+  r: Relation,
+  predicate: RelationType | undefined,
+): string {
+  const outgoing = r.sourceId === nodeId;
+  if (!outgoing && !predicate?.symmetric && predicate?.inverseLabel)
+    return predicate.inverseLabel;
+  return predicate?.label ?? r.type;
+}
+function RelationRow({
+  nodeId,
+  r,
+  catalog,
+  nodes,
+  active,
+  onPick,
+}: {
+  nodeId: string;
+  r: Relation;
+  catalog: Catalog;
+  nodes: Node[];
+  active: boolean;
+  onPick: (id: string) => void;
+}) {
+  const predicate = catalog.relationTypes.find((t) => t.code === r.type);
+  const otherId = r.sourceId === nodeId ? r.targetId : r.sourceId;
+  return (
+    <li>
+      <button
+        type="button"
+        className={active ? 'active' : ''}
+        aria-pressed={active}
+        onClick={() => onPick(r.id)}
+      >
+        <span className="relation-predicate">
+          {relationRowLabel(nodeId, r, predicate)} →
+        </span>{' '}
+        <strong>
+          <NodeName id={otherId} nodes={nodes} />
+        </strong>
+        <span className="relation-badge">
+          {evidenceBadges[r.evidenceStatus]}
+        </span>
+        {r.contested && (
+          <span className="contested relation-contested"> Contestada</span>
+        )}
+      </button>
+    </li>
+  );
+}
+function NodeRelationsList({
+  nodeId,
+  relations,
+  catalog,
+  nodes,
+  activeId,
+  onPick,
+}: {
+  nodeId: string;
+  relations: Relation[];
+  catalog: Catalog;
+  nodes: Node[];
+  activeId: string;
+  onPick: (id: string) => void;
+}) {
+  const connected = relations.filter(
+    (r) => r.sourceId === nodeId || r.targetId === nodeId,
+  );
+  if (connected.length === 0)
+    return <p>Nenhuma relação carregada para este ponto ainda.</p>;
+  return (
+    <ul className="relation-list">
+      {connected.map((r) => (
+        <RelationRow
+          key={r.id}
+          nodeId={nodeId}
+          r={r}
+          catalog={catalog}
+          nodes={nodes}
+          active={r.id === activeId}
+          onPick={onPick}
+        />
+      ))}
+    </ul>
+  );
+}
+function RelationSources({ id, heading }: { id: string; heading?: string }) {
   const { api } = useServices();
+  const query = useQuery({
+    queryKey: ['relation', id],
+    queryFn: ({ signal }) => api.relation(id, signal),
+  });
+  if (query.isPending) return <p role="status">Carregando fontes…</p>;
+  if (query.error)
+    return <Failure error={query.error} retry={() => void query.refetch()} />;
+  const relation: Relation = query.data;
+  return (
+    <>
+      <h3>Fontes{heading ? ` · ${heading}` : ''}</h3>
+      {relation.evidence.length === 0 && (
+        <p>
+          Nenhuma evidência cadastrada. A classificação é informada pela API.
+        </p>
+      )}
+      {relation.evidence.map((evidence, index) => (
+        <SourceEvidence
+          key={`${evidence.sourceId ?? 'sem-fonte'}-${index}`}
+          evidence={evidence}
+          index={index}
+        />
+      ))}
+    </>
+  );
+}
+function NodePanel({
+  id,
+  contexts,
+  relations,
+  catalog,
+  nodes,
+}: {
+  id: string;
+  contexts: Context[];
+  relations: Relation[];
+  catalog: Catalog;
+  nodes: Node[];
+}) {
+  const { api } = useServices();
+  const [activeRelationId, setActiveRelationId] = useState('');
   const query = useQuery({
     queryKey: ['node', id],
     queryFn: ({ signal }) => api.node(id, signal),
@@ -398,27 +661,66 @@ function NodePanel({ id, contexts }: { id: string; contexts: Context[] }) {
   if (query.error)
     return <Failure error={query.error} retry={() => void query.refetch()} />;
   const n = query.data;
+  const connected = relations.filter(
+    (r) => r.sourceId === n.id || r.targetId === n.id,
+  );
+  const activeId = connected.some(
+    (relation) => relation.id === activeRelationId,
+  )
+    ? activeRelationId
+    : (connected[0]?.id ?? '');
   return (
     <>
-      <p className="eyebrow">{kindLabels[n.kind]}</p>
+      <p className="panel-meta">
+        {kindLabels[n.kind]} · {editorialLabels[n.status]} · {n.degreeTotal}{' '}
+        conexões no total
+      </p>
       <h2>{n.label}</h2>
+      {n.contexts.length > 0 && (
+        <p className="node-context">
+          {n.contexts
+            .map((contextId) => {
+              const context = contexts.find((item) => item.id === contextId);
+              return context
+                ? `${context.label}${context.periodLabel ? ` · ${context.periodLabel}` : ''}`
+                : contextId;
+            })
+            .join(' / ')}
+        </p>
+      )}
       <p>{n.description}</p>
       {n.aliases.length > 0 && (
-        <p>Também chamado: {n.aliases.map((a) => a.alias).join(', ')}</p>
+        <p>
+          Também chamado: {n.aliases.map((alias) => alias.alias).join(', ')}
+        </p>
       )}
       {n.conceptScope && <p>Escopo: {conceptScopeLabels[n.conceptScope]}</p>}
-      <p>
-        Estado editorial: {editorialLabels[n.status]} · {n.degreeTotal} conexões
-        no total
-      </p>
-      {n.contexts.map((id) => {
-        const c = contexts.find((c) => c.id === id);
-        return (
-          <p className="badge-light" key={id}>
-            {c?.label ?? id} {c && formatPeriod(c)}
-          </p>
-        );
-      })}
+      <h3>Relações</h3>
+      <NodeRelationsList
+        nodeId={n.id}
+        relations={relations}
+        catalog={catalog}
+        nodes={nodes}
+        activeId={activeId}
+        onPick={setActiveRelationId}
+      />
+      {activeId && (
+        <RelationSources
+          id={activeId}
+          heading={(() => {
+            const relation = connected.find((item) => item.id === activeId);
+            if (!relation) return '';
+            const target = nodes.find(
+              (item) =>
+                item.id ===
+                (relation.sourceId === n.id
+                  ? relation.targetId
+                  : relation.sourceId),
+            );
+            return `${catalog.relationTypes.find((item) => item.code === relation.type)?.label ?? relation.type} ${target?.label ?? ''}`;
+          })()}
+        />
+      )}
       <div className="links">
         <Link to={`/edit/nodes/${n.id}`}>Editar ponto</Link>
         <Link to={`/history/nodes/${n.id}`}>Histórico</Link>
@@ -426,7 +728,15 @@ function NodePanel({ id, contexts }: { id: string; contexts: Context[] }) {
     </>
   );
 }
-function RelationPanel({ id, catalog }: { id: string; catalog: Catalog }) {
+function RelationPanel({
+  id,
+  catalog,
+  nodes,
+}: {
+  id: string;
+  catalog: Catalog;
+  nodes: Node[];
+}) {
   const { api } = useServices();
   const query = useQuery({
     queryKey: ['relation', id],
@@ -439,32 +749,20 @@ function RelationPanel({ id, catalog }: { id: string; catalog: Catalog }) {
   const predicate = catalog.relationTypes.find((t) => t.code === r.type);
   return (
     <>
-      <p className="eyebrow">Relação · {predicate?.label ?? r.type}</p>
       <h2>{r.claim}</h2>
+      <p className="panel-meta">
+        Relação · {predicate?.label ?? r.type} ·{' '}
+        {evidenceLabels[r.evidenceStatus]}
+        {r.contested && (
+          <>
+            {' · '}
+            <strong className="contested">Contestada</strong>
+          </>
+        )}
+      </p>
       <p>{r.justification}</p>
-      <p>{evidenceLabels[r.evidenceStatus]}</p>
-      {r.contested && <strong className="contested">Contestada</strong>}
-      <RelationMetadata r={r} predicate={predicate} />
-      <h3>Evidências</h3>
-      {r.evidence.length === 0 && (
-        <p>
-          Nenhuma evidência cadastrada. A classificação é informada pela API.
-        </p>
-      )}
-      {r.evidence.map((e, i) => (
-        <div className="evidence" key={`${e.sourceId ?? 'sem-fonte'}-${i}`}>
-          <p>
-            {stanceLabels[e.stance]} · {sourceKindLabels[e.sourceKind]}
-          </p>
-          {e.excerpt && <blockquote>{e.excerpt}</blockquote>}
-          <p>{e.locator}</p>
-          <p>{e.explanation}</p>
-          {e.conversationReference && (
-            <p>Conversa: {e.conversationReference}</p>
-          )}
-          {e.sourceId && <SourceEvidence id={e.sourceId} />}
-        </div>
-      ))}
+      <RelationMetadata r={r} predicate={predicate} nodes={nodes} />
+      <RelationSources id={r.id} />
       <div className="links">
         <Link to={`/edit/relations/${r.id}`}>Editar relação</Link>
         <Link to={`/history/relations/${r.id}`}>Histórico</Link>
@@ -472,27 +770,76 @@ function RelationPanel({ id, catalog }: { id: string; catalog: Catalog }) {
     </>
   );
 }
-function SourceEvidence({ id }: { id: string }) {
+function SourceEvidence({
+  evidence,
+  index,
+}: {
+  evidence: Relation['evidence'][number];
+  index: number;
+}) {
   const { api } = useServices();
   const query = useQuery({
-    queryKey: ['sources', id],
-    queryFn: ({ signal }) => api.detail('sources', id, signal),
+    queryKey: ['sources', evidence.sourceId],
+    queryFn: ({ signal }) => api.detail('sources', evidence.sourceId!, signal),
+    enabled: !!evidence.sourceId,
   });
-  if (query.isPending) return <p role="status">Carregando fonte…</p>;
+  if (evidence.sourceId && query.isPending)
+    return <p role="status">Carregando fonte…</p>;
   if (query.error)
     return <Failure error={query.error} retry={() => void query.refetch()} />;
-  const source = query.data as Source;
-  const reference = source.publicationLabel ?? source.doi;
   return (
-    <p>
-      {source.canonicalUrl ? (
-        <SafeLink url={source.canonicalUrl}>{source.title}</SafeLink>
-      ) : (
-        source.title
-      )}{' '}
-      · {source.authorText}
-      {reference ? ` · ${reference}` : ''}
-    </p>
+    <SourceEvidenceBody
+      evidence={evidence}
+      index={index}
+      source={query.data as Source | undefined}
+    />
+  );
+}
+function SourceEvidenceBody({
+  evidence,
+  index,
+  source,
+}: {
+  evidence: Relation['evidence'][number];
+  index: number;
+  source: Source | undefined;
+}) {
+  const reference = source?.publicationLabel ?? source?.doi;
+  return (
+    <div className="evidence">
+      <span className="evidence-index">
+        {String(index + 1).padStart(2, '0')}
+      </span>
+      <div>
+        <p className="evidence-title">
+          <EvidenceTitle source={source} />
+        </p>
+        {evidence.excerpt && <blockquote>{evidence.excerpt}</blockquote>}
+        {source && (
+          <p className="evidence-author">
+            {source.authorText}
+            {reference ? ` · ${reference}` : ''}
+          </p>
+        )}
+        <p className="evidence-meta">
+          {stanceLabels[evidence.stance]} ·{' '}
+          {sourceKindLabels[evidence.sourceKind]}
+          {evidence.locator ? ` · ${evidence.locator}` : ''}
+        </p>
+        {evidence.explanation && <p>{evidence.explanation}</p>}
+        {evidence.conversationReference && (
+          <p>Conversa: {evidence.conversationReference}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+function EvidenceTitle({ source }: { source: Source | undefined }) {
+  if (!source) return <>Evidência sem fonte vinculada</>;
+  return source.canonicalUrl ? (
+    <SafeLink url={source.canonicalUrl}>{source.title}</SafeLink>
+  ) : (
+    <>{source.title}</>
   );
 }
 function ContextEvidence({ id }: { id: string }) {
@@ -518,100 +865,103 @@ function FilterControls({ model }: { model: MapModel }) {
   return (
     <details className="filters">
       <summary>Filtros do mapa</summary>
-      <div className="form-grid">
-        <label>
-          Tipo
-          <select
-            value={model.filters.kind}
-            onChange={(e) =>
-              model.changeFilters({
-                ...model.filters,
-                kind: e.target.value as Filters['kind'],
-              })
-            }
-          >
-            <option value="">Todos</option>
-            {model.catalog.data?.nodeKinds.map((k) => (
-              <option key={k} value={k}>
-                {kindLabels[k]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Contexto
-          <select
-            value={model.filters.contextId}
-            onChange={(e) =>
-              model.changeFilters({
-                ...model.filters,
-                contextId: e.target.value,
-              })
-            }
-          >
-            <option value="">Todos</option>
-            {model.contexts.data?.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Ano inicial (astronômico)
-          <input
-            type="number"
-            value={model.filters.startYear ?? ''}
-            onChange={(e) =>
-              model.changeFilters({
-                ...model.filters,
-                startYear:
-                  e.target.value === '' ? null : Number(e.target.value),
-              })
-            }
-          />
-        </label>
-        <label>
-          Ano final (astronômico)
-          <input
-            type="number"
-            value={model.filters.endYear ?? ''}
-            onChange={(e) =>
-              model.changeFilters({
-                ...model.filters,
-                endYear: e.target.value === '' ? null : Number(e.target.value),
-              })
-            }
-          />
-        </label>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={model.filters.includeUnknownPeriod}
-            onChange={(e) =>
-              model.changeFilters({
-                ...model.filters,
-                includeUnknownPeriod: e.target.checked,
-              })
-            }
-          />
-          Incluir período desconhecido
-        </label>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={model.filters.includePending}
-            onChange={(e) =>
-              model.changeFilters({
-                ...model.filters,
-                includePending: e.target.checked,
-              })
-            }
-          />
-          Mostrar pendentes
-        </label>
+      <div className="filters-panel">
+        <div className="form-grid">
+          <label>
+            Tipo
+            <select
+              value={model.filters.kind}
+              onChange={(e) =>
+                model.changeFilters({
+                  ...model.filters,
+                  kind: e.target.value as Filters['kind'],
+                })
+              }
+            >
+              <option value="">Todos</option>
+              {model.catalog.data?.nodeKinds.map((k) => (
+                <option key={k} value={k}>
+                  {kindLabels[k]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Contexto
+            <select
+              value={model.filters.contextId}
+              onChange={(e) =>
+                model.changeFilters({
+                  ...model.filters,
+                  contextId: e.target.value,
+                })
+              }
+            >
+              <option value="">Todos</option>
+              {model.contexts.data?.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Ano inicial (astronômico)
+            <input
+              type="number"
+              value={model.filters.startYear ?? ''}
+              onChange={(e) =>
+                model.changeFilters({
+                  ...model.filters,
+                  startYear:
+                    e.target.value === '' ? null : Number(e.target.value),
+                })
+              }
+            />
+          </label>
+          <label>
+            Ano final (astronômico)
+            <input
+              type="number"
+              value={model.filters.endYear ?? ''}
+              onChange={(e) =>
+                model.changeFilters({
+                  ...model.filters,
+                  endYear:
+                    e.target.value === '' ? null : Number(e.target.value),
+                })
+              }
+            />
+          </label>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={model.filters.includeUnknownPeriod}
+              onChange={(e) =>
+                model.changeFilters({
+                  ...model.filters,
+                  includeUnknownPeriod: e.target.checked,
+                })
+              }
+            />
+            Incluir período desconhecido
+          </label>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={model.filters.includePending}
+              onChange={(e) =>
+                model.changeFilters({
+                  ...model.filters,
+                  includePending: e.target.checked,
+                })
+              }
+            />
+            Mostrar pendentes
+          </label>
+        </div>
+        <p>Ano 0 = 1 a.C.; −1 = 2 a.C. Contexto não prova influência.</p>
       </div>
-      <p>Ano 0 = 1 a.C.; −1 = 2 a.C. Contexto não prova influência.</p>
     </details>
   );
 }
@@ -633,7 +983,11 @@ function SearchResults({ model }: { model: MapModel }) {
           <button
             className="result"
             key={n.id}
-            onClick={() => model.chooseRoot(n)}
+            onClick={() => {
+              model.chooseRoot(n);
+              model.setTerm('');
+              model.setSearch('');
+            }}
           >
             <strong>{n.label}</strong>
             <small>
@@ -657,6 +1011,10 @@ function SearchResults({ model }: { model: MapModel }) {
   );
 }
 
+/**
+ * Controles secundários discretos no rodapé do mapa — referência não tem
+ * barra de ferramentas separada empurrando o canvas para baixo.
+ */
 function MapToolbar({ model }: { model: MapModel }) {
   return (
     <div className="toolbar">
@@ -682,19 +1040,104 @@ function MapToolbar({ model }: { model: MapModel }) {
       >
         Avançar foco
       </button>
+      {!model.list && (
+        <button
+          type="button"
+          className="flow-toggle"
+          aria-pressed={model.flowEnabled}
+          onClick={() => model.setFlowEnabled((value) => !value)}
+        >
+          Fluxo
+        </button>
+      )}
+    </div>
+  );
+}
+/** Canto inferior direito do canvas, como na referência — não entra no
+ * fluxo normal da página (posicionado sobre o mapa, não empurra nada). */
+function MapCornerControls({ model }: { model: MapModel }) {
+  if (model.list) return null;
+  return (
+    <div className="map-corner-controls">
+      {[
+        { factor: 1.2, label: 'Aumentar zoom', glyph: '+' },
+        { factor: 1 / 1.2, label: 'Diminuir zoom', glyph: '−' },
+      ].map(({ factor, label, glyph }) => (
+        <button
+          key={label}
+          className="subtle"
+          aria-label={label}
+          title={label}
+          disabled={!model.data.nodes.length}
+          onClick={() =>
+            model.setZoomCommand((previous) => ({
+              revision: previous.revision + 1,
+              factor,
+            }))
+          }
+        >
+          {glyph}
+        </button>
+      ))}
       <button
-        disabled={model.list || !model.data.nodes.length}
+        className="subtle"
+        disabled={!model.data.nodes.length}
         onClick={() => model.setFitRevision((value) => value + 1)}
+        aria-label="Ajustar mapa à tela"
+        title="Ajustar mapa à tela"
       >
-        Ajustar mapa à tela
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M6 2H2v4M10 2h4v4M6 14H2v-4M10 14h4v-4" />
+        </svg>
+        <span className="map-corner-label">Ajustar mapa à tela</span>
       </button>
     </div>
   );
 }
 
+/**
+ * Âncora de cada título de contexto: centro horizontal e topo do cluster de
+ * nós carregados que pertencem a ele (primeiro contexto de cada ponto, mesma
+ * convenção de `elements.ts`). Não há coordenada de contexto na API — isso é
+ * só uma anotação visual sobre posições reais já carregadas; contextos sem
+ * nenhum nó visível, ou nós ainda sem posição aplicada, simplesmente não
+ * geram título (fallback seguro, nunca quebra).
+ */
+function contextGroups(nodes: Node[], contexts: Context[]) {
+  return contexts.flatMap((context) => {
+    const nodeIds = nodes
+      .filter((node) => node.contexts[0] === context.id)
+      .map((node) => node.id);
+    return nodeIds.length
+      ? [
+          {
+            id: context.id,
+            label: context.label,
+            period: context.periodLabel ?? formatPeriod(context),
+            nodeIds,
+          },
+        ]
+      : [];
+  });
+}
 function MapDisplay({ model, catalog }: { model: MapModel; catalog: Catalog }) {
+  const groups = useMemo(
+    () => contextGroups(model.data.nodes, model.contexts.data ?? []),
+    [model.data.nodes, model.contexts.data],
+  );
   return (
     <div className="map-surface">
+      <MapCornerControls model={model} />
       {model.data.nodes.length === 0 ? (
         <div className="empty">
           <h2>Uma ideia é o começo</h2>
@@ -752,6 +1195,9 @@ function MapDisplay({ model, catalog }: { model: MapModel; catalog: Catalog }) {
             focus={model.focusHistory[model.focusIndex] ?? ''}
             focusRevision={model.focusRevision}
             fitRevision={model.fitRevision}
+            zoomCommand={model.zoomCommand}
+            flowEnabled={model.flowEnabled}
+            groups={groups}
           />
         </Suspense>
       )}
@@ -774,45 +1220,90 @@ function MapDetails({ model, catalog }: { model: MapModel; catalog: Catalog }) {
         {!model.selection.id ? (
           <p>Selecione um ponto ou fio para ler os detalhes.</p>
         ) : model.selection.edge ? (
-          <RelationPanel id={model.selection.id} catalog={catalog} />
+          <RelationPanel
+            key={model.selection.id}
+            id={model.selection.id}
+            catalog={catalog}
+            nodes={model.data.nodes}
+          />
         ) : (
           <NodePanel
+            key={model.selection.id}
             id={model.selection.id}
             contexts={model.contexts.data ?? []}
+            relations={model.data.relations}
+            catalog={catalog}
+            nodes={model.data.nodes}
           />
         )}
         {model.selection.id && !model.selection.edge && (
           <NodeActions model={model} />
         )}
+        <SaveView model={model} />
       </div>
     </aside>
   );
 }
 
+const kindGlyphs = {
+  person: <circle cx="7" cy="7" r="3" />,
+  tradition: (
+    <>
+      <path d="M2 4h10" />
+      <path d="M2 7h10" />
+      <path d="M2 10h10" />
+    </>
+  ),
+  concept: <polygon points="7,1.25 12.75,7 7,12.75 1.25,7" />,
+  work: <rect x="1.5" y="2.75" width="11" height="8.5" />,
+} as const;
+function KindKey() {
+  return (
+    <ul className="kind-key">
+      {(['person', 'tradition', 'concept', 'work'] as const).map((kind) => (
+        <li key={kind}>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 14 14"
+            aria-hidden="true"
+            fill={`${neutralColor}26`}
+            stroke={neutralColor}
+            strokeWidth="1.25"
+          >
+            {kindGlyphs[kind]}
+          </svg>
+          {kindLabels[kind]}
+        </li>
+      ))}
+    </ul>
+  );
+}
 function MapLegend({ model }: { model: MapModel }) {
   return (
     <div className="legend">
-      <ul className="legend-dots">
-        {[...new Set(model.data.nodes.flatMap((n) => n.contexts))]
-          .sort()
-          .map((id, i) => (
-            <li key={id}>
-              <span
-                className="context-dot"
-                style={{
-                  background: contextColors[i % contextColors.length],
-                }}
-                aria-hidden="true"
-              />
-              {model.contexts.data?.find((c) => c.id === id)?.label ?? id}
-            </li>
-          ))}
-      </ul>
       <details>
         <summary>Como ler o mapa</summary>
+        <ul className="legend-dots">
+          {[...new Set(model.data.nodes.flatMap((n) => n.contexts))]
+            .sort()
+            .map((id, i) => {
+              const color = contextColors[i % contextColors.length] ?? '';
+              return (
+                <li key={id}>
+                  <span
+                    className="context-dot"
+                    style={{ color, background: `${color}26` }}
+                    aria-hidden="true"
+                  />
+                  {model.contexts.data?.find((c) => c.id === id)?.label ?? id}
+                </li>
+              );
+            })}
+        </ul>
+        <KindKey />
         <p>
-          ○ Pessoa · ⬡ Tradição · ◇ Conceito · ▭ Obra. Tamanho limitado pelo
-          total de conexões informado pela API.
+          Cada ponto é uma etiqueta: o símbolo à esquerda do rótulo diz o tipo.
         </p>
         <p>
           Linha contínua: documentada. Tracejada: interpretação atribuída.
@@ -820,11 +1311,14 @@ function MapLegend({ model }: { model: MapModel }) {
           relevante, 3 central; sem avaliação = neutra).
         </p>
         <p>
-          Setas indicam direção; relações simétricas não têm seta. A disposição
-          é visual, sem escala de distância histórica. Arraste para fixar
-          posições. Rosa indica contestação, também identificada no painel.
+          Setas indicam direção; relações simétricas não têm seta. Com o fluxo
+          ativo, uma pequena marca percorre as relações direcionais da seleção,
+          de origem para destino. A disposição é visual, sem escala de distância
+          histórica. Arraste para fixar posições. Contestação é sinalizada no
+          painel de detalhes, não na cor do traço.
         </p>
         <p>
+          Ao selecionar, o restante do desenho recua para destacar a vizinhança.
           Sem contexto: neutro. Vários contextos aparecem no painel; a cor usa o
           primeiro contexto.
         </p>
@@ -854,10 +1348,7 @@ function SaveView({ model }: { model: MapModel }) {
           maxLength={120}
         />
       </label>
-      <button
-        className="primary"
-        disabled={!model.ledger.roots.length || model.saving}
-      >
+      <button disabled={!model.ledger.roots.length || model.saving}>
         Salvar view
       </button>
     </form>
@@ -878,22 +1369,35 @@ function InstrumentBar({ model }: { model: MapModel }) {
   );
 }
 
+function StageFooter({ model }: { model: MapModel }) {
+  return (
+    <div className="stage-footer">
+      {/* Modo lista/foco precisam ficar visíveis mesmo em modo lista — é
+          como se volta para o grafo — diferente da régua/legenda abaixo,
+          que só fazem sentido lendo o desenho. */}
+      <MapToolbar model={model} />
+      {!model.list && (
+        <>
+          <InstrumentBar model={model} />
+          <MapLegend model={model} />
+        </>
+      )}
+    </div>
+  );
+}
+
 function ReadyMap({ model }: { model: MapModel }) {
   const catalog = model.catalog.data;
   if (!catalog) return null;
   return (
-    <>
-      <div className="instrument">
-        <InstrumentBar model={model} />
-        <MapToolbar model={model} />
-        <div className="map-workspace">
-          <MapDisplay model={model} catalog={catalog} />
-          <MapDetails model={model} catalog={catalog} />
-        </div>
-        <MapLegend model={model} />
+    <div className="map-body">
+      <AtlasRail />
+      <div className="map-stage">
+        <MapDisplay model={model} catalog={catalog} />
+        <StageFooter model={model} />
       </div>
-      <SaveView model={model} />
-    </>
+      <MapDetails model={model} catalog={catalog} />
+    </div>
   );
 }
 
@@ -948,9 +1452,11 @@ function expansionCursor(ledger: Ledger, id: string) {
 function RelationMetadata({
   r,
   predicate,
+  nodes,
 }: {
   r: Relation;
   predicate: RelationType | undefined;
+  nodes: Node[];
 }) {
   return (
     <>
@@ -964,7 +1470,7 @@ function RelationMetadata({
       {r.contested && r.contestationNote && (
         <p>Contestação: {r.contestationNote}</p>
       )}
-      <p>{relationDirection(r, predicate)}</p>
+      <RelationDirection r={r} predicate={predicate} nodes={nodes} />
       {r.contextId && <ContextEvidence id={r.contextId} />}
     </>
   );
@@ -972,7 +1478,46 @@ function RelationMetadata({
 function relationAttribution(r: Relation) {
   return r.attributionText ?? r.inferenceAuthor ?? 'Não informada';
 }
-function relationDirection(r: Relation, predicate: RelationType | undefined) {
-  if (predicate?.symmetric) return 'Relação simétrica';
-  return `Direção: ${r.sourceId} → ${r.targetId}. ${predicate?.inverseLabel ?? ''}`;
+function NodeName({ id, nodes }: { id: string; nodes: Node[] }) {
+  const { api } = useServices();
+  const known = nodes.find((n) => n.id === id);
+  const query = useQuery({
+    queryKey: ['node', id],
+    queryFn: ({ signal }) => api.node(id, signal),
+    enabled: !known,
+  });
+  if (known) return <>{known.label}</>;
+  if (query.data) return <>{query.data.label}</>;
+  return <>{query.isPending ? 'carregando ponto…' : 'ponto não disponível'}</>;
+}
+function RelationDirection({
+  r,
+  predicate,
+  nodes,
+}: {
+  r: Relation;
+  predicate: RelationType | undefined;
+  nodes: Node[];
+}) {
+  if (predicate?.symmetric)
+    return (
+      <p>
+        Relação simétrica entre <NodeName id={r.sourceId} nodes={nodes} /> e{' '}
+        <NodeName id={r.targetId} nodes={nodes} />.
+      </p>
+    );
+  return (
+    <p>
+      Direção: <NodeName id={r.sourceId} nodes={nodes} />{' '}
+      {predicate ? `${predicate.label} ` : ''}→{' '}
+      <NodeName id={r.targetId} nodes={nodes} />.
+      {predicate?.inverseLabel && (
+        <>
+          {' '}
+          Leitura inversa: <NodeName id={r.targetId} nodes={nodes} />{' '}
+          {predicate.inverseLabel} <NodeName id={r.sourceId} nodes={nodes} />.
+        </>
+      )}
+    </p>
+  );
 }
