@@ -1,5 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseEnvironment } from '../../src/config/schema';
+
+describe('módulo env', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+  it('expõe a configuração parseada a partir de import.meta.env', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.com');
+    const { env } = await import('../../src/config/env');
+    expect(env.apiBaseUrl).toBe('https://api.example.com');
+  });
+});
 
 const valid = {
   VITE_AUTH_MODE: 'oidc',
