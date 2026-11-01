@@ -140,6 +140,24 @@ describe('adapter — URLs de leitura', () => {
     ]);
   });
 
+  it('as leituras paginadas e de lote repassam o sinal de cancelamento ao transporte', async () => {
+    const { api, send } = setup();
+    // As respostas vazias podem não passar no schema; só o pedido importa.
+    const ignore = (pending: Promise<unknown>) =>
+      pending.catch(() => undefined);
+    await ignore(api.neighbors('n1', defaultFilters, null, signal));
+    await ignore(api.imports(null, signal));
+    await ignore(api.pending(null, signal));
+    await ignore(api.history('nodes', 'n1', null, signal));
+    for (const call of [0, 1, 2, 3])
+      expect(send.mock.calls[call]?.[1]).toEqual({ signal });
+    // O detalhe do lote devolve outro formato; só o pedido importa aqui.
+    const detail = setup({ id: 'x' });
+    await detail.api.import('lote 1', signal).catch(() => undefined);
+    expect(path(detail.send)).toBe('/imports/lote%201');
+    expect(detail.send.mock.calls[0]?.[1]).toEqual({ signal });
+  });
+
   it('leituras de um registro codificam o ID e repassam o cancelamento', async () => {
     const services = createFixtureServices();
     await services.session.login();
