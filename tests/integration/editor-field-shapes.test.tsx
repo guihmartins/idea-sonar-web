@@ -38,6 +38,11 @@ function shape(label: string | RegExp) {
         : null,
   };
 }
+function optionTexts(label: string) {
+  return within(screen.getByLabelText(label))
+    .getAllByRole('option')
+    .map((o) => o.textContent);
+}
 async function ready(path: string, heading: string) {
   renderEditor(path);
   await screen.findByRole('heading', { name: heading });
@@ -166,6 +171,51 @@ describe('EntityEditor — forma dos campos', () => {
       ['1', '1 — Pontual'],
       ['2', '2 — Relevante'],
       ['3', '3 — Central'],
+    ]);
+  });
+
+  it('relação: as opções de intensidade seguem a ordem de exibição, com "Não avaliada" primeiro', async () => {
+    await ready('/edit/relations', 'Cadastrar relação');
+    // Chaves inteiras ('1'..'3') vêm antes de '' num objeto: a ordem vem da lista.
+    expect(optionTexts('Intensidade')).toEqual([
+      'Não avaliada',
+      '1 — Pontual',
+      '2 — Relevante',
+      '3 — Central',
+    ]);
+    expect(
+      within(screen.getByLabelText('Intensidade')).getByRole('option', {
+        name: 'Não avaliada',
+      }),
+    ).toHaveValue('');
+    expect(screen.getByLabelText('Intensidade')).toHaveValue('');
+    expect(optionTexts('Classificação da evidência')).toEqual([
+      'Documentada',
+      'Interpretação atribuída',
+      'Inferência / hipótese',
+    ]);
+  });
+
+  it('ponto: tipo na ordem do catálogo e escopo do conceito com "Selecione" primeiro', async () => {
+    await ready('/edit/nodes', 'Cadastrar ponto');
+    expect(optionTexts('Tipo')).toEqual([
+      'Pessoa',
+      'Tradição',
+      'Conceito',
+      'Obra',
+      'Figura',
+    ]);
+    expect(optionTexts('Precisão do período')).toEqual([
+      'Desconhecida',
+      'Aproximada',
+      'Intervalo',
+      'Exata',
+    ]);
+    await userEvent.selectOptions(screen.getByLabelText('Tipo'), 'concept');
+    expect(optionTexts('Escopo do conceito')).toEqual([
+      'Selecione',
+      'Conceito amplo',
+      'Interpretação contextualizada',
     ]);
   });
 

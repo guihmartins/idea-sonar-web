@@ -124,6 +124,10 @@ function EvidenceFields({
   );
 }
 
+// Opções como pares [valor, rótulo] na ordem de exibição: um objeto colocaria
+// as chaves inteiras ('1', '2', '3') antes de '' e esconderia "Não avaliada".
+export type ChoiceOptions = readonly (readonly [string, string])[];
+
 export function Choice({
   model,
   field,
@@ -134,7 +138,7 @@ export function Choice({
   model: FieldsModel;
   field: string;
   label: string;
-  options: Record<string, string>;
+  options: ChoiceOptions;
   disabled?: boolean;
 }) {
   return (
@@ -145,7 +149,7 @@ export function Choice({
         disabled={disabled}
         onChange={(e) => model.update(field, e.target.value)}
       >
-        {Object.entries(options).map(([value, text]) => (
+        {options.map(([value, text]) => (
           <option key={value} value={value}>
             {text}
           </option>
@@ -155,6 +159,12 @@ export function Choice({
   );
 }
 
+const evidenceStatusOptions: ChoiceOptions = [
+  ['documented', 'Documentada'],
+  ['attributed_interpretation', 'Interpretação atribuída'],
+  ['inference', 'Inferência / hipótese'],
+];
+
 export function EvidenceStatusFields({ model }: { model: FieldsModel }) {
   const status = model.fields.evidenceStatus;
   return (
@@ -163,11 +173,7 @@ export function EvidenceStatusFields({ model }: { model: FieldsModel }) {
         model={model}
         field="evidenceStatus"
         label="Classificação da evidência"
-        options={{
-          documented: 'Documentada',
-          attributed_interpretation: 'Interpretação atribuída',
-          inference: 'Inferência / hipótese',
-        }}
+        options={evidenceStatusOptions}
       />
       {status === 'attributed_interpretation' &&
         model.text('attributionText', 'Atribuição (quem interpreta)', true)}
@@ -250,7 +256,7 @@ export function PeriodFields({ model }: { model: FieldsModel }) {
         model={model}
         field="precision"
         label="Precisão do período"
-        options={precisionLabels}
+        options={Object.entries(precisionLabels)}
       />
     </>
   );
