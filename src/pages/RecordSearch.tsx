@@ -33,32 +33,37 @@ export function RecordSearch({
 }) {
   const applied = paramsFromFilters(filters).toString();
   const [seen, setSeen] = useState(applied);
+  // A URL que a própria busca acabou de pedir, até a tela renderizar com ela.
+  const [pending, setPending] = useState<string | null>(null);
   const [draft, setDraft] = useState(() => draftFromFilters(filters));
   const [error, setError] = useState('');
   // Voltar/avançar muda a URL por fora: o rascunho acompanha, sem remontar o
-  // formulário (remontar tiraria o foco do campo).
+  // formulário (remontar tiraria o foco do campo). A URL da própria busca não
+  // conta: o que o usuário digitar até ela renderizar não pode ser apagado.
   if (seen !== applied) {
     setSeen(applied);
-    setDraft(draftFromFilters(filters));
-    setError('');
+    setPending(null);
+    if (pending !== applied) {
+      setDraft(draftFromFilters(filters));
+      setError('');
+    }
   }
   const change: Change = (key, value) =>
     setDraft((current) => ({ ...current, [key]: value }));
+  function apply(next: ListFilters) {
+    const target = paramsFromFilters(next).toString();
+    setPending(target === applied ? null : target);
+    setError('');
+    setDraft(draftFromFilters(next));
+    onSearch(next);
+  }
   function submit(event: FormEvent) {
     event.preventDefault();
     try {
-      const next = filtersFromDraft(type, draft);
-      setError('');
-      setDraft(draftFromFilters(next));
-      onSearch(next);
+      apply(filtersFromDraft(type, draft));
     } catch (failure) {
       setError((failure as Error).message);
     }
-  }
-  function clear() {
-    setError('');
-    setDraft(draftFromFilters({}));
-    onSearch({});
   }
   return (
     <form
@@ -83,7 +88,7 @@ export function RecordSearch({
         </label>
         <div className="actions">
           <button type="submit">Buscar</button>
-          <button type="button" onClick={clear}>
+          <button type="button" onClick={() => apply({})}>
             Limpar
           </button>
         </div>
