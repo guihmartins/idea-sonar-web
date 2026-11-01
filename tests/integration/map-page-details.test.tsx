@@ -27,6 +27,8 @@ vi.mock('../../src/graph/GraphCanvas', () => ({
     zoomCommand: { revision: number; factor: number };
     flowEnabled: boolean;
     groups: unknown[];
+    positions: unknown;
+    viewport: unknown;
   }) => (
     <div
       role="img"
@@ -38,6 +40,8 @@ vi.mock('../../src/graph/GraphCanvas', () => ({
       data-zoom={JSON.stringify(props.zoomCommand)}
       data-flow={String(props.flowEnabled)}
       data-groups={JSON.stringify(props.groups)}
+      data-positions={JSON.stringify(props.positions)}
+      data-viewport={JSON.stringify(props.viewport)}
     >
       {props.nodes.map((n) => (
         <button key={n.id} onClick={() => props.onSelect(n.id, false)}>
@@ -789,5 +793,213 @@ describe('MapPage — busca, filtros e modo lista', () => {
     expect(
       screen.getByRole('button', { name: 'Abrir painel' }),
     ).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
+describe('MapPage — movimento reduzido, expansão e foco', () => {
+  it('com preferência por menos movimento o fluxo começa desligado', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query === '(prefers-reduced-motion: reduce)',
+        addEventListener: vi.fn(),
+      })),
+    );
+    try {
+      const user = userEvent.setup();
+      renderMap();
+      await pickRoot(user);
+      expect(canvas()).toHaveAttribute('data-flow', 'false');
+      expect(screen.getByRole('button', { name: 'Fluxo' })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('expansão truncada pela API avisa para refinar os filtros', async () => {
+    const services = withApi((original) => ({
+      neighbors: async (...args: Parameters<typeof original.neighbors>) => ({
+        ...(await original.neighbors(...args)),
+        truncated: true,
+      }),
+    }));
+    const user = userEvent.setup();
+    renderMap(services);
+    await pickRoot(user);
+    await user.click(screen.getByRole('button', { name: 'Expandir conexões' }));
+    expect(
+      await screen.findByText(
+        'A API limitou esta expansão. Refine os filtros.',
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText('Conexões carregadas.')).not.toBeInTheDocument();
+  });
+
+  it('o botão de expandir fica ocupado durante a chamada e a mensagem some ao trocar a raiz', async () => {
+    const user = userEvent.setup();
+    renderMap();
+    await pickRoot(user);
+    await user.click(screen.getByRole('button', { name: 'Expandir conexões' }));
+    expect(screen.getByRole('button', { name: 'Carregando…' })).toBeDisabled();
+    expect(await screen.findByText('Conexões carregadas.')).toBeVisible();
+    await user.type(screen.getByLabelText('Buscar ponto'), 'Jung');
+    await user.click(screen.getByRole('button', { name: 'Buscar' }));
+    const results = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>('.search-results');
+      if (!found) throw new Error('sem resultados ainda');
+      return found;
+    });
+    await user.click(
+      await within(results).findByRole('button', {
+        name: /Jung \(exemplo fictício\)/,
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByText('Conexões carregadas.'),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByRole('button', { name: 'Expandir conexões' }),
+    ).toBeEnabled();
+  });
+
+  it('centralizar empilha o foco; voltar e avançar movem a seleção e a revisão', async () => {
+    const user = await loadJung();
+    const gnosis = 'nó Gnosticismo (exemplo fictício)';
+    const concept = 'nó Conceito compartilhado fictício';
+    await user.click(screen.getByRole('button', { name: gnosis }));
+    await user.click(screen.getByRole('button', { name: 'Centralizar' }));
+    expect(canvas()).toHaveAttribute('data-focus', ids.gnosis);
+    expect(canvas()).toHaveAttribute('data-focus-revision', '1');
+    expect(canvas()).toHaveAttribute('data-selected', ids.gnosis);
+    await user.click(screen.getByRole('button', { name: 'Voltar foco' }));
+    expect(canvas()).toHaveAttribute('data-focus', ids.jung);
+    expect(canvas()).toHaveAttribute('data-focus-revision', '2');
+    expect(canvas()).toHaveAttribute('data-selected', ids.jung);
+    expect(screen.getByRole('button', { name: 'Voltar foco' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Avançar foco' }));
+    expect(canvas()).toHaveAttribute('data-focus', ids.gnosis);
+    expect(canvas()).toHaveAttribute('data-focus-revision', '3');
+    // Centralizar de novo depois de voltar descarta o futuro do histórico.
+    await user.click(screen.getByRole('button', { name: 'Voltar foco' }));
+    await user.click(screen.getByRole('button', { name: concept }));
+    await user.click(screen.getByRole('button', { name: 'Centralizar' }));
+    expect(canvas()).toHaveAttribute('data-focus', ids.concept);
+    expect(screen.getByRole('button', { name: 'Avançar foco' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Voltar foco' })).toBeEnabled();
+  });
+
+  it('recolher a expansão tira do histórico de foco o que deixou de ser visível', async () => {
+    const user = await loadJung();
+    await user.click(
+      screen.getByRole('button', { name: 'nó Gnosticismo (exemplo fictício)' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Centralizar' }));
+    expect(canvas()).toHaveAttribute('data-focus', ids.gnosis);
+    await user.click(
+      screen.getByRole('button', { name: 'nó Jung (exemplo fictício)' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Recolher expansão' }));
+    expect(
+      await screen.findByText(
+        'Expansão recolhida. Pontos compartilhados preservados.',
+      ),
+    ).toBeVisible();
+    // O foco volta ao único ponto que ficou: a raiz.
+    expect(canvas()).toHaveAttribute('data-focus', ids.jung);
+    expect(screen.getByRole('button', { name: 'Voltar foco' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Avançar foco' })).toBeDisabled();
+  });
+});
+
+describe('MapPage — restaurar view', () => {
+  async function savedView(extra: Record<string, unknown> = {}) {
+    const services = createFixtureServices();
+    await services.session.login();
+    const view = await services.api.save(
+      'views',
+      {
+        name: 'Recorte restaurado',
+        status: 'active',
+        rootNodeId: ids.jung,
+        filters: { includePending: true, startYear: -10, endYear: 90 },
+        expandedNodes: [],
+        positions: { [ids.jung]: { x: 40, y: 50 } },
+        viewport: { zoom: 1.5, pan: { x: 8, y: 9 } },
+        ...extra,
+      },
+      'restore-key',
+    );
+    return { services, view };
+  }
+  function renderRestore(services: Services, viewId: string) {
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={createQueryClient()}>
+          <MemoryRouter initialEntries={[`/map?view=${viewId}`]}>
+            <ServicesProvider services={services}>{children}</ServicesProvider>
+          </MemoryRouter>
+        </QueryClientProvider>
+      );
+    }
+    return render(<MapPage />, { wrapper: Wrapper });
+  }
+
+  it('anuncia a restauração, aplica filtros, posições, viewport, seleção e foco', async () => {
+    const { services, view } = await savedView();
+    renderRestore(services, view.id);
+    expect(
+      screen.getByText('Restaurando view com dados atuais…'),
+    ).toBeVisible();
+    expect(
+      await screen.findByText('View restaurada com dados atuais.'),
+    ).toBeVisible();
+    expect(
+      screen.queryByText('Restaurando view com dados atuais…'),
+    ).not.toBeInTheDocument();
+    expect(JSON.parse(canvas().getAttribute('data-positions') ?? '{}')).toEqual(
+      {
+        [ids.jung]: { x: 40, y: 50 },
+      },
+    );
+    expect(JSON.parse(canvas().getAttribute('data-viewport') ?? '{}')).toEqual({
+      zoom: 1.5,
+      pan: { x: 8, y: 9 },
+    });
+    expect(canvas()).toHaveAttribute('data-selected', ids.jung);
+    expect(canvas()).toHaveAttribute('data-focus', ids.jung);
+    expect(screen.getByLabelText('Mostrar pendentes')).toBeChecked();
+    expect(screen.getByLabelText('Ano inicial (astronômico)')).toHaveValue(-10);
+    expect(screen.getByLabelText('Ano final (astronômico)')).toHaveValue(90);
+    expect(screen.getByRole('button', { name: 'Voltar foco' })).toBeDisabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('view inexistente mostra o erro e nenhum ponto', async () => {
+    renderRestore(createFixtureServices(), 'nao-existe');
+    expect((await screen.findAllByRole('alert')).length).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole('img', { name: 'canvas' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('trocar o filtro depois de restaurar descarta as expansões e mantém a raiz', async () => {
+    const { services, view } = await savedView();
+    renderRestore(services, view.id);
+    await screen.findByText('View restaurada com dados atuais.');
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText('Incluir período desconhecido'));
+    expect(
+      await screen.findByText(
+        'Filtros alterados. Expansões e cursores anteriores descartados.',
+      ),
+    ).toBeVisible();
+    expect(canvas()).toHaveAttribute('data-selected', ids.jung);
+    expect(canvas()).toHaveAttribute('data-focus', ids.jung);
+    expect(screen.getByRole('button', { name: 'Voltar foco' })).toBeDisabled();
   });
 });
