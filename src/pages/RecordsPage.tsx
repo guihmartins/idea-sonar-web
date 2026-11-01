@@ -4,12 +4,13 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useServices } from '../app/services';
 import { ApiError } from '../api/client';
 import { Failure, editorialLabels } from '../components/Feedback';
-import type { CandidateType } from '../api/adapter';
+import type { CandidateType, ListFilters } from '../api/adapter';
 import type {
+  Entity,
   EntityType,
   HistoryEntry,
   ImportDetail,
@@ -28,6 +29,14 @@ import {
   pendingProposal,
   pendingTitle,
 } from '../components/labels';
+import { RecordSearch } from './RecordSearch';
+import {
+  countText,
+  emptyText,
+  filtersFromParams,
+  isSearchable,
+  paramsFromFilters,
+} from './searchFilters';
 export const typeLabels: Record<EntityType, string> = {
   nodes: 'Pontos',
   relations: 'Relações',
@@ -37,50 +46,44 @@ export const typeLabels: Record<EntityType, string> = {
 };
 export function RecordsPage({ type }: { type: EntityType }) {
   const { api } = useServices();
+  const [params, setParams] = useSearchParams();
+  // Só pontos, fontes e contextos têm busca; nas outras listas a URL não conta.
+  const searchable = isSearchable(type);
+  const filters: ListFilters = searchable
+    ? filtersFromParams(type, params)
+    : {};
+  // Os filtros fazem parte da chave: a API recusa o cursor de outra busca, então
+  // mudar um filtro recomeça a lista em vez de continuar a paginação antiga.
   const query = useInfiniteQuery({
-    queryKey: ['list', type],
+    queryKey: ['list', type, filters],
     initialPageParam: null as string | null,
-    queryFn: ({ pageParam, signal }) => api.list(type, pageParam, signal),
+    queryFn: ({ pageParam, signal }) =>
+      api.list(type, pageParam, signal, filters),
     getNextPageParam: (p) => p.nextCursor,
   });
+  const items = query.data?.pages.flatMap((p) => p.items) ?? [];
   return (
     <section>
-      <div className="page-heading">
-        <h1>{typeLabels[type]}</h1>
-        {type !== 'views' && (
-          <Link className="button primary" to={`/edit/${type}`}>
-            Cadastrar
-          </Link>
-        )}
-      </div>
+      <PageHeading type={type} />
+      <SearchSection
+        type={type}
+        filters={filters}
+        summary={
+          query.isSuccess ? countText(items.length, query.hasNextPage) : ''
+        }
+        onSearch={(next) => setParams(paramsFromFilters(next))}
+      />
       {query.isPending && <p role="status">Carregando…</p>}
       {query.error && (
         <Failure error={query.error} retry={() => void query.refetch()} />
       )}
-      {query.data?.pages[0]?.items.length === 0 && (
-        <p className="empty">
-          Nenhum registro encontrado.
-          {type === 'views' && ' Salve um recorte na tela Explorar mapa.'}
-        </p>
+      {query.isSuccess && items.length === 0 && (
+        <EmptyList type={type} filters={filters} />
       )}
       <div className="record-list">
-        {query.data?.pages
-          .flatMap((p) => p.items)
-          .map((item) => (
-            <article key={item.id}>
-              <h2>{entityTitle(type, item)}</h2>
-              <p>{entitySummary(type, item)}</p>
-              {type === 'nodes' && (
-                <NodeIdentifiers identifiers={(item as Node).identifiers} />
-              )}
-              <p>Estado: {editorialLabels[item.status]}</p>
-              {type === 'views' ? (
-                <Link to={`/map?view=${item.id}`}>Restaurar view</Link>
-              ) : (
-                <Link to={`/edit/${type}/${item.id}`}>Ver e editar</Link>
-              )}
-            </article>
-          ))}
+        {items.map((item) => (
+          <RecordItem key={item.id} type={type} item={item} />
+        ))}
       </div>
       {query.hasNextPage && (
         <button
@@ -91,6 +94,79 @@ export function RecordsPage({ type }: { type: EntityType }) {
         </button>
       )}
     </section>
+  );
+}
+// Busca e linha de estado (região viva: o leitor de tela anuncia a contagem).
+function SearchSection({
+  type,
+  filters,
+  summary,
+  onSearch,
+}: {
+  type: EntityType;
+  filters: ListFilters;
+  summary: string;
+  onSearch: (filters: ListFilters) => void;
+}) {
+  if (!isSearchable(type)) return null;
+  return (
+    <>
+      <RecordSearch
+        key={type}
+        type={type}
+        filters={filters}
+        onSearch={onSearch}
+      />
+      <p className="record-count" aria-live="polite">
+        {summary}
+      </p>
+    </>
+  );
+}
+function PageHeading({ type }: { type: EntityType }) {
+  return (
+    <div className="page-heading">
+      <h1>{typeLabels[type]}</h1>
+      {type !== 'views' && (
+        <Link className="button primary" to={`/edit/${type}`}>
+          Cadastrar
+        </Link>
+      )}
+    </div>
+  );
+}
+// Lista vazia: na busca, o texto nomeia o que foi buscado.
+function EmptyList({
+  type,
+  filters,
+}: {
+  type: EntityType;
+  filters: ListFilters;
+}) {
+  return (
+    <p className="empty">
+      {isSearchable(type)
+        ? emptyText(type, filters)
+        : 'Nenhum registro encontrado.'}
+      {type === 'views' && ' Salve um recorte na tela Explorar mapa.'}
+    </p>
+  );
+}
+function RecordItem({ type, item }: { type: EntityType; item: Entity }) {
+  return (
+    <article>
+      <h2>{entityTitle(type, item)}</h2>
+      <p>{entitySummary(type, item)}</p>
+      {type === 'nodes' && (
+        <NodeIdentifiers identifiers={(item as Node).identifiers} />
+      )}
+      <p>Estado: {editorialLabels[item.status]}</p>
+      {type === 'views' ? (
+        <Link to={`/map?view=${item.id}`}>Restaurar view</Link>
+      ) : (
+        <Link to={`/edit/${type}/${item.id}`}>Ver e editar</Link>
+      )}
+    </article>
   );
 }
 export function ImportsPage() {

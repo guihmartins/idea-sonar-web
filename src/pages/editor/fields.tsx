@@ -7,6 +7,7 @@ import {
   stanceLabels,
   sourceKindLabels,
 } from '../../components/labels';
+import { YearField } from '../../components/YearField';
 import { emptyEvidence } from './payload';
 import type {
   EvidenceDraft,
@@ -230,26 +231,14 @@ export function PeriodFields({ model }: { model: FieldsModel }) {
       </p>
       {(['start', 'end'] as const).map((key) => (
         <div className="form-grid" key={key}>
-          <label>
-            {key === 'start' ? 'Ano inicial' : 'Ano final'}
-            <input
-              type="number"
-              min="1"
-              step="1"
-              value={model.fields[key]}
-              onChange={(e) => model.update(key, e.target.value)}
-            />
-          </label>
-          <label>
-            Era do {key === 'start' ? 'início' : 'fim'}
-            <select
-              value={model.fields[`${key}Era`]}
-              onChange={(e) => model.update(`${key}Era`, e.target.value)}
-            >
-              <option value="ce">d.C.</option>
-              <option value="bce">a.C.</option>
-            </select>
-          </label>
+          <YearField
+            label={key === 'start' ? 'Ano inicial' : 'Ano final'}
+            eraLabel={`Era do ${key === 'start' ? 'início' : 'fim'}`}
+            year={model.fields[key]}
+            era={model.fields[`${key}Era`]}
+            onYear={(value) => model.update(key, value)}
+            onEra={(value) => model.update(`${key}Era`, value)}
+          />
         </div>
       ))}
       <Choice

@@ -13,6 +13,7 @@ import type {
 } from '../api/domain';
 import { Failure } from '../components/Feedback';
 import { conceptScopeLabels, kindLabels } from '../components/labels';
+import { yearFields } from '../components/period';
 import {
   buildEditorBody,
   evidenceDraft,
@@ -367,8 +368,9 @@ function periodFields(period: Pick<Context, 'startYear' | 'endYear'>) {
     ['start', period.startYear],
     ['end', period.endYear],
   ] as const) {
-    data[key] = year === null ? '' : String(year <= 0 ? 1 - year : year);
-    data[`${key}Era`] = year !== null && year <= 0 ? 'bce' : 'ce';
+    const parts = yearFields(year);
+    data[key] = parts.value;
+    data[`${key}Era`] = parts.era;
   }
   return data;
 }
