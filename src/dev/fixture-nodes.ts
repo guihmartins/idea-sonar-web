@@ -131,7 +131,7 @@ export function duplicateFailure() {
   });
 }
 
-const fold = (text: string) =>
+export const fold = (text: string) =>
   text
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
