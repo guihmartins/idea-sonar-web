@@ -272,6 +272,11 @@ function makeNode(id: string, extra: Partial<Node> = {}): Node {
     updatedAt: '2026-01-01T00:00:00.000Z',
     status: 'active',
     kind: 'person',
+    startYear: null,
+    endYear: null,
+    precision: 'unknown',
+    periodLabel: null,
+    identifiers: [],
     label: `Nó ${id}`,
     description: 'desc',
     conceptScope: null,
@@ -313,6 +318,7 @@ function makeRelation(
 }
 const catalog: Catalog = {
   nodeKinds: ['person', 'tradition', 'concept', 'work'],
+  identifierSchemes: [],
   relationTypes: [
     {
       code: 'influenced',

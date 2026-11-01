@@ -24,6 +24,10 @@ describe('graphStyle', () => {
     expect(style.label(fakeElement({ shape: 'hexagon', label: 'Raiz' }))).toBe(
       '≡ Raiz',
     );
+    // Figura: triângulo, com o glifo △ do mesmo bloco de ◇ e □.
+    expect(
+      style.label(fakeElement({ shape: 'triangle', label: 'Hermes' })),
+    ).toBe('△ Hermes');
   });
 
   it('resolve estilo e seta da aresta a partir dos dados do elemento', () => {

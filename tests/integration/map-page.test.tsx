@@ -574,19 +574,50 @@ describe('MapPage — painel de detalhes', () => {
     ).toBeNull();
   });
 
-  it('mostra falha ao carregar contextos e permite tentar novamente', async () => {
+  it('mostra falha ao carregar o contexto de um ponto visível e permite tentar novamente', async () => {
     const services = createFixtureServices();
+    await services.session.login();
+    const realDetail = services.api.detail;
+    let failures = 1;
+    const detail = vi
+      .spyOn(services.api, 'detail')
+      .mockImplementation(async (type, id, signal) => {
+        if (type === 'contexts' && failures-- > 0)
+          throw new Error('Falha ao carregar contextos');
+        return realDetail(type, id, signal);
+      });
     const list = vi.spyOn(services.api, 'list');
-    list.mockRejectedValueOnce(new Error('Falha ao carregar contextos'));
-    renderMap('/map', services);
+    const { user } = await withRoot(services);
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Falha ao carregar contextos',
     );
-    await userEvent
-      .setup()
-      .click(screen.getByRole('button', { name: 'Tentar novamente' }));
-    expect(await screen.findByText('Filtros do mapa')).toBeInTheDocument();
-    expect(list).toHaveBeenCalledTimes(2);
+    // Sem o nome, o painel mostra o ID do contexto.
+    expect(screen.getByText(ids.context)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Tentar novamente' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument(),
+    );
+    expect(
+      await screen.findByText('Contexto fictício', {
+        selector: '.legend-dots li',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      detail.mock.calls.filter(([type]) => type === 'contexts'),
+    ).toHaveLength(2);
+    // Nenhuma listagem de contextos: só os contextos dos pontos visíveis.
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it('não consulta contextos enquanto nenhum ponto está visível', async () => {
+    const services = createFixtureServices();
+    await services.session.login();
+    const detail = vi.spyOn(services.api, 'detail');
+    const list = vi.spyOn(services.api, 'list');
+    renderMap('/map', services);
+    expect(await screen.findByText('Uma ideia é o começo')).toBeInTheDocument();
+    expect(detail).not.toHaveBeenCalled();
+    expect(list).not.toHaveBeenCalled();
   });
 
   it('mostra falha no detalhe do ponto e recupera ao tentar novamente', async () => {
@@ -746,8 +777,19 @@ describe('MapPage — filtros', () => {
         'Filtros alterados. Expansões e cursores anteriores descartados.',
       ),
     ).toBeInTheDocument();
-    const contextSelect = screen.getByRole('combobox', { name: 'Contexto' });
-    await user.selectOptions(contextSelect, ids.context);
+    const contextPicker = screen.getByRole('group', { name: 'Contexto' });
+    await user.type(
+      within(contextPicker).getByRole('textbox', { name: 'Buscar candidato' }),
+      'fict',
+    );
+    await user.click(
+      await within(contextPicker).findByRole('radio', {
+        name: 'Contexto fictício',
+      }),
+    );
+    expect(
+      await within(contextPicker).findByText('Selecionado: Contexto fictício'),
+    ).toBeInTheDocument();
     const startYear = screen.getByRole('spinbutton', {
       name: 'Ano inicial (astronômico)',
     });
@@ -797,6 +839,50 @@ describe('MapPage — filtros', () => {
     expect(
       screen.getByText('Contexto fictício', { selector: '.legend-dots li' }),
     ).toBeInTheDocument();
+  });
+
+  it('limpa o filtro de contexto pela seleção e volta a pesquisar sem contextId', async () => {
+    const services = createFixtureServices();
+    const { user } = await withRoot(services);
+    const search = vi.spyOn(services.api, 'search');
+    await user.type(
+      screen.getByRole('textbox', { name: 'Buscar ponto' }),
+      'Jung',
+    );
+    await user.click(screen.getByRole('button', { name: 'Buscar' }));
+    await user.click(screen.getByText('Filtros do mapa'));
+    const picker = screen.getByRole('group', { name: 'Contexto' });
+    expect(within(picker).queryByText(/Selecionado:/)).not.toBeInTheDocument();
+    expect(
+      within(picker).queryByRole('button', { name: 'Limpar seleção' }),
+    ).not.toBeInTheDocument();
+    await user.type(
+      within(picker).getByRole('textbox', { name: 'Buscar candidato' }),
+      'fict',
+    );
+    await user.click(
+      await within(picker).findByRole('radio', { name: 'Contexto fictício' }),
+    );
+    await waitFor(() =>
+      expect(search).toHaveBeenLastCalledWith(
+        'Jung',
+        expect.objectContaining({ contextId: ids.context }),
+        null,
+        expect.anything(),
+      ),
+    );
+    await user.click(
+      within(picker).getByRole('button', { name: 'Limpar seleção' }),
+    );
+    expect(within(picker).queryByText(/Selecionado:/)).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(search).toHaveBeenLastCalledWith(
+        'Jung',
+        expect.objectContaining({ contextId: '' }),
+        null,
+        expect.anything(),
+      ),
+    );
   });
 
   it('reseta a seleção quando não há raiz ao mudar filtros', async () => {

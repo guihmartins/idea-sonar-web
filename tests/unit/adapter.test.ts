@@ -6,7 +6,7 @@ import {
   fromStoredFilters,
   toStoredFilters,
 } from '../../src/api/domain';
-import type { PendingItem } from '../../src/api/domain';
+import type { ImportBatch, PendingItem } from '../../src/api/domain';
 import { pendingTitle } from '../../src/components/labels';
 import { formatAliases, parseAliases } from '../../src/pages/editor/payload';
 import { createFixtureServices, ids } from '../../src/dev/fixtures';
@@ -32,7 +32,109 @@ const pending: PendingItem = {
   },
 };
 
+const batch: ImportBatch = {
+  contractVersion: '1',
+  policyVersion: '1',
+  idempotencyKey: 'chave-do-lote',
+  origin: 'manual',
+  inputSummary: 'Conceito contextual criado no editor',
+  dryRun: false,
+  nodes: [
+    {
+      op: 'create',
+      clientRef: 'conceito',
+      kind: 'concept',
+      label: 'Conceito contextual',
+      description: 'Descrição',
+      conceptScope: 'contextual',
+      precision: 'unknown',
+      aliases: [],
+      identifiers: [],
+      contexts: [{ id: '00000000-0000-4000-8000-000000000006' }],
+      status: 'active',
+    },
+  ],
+  relations: [
+    {
+      op: 'update',
+      clientRef: 'contextualizacao',
+      id: '00000000-0000-4000-8000-000000000007',
+      expectedVersion: 3,
+      status: 'active',
+    },
+  ],
+};
+const importResult = {
+  batchId: 'b1',
+  status: 'committed_with_pending',
+  created: 1,
+  updated: 0,
+  reused: 0,
+  pending: 1,
+  discarded: 0,
+  clientRefToId: { conceito: 'n1' },
+  items: [
+    {
+      clientRef: 'conceito',
+      entityType: 'nodes',
+      entityId: 'n1',
+      outcome: 'created',
+      reason: null,
+      candidates: [],
+    },
+    {
+      clientRef: 'contextualizacao',
+      entityType: 'relations',
+      entityId: null,
+      outcome: 'pending',
+      reason: 'Relação ativa exige pontos ativos',
+      candidates: [],
+    },
+  ],
+  viewUrl: 'http://localhost:8080/imports/b1',
+  dryRun: false,
+};
+
 describe('adapter alinhado ao contrato da API', () => {
+  it('importBatch envia o lote por POST /imports com a chave de idempotência', async () => {
+    const { api, send } = setup(importResult);
+    const result = await api.importBatch(batch, 'chave-do-lote');
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0]).toEqual([
+      '/imports',
+      { method: 'POST', body: batch, idempotencyKey: 'chave-do-lote' },
+    ]);
+    expect(send.mock.calls[0]?.[1]?.idempotencyKey).toBe(batch.idempotencyKey);
+    expect(result).toEqual(importResult);
+    expect(result.items[1]?.reason).toBe('Relação ativa exige pontos ativos');
+  });
+  it('importBatch rejeita resposta fora do contrato de ImportResult', async () => {
+    const missing = setup({ ...importResult, items: undefined });
+    await expect(missing.api.importBatch(batch, 'k')).rejects.toThrow(
+      'fora do contrato',
+    );
+    const wrongStatus = setup({ ...importResult, status: 'undone' });
+    await expect(wrongStatus.api.importBatch(batch, 'k')).rejects.toThrow(
+      'fora do contrato',
+    );
+    const wrongItem = setup({
+      ...importResult,
+      items: [{ ...importResult.items[0], outcome: 'removido' }],
+    });
+    await expect(wrongItem.api.importBatch(batch, 'k')).rejects.toThrow(
+      'fora do contrato',
+    );
+  });
+  it('nodeRelations lista as relações do ponto, pendentes inclusive, de um predicado', async () => {
+    const { api, send } = setup(page);
+    await api.nodeRelations('n 1', 'contextualizes', signal);
+    expect(send.mock.calls[0]?.[0]).toBe(
+      '/relations?nodeId=n+1&type=contextualizes&includePending=true&limit=50',
+    );
+    expect(send.mock.calls[0]?.[1]).toEqual({ signal });
+    await api.nodeRelations('n1', 'contextualizes');
+    expect(send.mock.calls[1]?.[1]).toEqual({});
+  });
   it('envia filtros com os nomes da API e omite vazios', async () => {
     const { api, send } = setup(page);
     await api.search(

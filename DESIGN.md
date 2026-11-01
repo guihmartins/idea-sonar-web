@@ -240,8 +240,29 @@ elemento parece ter volume, está errado.
 
 Canto reto em tudo — controles, campos, prancha, selos. Marcadores são
 quadrados; a legenda de contexto usa quadrados contornados iguais aos nós; as
-formas dos tipos (círculo, hexágono, losango, retângulo) aparecem na legenda em
-SVG desenhado, com o mesmo traço do mapa, não com glifos unicode.
+formas dos tipos aparecem na legenda em SVG desenhado, com o mesmo traço do
+mapa, não com glifos unicode:
+
+| Tipo | Forma (Cytoscape) | Glifo no rótulo do nó |
+| --- | --- | --- |
+| Pessoa | círculo (`ellipse`) | • |
+| Tradição | hexágono (`hexagon`) | ≡ |
+| Conceito | losango (`diamond`) | ◇ |
+| Obra | retângulo (`rectangle`) | □ |
+| Figura | triângulo (`triangle`) | △ |
+
+**Figura** (figura mítica, religiosa, literária ou interior, distinta da pessoa
+histórica) é o triângulo. Foi o escolhido porque é o polígono mais simples ainda
+livre e de cantos retos (nada de `round-*`, que quebraria "canto reto em tudo"),
+e porque se distingue dos quatro anteriores mesmo a 14px: nenhum deles tem uma
+ponta única. Descartados: estrela (lê-se como favorito/avaliação e tem dez
+vértices, pesada a 14px), pentágono e octógono (quase indistinguíveis do
+hexágono e do círculo a esse tamanho) e `vee`/`tag` (sugerem direção, que é
+papel da seta da relação). O glifo △ do rótulo vem do mesmo bloco Unicode de ◇ e
+□ (Formas Geométricas), então tem a mesma cobertura de fonte; na legenda e no
+painel a forma é sempre SVG. Cores e contraste não mudaram: a figura usa o
+mesmo traço neutro `#767c6b` (≥3:1 sobre o marfim) e o mesmo preenchimento a
+16% dos demais tipos.
 
 ## Components
 
@@ -257,6 +278,38 @@ SVG desenhado, com o mesmo traço do mapa, não com glifos unicode.
 - **Linhas de registro**: fio separando itens, título à esquerda, ação alinhada à
   direita, última linha do registro em mono como metadado. Sem cartões.
 - **Resultados de busca**: linhas com o ID em mono à direita, não cartões.
+- **Seletor por busca** (pontos, contextos e fontes no editor; contexto no filtro
+  do mapa): `fieldset` com etiqueta mono, campo "Buscar candidato", o que já está
+  escolhido escrito pelo nome (rádio para um, lista com "Remover" para vários) e
+  resultados em linhas de rádio ou caixa, no máximo 20, com rolagem própria. Nada
+  é listado por inteiro: sem texto de busca não há resultados. O controle marcado
+  fica onde estava, para o foco do teclado não se perder.
+- **Grupo "Contextualização"** (formulário de ponto, só conceito contextual
+  ativo): mesma vocação de `fieldset` com etiqueta, sem cartão. Pede o conceito
+  amplo (seletor por busca, só conceitos amplos ativos), afirmação, justificativa,
+  classificação da evidência com autoria ou atribuição, e as evidências do
+  formulário de relação. Para um ponto pendente com relação pendente, vira um
+  resumo da relação (afirmação em texto, conceito amplo e estado em mono) que
+  será ativada junto; o conceito e a relação são gravados em um único lote.
+- **Período do ponto**: uma linha em mono (`.period`, `muted`) logo abaixo do
+  título no painel do mapa, com o período formatado (anos astronômicos, "a.C."
+  explícito, "Aproximadamente" quando a precisão é aproximada). Ponto sem ano nem
+  rótulo não ganha linha. Nas listas, o período entra no resumo, depois do tipo.
+- **Identificadores**: no painel e nas listas, uma lista horizontal em mono
+  (`.identifiers`, `muted`) com "Esquema: valor"; o que tem página de registro
+  (Wikidata, VIAF, ISNI, DOI, Open Library) é link `↗` para outra aba, com
+  `rel="noopener noreferrer"`; ISBN fica em texto. No editor, cada identificador
+  é uma linha (esquema do catálogo, valor, "Remover") em um `fieldset`; o erro da
+  API aparece embaixo do valor, em `--error`, ligado por `aria-describedby`, e
+  erros do conjunto (duplicado, já cadastrado em outro ponto) acima das linhas.
+- **Descartar pendência**: botão secundário ao lado de "Resolver pendência" (o
+  primário continua único). Exige a justificativa e não escolhe registro; o item
+  vira "Descartados" no detalhe da importação. No detalhe, candidatos de uma
+  pendência são links "Nome" para o editor de cada um, em lista aninhada.
+- **Resultado de lote**: sucesso é uma linha com marcador verde (`.status`) e o
+  link "Ver importação"; pendência é a mesma linha em âmbar (`.status--warning`,
+  `role="alert"`) com a lista de itens e motivos, e nunca diz que deu certo. A
+  cor não é o único sinal: o texto diz "ficou pendente".
 - **Prancha do mapa**: barra de título em mono (ponto raiz e "N/500 pontos ·
   M relações"), barra de controles, superfície de desenho, painel de detalhes
   separado por fio, rodapé em mono com legenda de contextos e "Como ler o mapa".

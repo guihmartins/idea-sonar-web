@@ -1,4 +1,4 @@
-import { expect, test, type Locator } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 type TestPoint = { x: number; y: number };
 type TestNode = {
   id(): string;
@@ -70,6 +70,42 @@ async function assertRealHitTarget(control: Locator, width: number) {
   });
   expect(hit, `Controle obstruído no centro em ${width}px.`).toBe(true);
 }
+// Espera por condição, não por tempo: a expansão terminou (3 pontos, 2 relações)
+// e o desenho parou — posições, pan e zoom iguais por 6 quadros seguidos e
+// nenhuma animação do Cytoscape em curso. Só então o teste lê ou arrasta nós.
+async function expandedAndSettled(page: Page) {
+  await expect(
+    page.getByRole('img', { name: /Mapa com 3 pontos e 2 relações/ }),
+  ).toBeVisible();
+  await page.waitForFunction(
+    () => {
+      const container = document.querySelector('.graph-canvas') as
+        (HTMLElement & { _cyreg?: { cy?: TestCy & SettleCy } }) | null;
+      const cy = container?._cyreg?.cy;
+      if (!cy) return false;
+      const snapshot = JSON.stringify([
+        cy.nodes().map((n) => [n.id(), n.position()]),
+        cy.pan(),
+        cy.zoom(),
+      ]);
+      const state = window as unknown as {
+        __atlasSnapshot?: string;
+        __atlasStable?: number;
+      };
+      state.__atlasStable =
+        state.__atlasSnapshot === snapshot ? (state.__atlasStable ?? 0) + 1 : 0;
+      state.__atlasSnapshot = snapshot;
+      return state.__atlasStable >= 6 && !cy.animated();
+    },
+    undefined,
+    { polling: 'raf' },
+  );
+}
+type SettleCy = {
+  nodes(): { map<T>(callback: (node: TestNode) => T): T[] };
+  zoom(): number;
+  animated(): boolean;
+};
 test.beforeEach(async ({ page }) => {
   await page.goto('/map');
   await page
@@ -202,7 +238,13 @@ test('filtros do mapa cabem na viewport e são operáveis no mobile, com o paine
     await page.getByText('Filtros do mapa', { exact: true }).click();
     const panel = page.locator('.filters-panel');
     const kindSelect = panel.getByLabel('Tipo');
-    const contextSelect = panel.getByLabel('Contexto');
+    const contextGroup = panel.getByRole('group', {
+      name: 'Contexto',
+      exact: true,
+    });
+    const contextSearch = contextGroup.getByRole('textbox', {
+      name: 'Buscar candidato',
+    });
     const startYear = panel.getByLabel('Ano inicial (astronômico)', {
       exact: true,
     });
@@ -217,7 +259,7 @@ test('filtros do mapa cabem na viewport e são operáveis no mobile, com o paine
     });
     const controls = [
       kindSelect,
-      contextSelect,
+      contextSearch,
       startYear,
       endYear,
       includeUnknown,
@@ -240,9 +282,16 @@ test('filtros do mapa cabem na viewport e são operáveis no mobile, com o paine
     await assertRealHitTarget(kindSelect, width);
     await kindSelect.selectOption('person');
     await expect(kindSelect).toHaveValue('person');
-    await assertRealHitTarget(contextSelect, width);
-    await contextSelect.selectOption({ label: 'Contexto fictício' });
-    await expect(contextSelect).not.toHaveValue('');
+    await assertRealHitTarget(contextSearch, width);
+    await contextSearch.fill('fict');
+    const contextOption = contextGroup.getByRole('radio', {
+      name: 'Contexto fictício',
+    });
+    await assertRealHitTarget(contextOption, width);
+    await contextOption.check();
+    await expect(
+      contextGroup.getByText('Selecionado: Contexto fictício'),
+    ).toBeVisible();
     await assertRealHitTarget(startYear, width);
     await startYear.fill('100');
     await expect(startYear).toHaveValue('100');
@@ -517,6 +566,7 @@ test('arrastar um nó atualiza os controles das relações conectadas', async ({
   await page.getByRole('button', { name: 'Buscar', exact: true }).click();
   await page.getByRole('button', { name: /Jung.*Pessoa/ }).click();
   await page.getByRole('button', { name: 'Expandir conexões' }).click();
+  await expandedAndSettled(page);
   const canvas = page.locator('.graph-canvas');
   const target = await canvas.evaluate((container) => {
     const cy = (container as CyContainer)._cyreg?.cy;
@@ -557,6 +607,7 @@ test('a curva reversa permanece separada no renderer Cytoscape real', async ({
   await page.getByRole('button', { name: 'Buscar', exact: true }).click();
   await page.getByRole('button', { name: /Jung.*Pessoa/ }).click();
   await page.getByRole('button', { name: 'Expandir conexões' }).click();
+  await expandedAndSettled(page);
   const curves = await page
     .locator('.graph-canvas')
     .evaluate(async (container) => {
@@ -576,16 +627,19 @@ test('a curva reversa permanece separada no renderer Cytoscape real', async ({
           arrow: 'triangle',
         },
       });
-      // A aresta nova altera o conjunto de paralelas da existente. Deixe o
-      // renderer processar a invalidação e o recálculo dos controles antes de
-      // comparar a curva em sentido oposto.
-      await new Promise<void>((resolve) =>
-        requestAnimationFrame(() => resolve()),
-      );
-      await new Promise<void>((resolve) =>
-        requestAnimationFrame(() => resolve()),
-      );
+      // A aresta nova altera o conjunto de paralelas da existente. Espera o
+      // renderer recalcular os controles das duas (condição, não quantidade
+      // fixa de quadros); o teto de quadros só evita laço infinito.
       const reverse = cy.getElementById('test-reverse-curve');
+      const curved = (edge: { controlPoints(): TestPoint[] | null }) =>
+        (edge.controlPoints() ?? []).length === 2;
+      let frame = 0;
+      while (!(curved(forward) && curved(reverse)) && frame < 600) {
+        frame += 1;
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+      }
       return {
         forward: forward.controlPoints() ?? [],
         reverse: reverse.controlPoints() ?? [],

@@ -35,6 +35,47 @@ describe('Failure', () => {
     expect(screen.getByText(/"field": "invalid"/)).toBeInTheDocument();
   });
 
+  it('lista o caminho e a mensagem de cada campo que a API apontou', () => {
+    const error = new ApiError(400, 'Dados inválidos', {
+      code: 'VALIDATION_ERROR',
+      message: 'Dados inválidos',
+      details: [
+        { path: 'relations.0.claim', message: 'Obrigatório' },
+        { path: '', message: 'clientRef deve ser único no lote' },
+        { path: 7, message: 'ignorado: caminho que não é texto' },
+        { path: 'sem-mensagem' },
+        null,
+      ],
+      requestId: 'req-9',
+    });
+    renderWithServices(<Failure error={error} />);
+    const items = screen.getAllByRole('listitem');
+    expect(items).toHaveLength(2);
+    expect(items[0]).toHaveTextContent('relations.0.claim Obrigatório');
+    expect(items[0]?.querySelector('code')).toHaveTextContent(
+      'relations.0.claim',
+    );
+    expect(items[1]).toHaveTextContent('clientRef deve ser único no lote');
+    expect(items[1]?.querySelector('code')).toBeNull();
+  });
+
+  it('não cria lista quando details não é uma lista de campos', () => {
+    renderWithServices(
+      <Failure
+        error={new ApiError(400, 'Dados inválidos', { details: 'texto' })}
+      />,
+    );
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument();
+    renderWithServices(
+      <Failure error={new ApiError(400, 'Dados inválidos', { details: [] })} />,
+    );
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument();
+    renderWithServices(
+      <Failure error={new ApiError(400, 'Dados inválidos', null)} />,
+    );
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument();
+  });
+
   it('não mostra detalhes quando o objeto é vazio', () => {
     const error = new ApiError(500, 'Falha interna', {});
     renderWithServices(<Failure error={error} />);

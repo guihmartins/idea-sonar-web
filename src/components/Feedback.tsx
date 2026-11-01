@@ -1,4 +1,4 @@
-import { ApiError } from '../api/client';
+import { ApiError, fieldIssues } from '../api/client';
 import { useServices } from '../app/services';
 export function Failure({
   error,
@@ -15,6 +15,7 @@ export function Failure({
           ? error.message
           : 'Não foi possível carregar os dados.'}
       </p>
+      {error instanceof ApiError && <FieldIssues details={error.details} />}
       {error instanceof ApiError && <ErrorDetails details={error.details} />}
       {error instanceof ApiError && error.requestId && (
         <p>Identificador: {error.requestId}</p>
@@ -60,6 +61,19 @@ export const editorialLabels = {
   archived: 'Arquivado',
 };
 
+function FieldIssues({ details }: { details: unknown }) {
+  const issues = fieldIssues(details);
+  if (issues.length === 0) return null;
+  return (
+    <ul className="field-issues">
+      {issues.map((issue, index) => (
+        <li key={`${issue.path}-${index}`}>
+          {issue.path && <code>{issue.path}</code>} {issue.message}
+        </li>
+      ))}
+    </ul>
+  );
+}
 function ErrorDetails({ details }: { details: unknown }) {
   if (
     details === null ||

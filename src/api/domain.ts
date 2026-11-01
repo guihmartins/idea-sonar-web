@@ -2,7 +2,13 @@
 // contracts/openapi.json; o fim do arquivo confere os tipos gerados na compilação.
 import { z } from 'zod';
 import type { components } from './generated/schema';
-export const kindSchema = z.enum(['person', 'tradition', 'concept', 'work']);
+export const kindSchema = z.enum([
+  'person',
+  'tradition',
+  'concept',
+  'work',
+  'figure',
+]);
 export const statusSchema = z.enum(['active', 'pending', 'archived']);
 export const evidenceStatusSchema = z.enum([
   'documented',
@@ -15,8 +21,23 @@ export const precisionSchema = z.enum([
   'range',
   'exact',
 ]);
+export const identifierSchemeSchema = z.enum([
+  'wikidata',
+  'viaf',
+  'isni',
+  'isbn',
+  'doi',
+  'openlibrary',
+]);
 const optionalText = z.string().nullable().default(null);
 const optionalYear = z.number().int().nullable().default(null);
+// Período próprio de contextos e pontos; anos astronômicos (0 = 1 a.C.).
+const period = {
+  startYear: optionalYear,
+  endYear: optionalYear,
+  precision: precisionSchema,
+  periodLabel: optionalText,
+};
 const detail = {
   id: z.string(),
   version: z.number().int().positive(),
@@ -28,10 +49,7 @@ export const contextSchema = z.object({
   ...detail,
   label: z.string(),
   traditionNodeId: optionalText,
-  startYear: optionalYear,
-  endYear: optionalYear,
-  precision: precisionSchema,
-  periodLabel: optionalText,
+  ...period,
   regionLabel: optionalText,
   notes: optionalText,
 });
@@ -52,7 +70,11 @@ export const nodeSchema = z.object({
   label: z.string(),
   description: z.string(),
   conceptScope: z.enum(['broad', 'contextual']).nullable().default(null),
+  ...period,
   aliases: z.array(z.object({ alias: z.string(), language: z.string() })),
+  identifiers: z.array(
+    z.object({ scheme: identifierSchemeSchema, value: z.string() }),
+  ),
   contexts: z.array(z.string()),
   degreeTotal: z.number().int().nonnegative(),
   archivedAt: optionalText,
@@ -97,6 +119,7 @@ export const relationTypeSchema = z.object({
 export const catalogSchema = z.object({
   nodeKinds: z.array(kindSchema),
   relationTypes: z.array(relationTypeSchema),
+  identifierSchemes: z.array(identifierSchemeSchema),
   evidenceStatuses: z.array(evidenceStatusSchema),
   editorialStatuses: z.array(statusSchema),
   intensities: z.array(
@@ -143,6 +166,7 @@ export const importOutcomeSchema = z.enum([
   'updated',
   'reused',
   'pending',
+  'discarded',
 ]);
 export const importSummarySchema = z.object({
   id: z.string(),
@@ -153,22 +177,39 @@ export const importSummarySchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
 });
+export const importItemSchema = z.object({
+  clientRef: z.string(),
+  entityType: z.string(),
+  entityId: z.string().nullable(),
+  outcome: importOutcomeSchema,
+  reason: z.string().nullable(),
+  // IDs de registros existentes que o item repetiria (nome, alias, identificador).
+  candidates: z.array(z.string()).default([]),
+});
 export const importDetailSchema = importSummarySchema.extend({
   result: z.object({
     created: z.number(),
     updated: z.number(),
     reused: z.number(),
     pending: z.number(),
-    items: z.array(
-      z.object({
-        clientRef: z.string(),
-        entityType: z.string(),
-        entityId: z.string().nullable(),
-        outcome: importOutcomeSchema,
-        reason: z.string().nullable(),
-      }),
-    ),
+    // Lotes gravados antes do modelo v2 não têm o contador.
+    discarded: z.number().default(0),
+    items: z.array(importItemSchema),
   }),
+});
+// Resposta de POST /imports (ImportResult): o lote que acabou de ser aplicado.
+export const importResultSchema = z.object({
+  batchId: z.string(),
+  status: z.enum(['committed', 'committed_with_pending']),
+  created: z.number(),
+  updated: z.number(),
+  reused: z.number(),
+  pending: z.number(),
+  discarded: z.number(),
+  clientRefToId: z.record(z.string(), z.string()),
+  items: z.array(importItemSchema),
+  viewUrl: z.string().nullable(),
+  dryRun: z.boolean(),
 });
 export const undoResultSchema = z.object({
   batchId: z.string(),
@@ -188,7 +229,8 @@ export const pendingSchema = z.object({
 });
 export const resolveResultSchema = z.object({
   id: z.string(),
-  entityId: z.string(),
+  // Nulo quando a pendência foi descartada (nenhum registro envolvido).
+  entityId: z.string().nullable(),
   version: z.number().int(),
   reason: z.string(),
 });
@@ -215,6 +257,8 @@ export type StoredFilters = z.infer<typeof storedFiltersSchema>;
 export type HistoryEntry = z.infer<typeof historySchema>;
 export type ImportSummary = z.infer<typeof importSummarySchema>;
 export type ImportDetail = z.infer<typeof importDetailSchema>;
+export type ImportItem = z.infer<typeof importItemSchema>;
+export type ImportResult = z.infer<typeof importResultSchema>;
 export type PendingItem = z.infer<typeof pendingSchema>;
 export type Entity = Node | Relation | Source | Context | SavedView;
 export const neighborSchema = z.object({
@@ -266,6 +310,20 @@ export type Page<T> = { items: T[]; nextCursor: string | null };
 // Falha a compilação se o modelo validado divergir dos tipos gerados do OpenAPI.
 type Schemas = components['schemas'];
 type Assignable<T extends U, U> = T;
+// Lote enviado a POST /imports: os itens vêm direto dos tipos gerados, então o
+// compilador recusa campo, enum ou referência que o contrato não aceita. Só os
+// quatro grupos viram opcionais (a API assume lista vazia).
+type BatchSchema = Schemas['ImportBatchV1'];
+export type BatchNode = BatchSchema['nodes'][number];
+export type BatchRelation = BatchSchema['relations'][number];
+export type BatchRef = { id: string } | { clientRef: string };
+export type ImportBatch = Omit<
+  BatchSchema,
+  'nodes' | 'contexts' | 'sources' | 'relations'
+> & {
+  nodes?: BatchNode[];
+  relations?: BatchRelation[];
+};
 export type ContractCheck = [
   Assignable<Node, Schemas['NodeDetail']>,
   Assignable<Omit<Relation, 'type'>, Omit<Schemas['RelationDetail'], 'type'>>,
@@ -273,4 +331,9 @@ export type ContractCheck = [
   Assignable<Context, Schemas['ContextDetail']>,
   Assignable<Catalog, Schemas['Catalog']>,
   Assignable<z.infer<typeof identitySchema>, Schemas['Identity']>,
+  Assignable<ImportResult, Schemas['ImportResult']>,
+  Assignable<
+    BatchRef,
+    Extract<BatchNode, { op: 'create' }>['contexts'][number]
+  >,
 ];

@@ -6,20 +6,25 @@ import {
 } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { useServices } from '../app/services';
+import { ApiError } from '../api/client';
 import { Failure, editorialLabels } from '../components/Feedback';
 import type { CandidateType } from '../api/adapter';
 import type {
   EntityType,
   HistoryEntry,
   ImportDetail,
+  ImportItem,
+  Node,
   PendingItem,
 } from '../api/domain';
+import { NodeIdentifiers } from '../components/NodeIdentifiers';
 import {
   entitySummary,
   entityTitle,
   historyLabels,
   importStatusLabels,
   originLabels,
+  outcomeLabels,
   pendingProposal,
   pendingTitle,
 } from '../components/labels';
@@ -65,6 +70,9 @@ export function RecordsPage({ type }: { type: EntityType }) {
             <article key={item.id}>
               <h2>{entityTitle(type, item)}</h2>
               <p>{entitySummary(type, item)}</p>
+              {type === 'nodes' && (
+                <NodeIdentifiers identifiers={(item as Node).identifiers} />
+              )}
               <p>Estado: {editorialLabels[item.status]}</p>
               {type === 'views' ? (
                 <Link to={`/map?view=${item.id}`}>Restaurar view</Link>
@@ -130,12 +138,6 @@ export function ImportsPage() {
     </section>
   );
 }
-const outcomeLabels = {
-  created: 'Criados',
-  updated: 'Atualizados',
-  reused: 'Reutilizados',
-  pending: 'Pendentes',
-} as const;
 export function ImportPage() {
   const { id = '' } = useParams();
   const { api } = useServices();
@@ -254,7 +256,7 @@ function ImportOutcome({
   items,
 }: {
   title: string;
-  items: { clientRef: string; entityType: string; reason: string | null }[];
+  items: ImportItem[];
 }) {
   return (
     <div>
@@ -265,6 +267,7 @@ function ImportOutcome({
             <li key={item.clientRef}>
               {item.clientRef} ({item.entityType})
               {item.reason ? ` — ${item.reason}` : ''}
+              <CandidateLinks item={item} />
             </li>
           ))}
         </ul>
@@ -272,6 +275,35 @@ function ImportOutcome({
         <p>Nenhum item.</p>
       )}
     </div>
+  );
+}
+// Registros existentes que o item repetiria, cada um com link para o editor.
+function CandidateLinks({ item }: { item: ImportItem }) {
+  if (item.candidates.length === 0) return null;
+  return (
+    <ul
+      className="candidate-links"
+      aria-label={`Candidatos de ${item.clientRef}`}
+    >
+      {item.candidates.map((id) => (
+        <CandidateLink key={id} type={item.entityType} id={id} />
+      ))}
+    </ul>
+  );
+}
+function CandidateLink({ type, id }: { type: string; id: string }) {
+  const { api } = useServices();
+  const kind = type as EntityType;
+  const query = useQuery({
+    queryKey: [kind, id],
+    queryFn: ({ signal }) => api.detail(kind, id, signal),
+  });
+  return (
+    <li>
+      <Link to={`/edit/${type}/${id}`}>
+        {query.data ? entityTitle(kind, query.data) : id}
+      </Link>
+    </li>
   );
 }
 export function PendingPage() {
@@ -289,33 +321,67 @@ export function PendingPage() {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState<unknown>(null);
   const [message, setMessage] = useState('');
-  async function resolve(item: PendingItem) {
-    const key = keys.get(item.id) ?? crypto.randomUUID();
-    keys.set(item.id, key);
+  // Resolver e descartar usam chaves próprias por pendência: a mesma ação
+  // repetida reaproveita a chave, e outra ação não herda a anterior.
+  async function act(
+    item: PendingItem,
+    action: string,
+    done: string,
+    run: (key: string) => Promise<unknown>,
+  ) {
+    const id = `${item.id}:${action}`;
+    const key = keys.get(id) ?? crypto.randomUUID();
+    keys.set(id, key);
     setBusy(item.id);
     setError(null);
     try {
-      await api.resolve(
+      await run(key);
+      keys.delete(id);
+      setMessage(done);
+      await cache.invalidateQueries();
+    } catch (e) {
+      setError(e);
+      // Lote desfeito depois de a lista carregar: a API já não lista a pendência.
+      if (e instanceof ApiError && e.code === 'BATCH_UNDONE')
+        await cache.invalidateQueries();
+    } finally {
+      setBusy('');
+    }
+  }
+  // Qualquer edição do formulário da pendência invalida as chaves dela.
+  function forget(id: string) {
+    keys.delete(`${id}:resolve`);
+    keys.delete(`${id}:discard`);
+  }
+  const resolve = (item: PendingItem) =>
+    act(item, 'resolve', 'Pendência resolvida pela API.', (key) =>
+      api.resolve(
         item,
         selected[item.id] ?? '',
         (reason[item.id] ?? '').trim(),
         key,
+      ),
+    );
+  // Descartar não escolhe registro: só exige a justificativa.
+  function discard(item: PendingItem) {
+    const why = (reason[item.id] ?? '').trim();
+    if (!why) {
+      setError(
+        new Error('Informe a justificativa da resolução para descartar.'),
       );
-      keys.delete(item.id);
-      setMessage('Pendência resolvida pela API.');
-      await cache.invalidateQueries();
-    } catch (e) {
-      setError(e);
-    } finally {
-      setBusy('');
+      return Promise.resolve();
     }
+    return act(item, 'discard', 'Pendência descartada.', (key) =>
+      api.discard(item, why, key),
+    );
   }
   return (
     <section>
       <h1>Pendências</h1>
       <p>
         Revise os motivos e escolha explicitamente o registro existente que
-        resolve cada pendência. Nenhuma mesclagem é automática.
+        resolve cada pendência. Nenhuma mesclagem é automática. Descartar tira a
+        pendência da fila sem criar nem alterar registro.
       </p>
       {query.isPending && <p role="status">Carregando…</p>}
       {query.error && (
@@ -347,7 +413,7 @@ export function PendingPage() {
               value={selected[p.id] ?? ''}
               onChange={(value) => {
                 setSelected({ ...selected, [p.id]: value });
-                keys.delete(p.id);
+                forget(p.id);
               }}
             />
             <label>
@@ -357,13 +423,22 @@ export function PendingPage() {
                 value={reason[p.id] ?? ''}
                 onChange={(e) => {
                   setReason({ ...reason, [p.id]: e.target.value });
-                  keys.delete(p.id);
+                  forget(p.id);
                 }}
               />
             </label>
-            <button className="primary" disabled={!!busy}>
-              Resolver pendência
-            </button>
+            <div className="actions">
+              <button className="primary" disabled={!!busy}>
+                Resolver pendência
+              </button>
+              <button
+                type="button"
+                disabled={!!busy}
+                onClick={() => void discard(p)}
+              >
+                Descartar pendência
+              </button>
+            </div>
           </form>
         ))}
       {query.hasNextPage && (

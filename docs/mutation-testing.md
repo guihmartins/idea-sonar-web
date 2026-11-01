@@ -2,34 +2,61 @@
 
 StrykerJS 10.1.1 com runner Vitest 10.1.1 e checker TypeScript 10.1.1, Node 24.19.0, TypeScript 5.9.3 e Vitest 5.0.5. Dependências exatas e lockfile versionados.
 
-## Escopo
+> **Medição pendente.** Nenhuma nota abaixo vale para a `main` atual: a última rodada completa é anterior ao merge do Atlas e à ampliação do escopo. Uma nova medição da `main` está planejada para uma fase posterior; até lá, os números da seção histórica servem só como referência de método.
 
-Seis módulos de lógica crítica, sem alteração do comportamento de produção:
+## Escopo atual
 
-- `src/config/schema.ts`: validação da URL da API e modos none/OIDC.
-- `src/api/client.ts`: headers, corpos, idempotência, If-Match, renovação, erros, timeout e cancelamento.
-- `src/auth/auth0.ts`: configuração/delegação ao SDK oficial e token em memória.
-- `src/graph/visibility/ledger.ts`: raízes, expansão/paginação, compartilhamento, gerações e limite de pontos.
-- `src/graph/adapter/elements.ts`: identidade, formas, cor, direção, evidência e intensidade.
-- `src/components/period.ts`: anos astronômicos, intervalos, aproximação e período desconhecido.
+Todo o código de `src`, o mesmo escopo da cobertura (`qualityExclude` em `vitest.config.ts`, espelhado em `mutate` de `stryker.config.mjs`). Ficam de fora:
 
-Não inclui telas React, estilos, layout/canvas, adapter HTTP provisório, schemas DTO, gerados, fixtures ou scripts de build. Testes de integração/build e Playwright permanecem na suíte normal. A nota abaixo **não representa todo o frontend**, nem valida integração com API/OIDC reais.
+- `src/api/generated/**`: gerado do contrato OpenAPI, nunca editado à mão.
+- `src/dev/**`: fixtures da API fictícia (inclui o processador de lote), que não entram no bundle de produção.
+- `src/main.tsx`: bootstrap sem lógica.
+- `*.d.ts`.
+
+Telas React, adapter HTTP, schemas, grafo, layout e estilos do grafo entram. Os testes de integração de tela rodam por mutante, então o custo é bem maior que o do marco 1 (que cobria seis módulos puros): a execução completa leva dezenas de minutos.
+
+A nota mede os testes unitários e de integração do projeto. Não mede o E2E (Playwright), a integração com API ou OIDC reais, nem prova que o código esteja correto.
+
+## Configuração
+
+Arquivos: `stryker.config.mjs` e `vitest.mutation.config.ts`.
+
+- **Runner:** Vitest, com `vitest.mutation.config.ts` e `related: true` (só os testes ligados ao arquivo mutado). A configuração herda a base de `vitest.config.ts` e roda `tests/unit/**` e `tests/integration/**`, exceto `build-env`, `lint` e `contracts`, que sobem subprocessos (Vite, ESLint, gerador de contrato) e custariam minutos por mutante sem exercitar `src`.
+- **Checker:** TypeScript (`tsconfig.json`). Mutante que não compila é separado e não conta como detectado pelos testes.
+- **Cobertura:** `coverageAnalysis: perTest`, operadores padrão e mutantes estáticos habilitados. Nenhum operador ou mutante foi desabilitado para elevar a nota.
+- **Tempo:** `timeoutMS` 20 s e `timeoutFactor` 2; telas com Testing Library são muito mais lentas que funções puras, e prazo curto contaria mutante vivo como timeout. `concurrency` 4.
+- **Incremental:** `incremental: true` reaproveita mutantes cujo código e testes não mudaram; o estado fica em `reports/`, fora do Git. `--force` refaz tudo.
+- **Gate:** `thresholds` high 80, low 60, `break` 80. Nota abaixo de 80% faz `npm run test:mutation` falhar.
+- **Relatórios:** texto no terminal, HTML em `reports/mutation/index.html` e JSON em `reports/mutation/mutation.json`. `reports/` e `.stryker-tmp/` são ignorados no Git, no Docker e no formatter.
+- **Supressões:** `// Stryker disable` só para mutante de fato equivalente, com o motivo no comentário. Para texto PT-BR, a regra é asserção no texto, não supressão.
+
+O Stryker não gera mutante para atributo nem para texto de JSX (`className`, `role`, `aria-label`, conteúdo de elemento). Os mutantes de tela são condicionais, operadores lógicos e relacionais, literais em expressões, arrays e objetos; é neles que os testes de tela precisam afirmar algo.
 
 ## Reprodução
 
 ```sh
 npm ci
-npm run test:mutation:baseline
-npm run test:mutation
+npm run test:mutation:baseline   # só a suíte da mutação, sem Stryker
+npm run test:mutation            # Stryker; manual, leva dezenas de minutos
+npx stryker run --force          # ignora o estado incremental
 ```
 
-A primeira etapa executa somente os testes unitários usados pelo runner. A segunda cria sandboxes temporários, instrumenta o código e executa mutações reais. Não exige API, token ou variáveis de provedor. O modo sem token do produto permanece inalterado.
+Não exige API, token nem variáveis de provedor. O workflow **Mutation tests** (`.github/workflows/mutation.yml`) só roda por `workflow_dispatch` e guarda o relatório como artefato; não roda em push nem em PR. O CI automático segue arquivado em `.github/workflows-disabled/`.
 
-Configuração: `stryker.config.mjs` e `vitest.mutation.config.ts`. Cobertura por teste, seleção de testes relacionados, operadores padrão e mutantes estáticos habilitados. Nenhum operador/mutante foi excluído para elevar a nota. O checker separa alterações que não compilam; elas não contam como mutações detectadas por testes. Dois processos concorrentes (um checker e um runner), timeout adicional de 2s e fator 1,5.
+A nota usa `(Killed + Timeout) / (Killed + Timeout + Survived + NoCoverage)`. Erros de compilação não entram na conta. Sobrevivência não prova bug: pode ser falta de teste ou alteração equivalente sob dados válidos do contrato, e cada mutante deve ser lido pelo efeito.
 
-## Resultado
+## Pontos fracos conhecidos
 
-Histórico: os números abaixo são da execução anterior à refatoração para ESLint/complexidade 10. Os arquivos foram reorganizados depois; a nota não foi recalculada. Por solicitação do usuário, nenhuma nova execução do Stryker foi feita na alteração de lint; a próxima rodada fica para execução manual.
+Do último relatório (anterior ao merge do Atlas), os dois arquivos que mais pesavam eram `src/app/App.tsx`, com nota **0%**, e `src/api/adapter.ts`, com **68%**. Foram reforçados depois, ainda sem nova medição:
+
+- `tests/integration/app-routes.test.tsx`: título de cada rota, redirecionamentos de `/`, `/login` e `/callback`, página não encontrada, cabeçalho e navegação fora do mapa, foco no conteúdo ao navegar.
+- `tests/unit/adapter-requests.test.ts`: URLs exatas de `search`, `candidates`, `neighbors`, `list` e `history`, vazios e nulos omitidos, método, corpo e cabeçalhos de `save`, `undo`, `resolve` e `importBatch`, também pelo transporte real.
+
+Desde aquele relatório entraram o Atlas, os seletores por busca, o grupo de contextualização do editor e o lote de importação; esse código também ainda não foi medido.
+
+## Histórico: rodada do marco 1 (seis módulos)
+
+> **Histórico, não vale para o código atual.** Os números abaixo são da primeira configuração, que mutava apenas seis módulos (`src/config/schema.ts`, `src/api/client.ts`, `src/auth/auth0.ts`, `src/graph/visibility/ledger.ts`, `src/graph/adapter/elements.ts` e `src/components/period.ts`), antes da refatoração para ESLint com complexidade 10 e da ampliação para todo o `src`. Os arquivos foram reorganizados depois e a nota não foi recalculada. Aquela configuração não incluía telas, estilos, layout/canvas, adapter HTTP, schemas DTO, gerados, fixtures nem scripts de build, e usava timeout adicional de 2 s com fator 1,5 e dois processos concorrentes (um checker e um runner).
 
 Rodada inicial em 25/10/2026, usando os testes originais do commit `5eb1c98` com a nova configuração Stryker (gate desativado apenas na primeira medição): **61,45%**, com 50 testes unitários. Foram gerados 521 mutantes: 206 mortos, 14 detectados por timeout, 96 sobreviventes, 42 sem cobertura e 163 erros de compilação. Os timeouts iniciais correspondem a loops/esperas sem resolução introduzidos pelas mutações no ledger e no transporte.
 
@@ -58,7 +85,7 @@ A nota usa `(Killed + Timeout) / (Killed + Timeout + Survived + NoCoverage)`: 32
 | Elementos do grafo     |       24,14% |     75,86% |                    6 |             1 |
 | Ledger de visibilidade |       87,80% |    100,00% |                    0 |             0 |
 
-## Sobreviventes e limitações
+### Sobreviventes e limitações
 
 Os 30 sobreviventes **não foram suprimidos**. A nota não é 100% e o gate é global no escopo selecionado, não por arquivo.
 
@@ -69,13 +96,3 @@ Os 30 sobreviventes **não foram suprimidos**. A nota não é 100% e o gate é g
 - **Auth0 (1):** a guarda de modo pode mudar sem ser percebida quando somente configurações normalizadas pelo parser são usadas. Falta cobrir diretamente o estado inconsistente de modo none com objeto OIDC presente; o bootstrap do produto já evita chamar o SDK nesse modo.
 
 O JSON preserva IDs, localizações, substituições e testes associados para revisão individual. Não há validação de toda a UI/Canvas por mutação nesta rodada; integração real com API permanece fora do escopo.
-
-## Relatórios e CI
-
-- HTML navegável: `reports/mutation/index.html`.
-- Dados por mutante/teste: `reports/mutation/mutation.json`.
-- HTML/JSON e `.stryker-tmp` são ignorados no Git, no contexto Docker e no formatter.
-- Conforme correção do usuário, **Mutation tests** fica disponível apenas manualmente por `workflow_dispatch` em `.github/workflows/mutation.yml`, com relatórios como artifact. Não roda em push/PR. O CI automático permanece arquivado/desativado. O comando local também permanece disponível.
-- Gate configurado em 80% no escopo acima; nota inferior faz `npm run test:mutation` falhar. O workflow de verificação também está desativado; testes de integração, build, E2E e container continuam disponíveis por comandos locais.
-
-Sobrevivência não prova que o código tem um bug: pode indicar falta de teste ou uma alteração equivalente sob os dados/contrato válidos. A análise deve olhar o efeito de cada mutante. Uma nota alta tampouco substitui revisão ou testes com API real.

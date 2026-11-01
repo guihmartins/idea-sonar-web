@@ -22,6 +22,7 @@
     "contracts:import": "node scripts/contracts.mjs import",
     "dev:fixtures": "VITE_ENABLE_FIXTURES=true vite",
     "test:e2e:fixtures": "playwright test --config playwright.fixtures.config.ts",
+    "test:e2e:real": "playwright test --config playwright.real.config.ts",
     "test:container": "sh scripts/smoke-container.sh",
     "format": "prettier --write src tests scripts *.ts *.mjs *.json *.yml docs README.md .github",
     "format:check": "prettier --check src tests scripts *.ts *.mjs *.json *.yml docs README.md .github",

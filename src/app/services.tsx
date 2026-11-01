@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
@@ -55,6 +55,11 @@ function AuthenticatedGate({
   const cache = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
+  // `navigate` muda a cada rota; fora das dependências, navegar não refaz o
+  // portão (nem chama /me de novo, nem desmonta o conteúdo).
+  const navigation = useRef(navigate);
+  navigation.current = navigate;
+  const callback = location.pathname === '/callback';
   const [state, setState] = useState<
     'loading' | 'login' | 'ready' | 'denied' | 'error'
   >('loading');
@@ -64,9 +69,9 @@ function AuthenticatedGate({
     let current = true;
     setState('loading');
     void (async () => {
-      if (location.pathname === '/callback') {
+      if (callback) {
         await session.callback();
-        if (current) navigate('/map', { replace: true });
+        if (current) navigation.current('/map', { replace: true });
         return;
       }
       if (!(await session.authenticated())) {
@@ -87,13 +92,12 @@ function AuthenticatedGate({
             ? 'login'
             : 'error',
       );
-      if (location.pathname === '/callback')
-        navigate('/login', { replace: true });
+      if (callback) navigation.current('/login', { replace: true });
     });
     return () => {
       current = false;
     };
-  }, [api, session, attempt, navigate, location.pathname === '/callback']);
+  }, [api, session, attempt, callback]);
   async function logout() {
     setState('login');
     await cache.cancelQueries();

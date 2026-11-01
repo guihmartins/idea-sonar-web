@@ -8,6 +8,7 @@ export default defineConfig([
     ignores: [
       'node_modules/**',
       'dist/**',
+      'dist-e2e-real/**',
       'coverage/**',
       'reports/**',
       '.stryker-tmp/**',

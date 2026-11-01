@@ -12,13 +12,20 @@ import {
   pendingSchema,
   importSummarySchema,
   importDetailSchema,
+  importResultSchema,
   undoResultSchema,
   resolveResultSchema,
   historySchema,
   identitySchema,
   pageSchema,
 } from './domain';
-import type { EntityType, Filters, Entity, PendingItem } from './domain';
+import type {
+  EntityType,
+  Filters,
+  Entity,
+  ImportBatch,
+  PendingItem,
+} from './domain';
 import type { RequestOptions, Transport } from './client';
 const entitySchemas = {
   nodes: nodeSchema,
@@ -28,6 +35,8 @@ const entitySchemas = {
   views: viewSchema,
 };
 export type CandidateType = 'nodes' | 'sources' | 'contexts';
+// `exact`: nome ou alias inteiro, ou identificador (a API ignora o resto).
+export type Match = 'contains' | 'exact';
 function query(
   values: Record<string, string | number | boolean | null | undefined>,
 ): string {
@@ -61,16 +70,29 @@ export function createApi(send: Transport) {
       filters: Filters,
       cursor: string | null,
       signal: AbortSignal,
+      match?: Match,
     ) =>
       read(
         pageSchema(nodeSchema),
-        `/nodes${query({ q, ...filters, cursor, limit: 50 })}`,
+        `/nodes${query({ q, match, ...filters, cursor, limit: 50 })}`,
         { signal },
       ),
-    candidates: (type: CandidateType, q: string, signal?: AbortSignal) =>
+    candidates: (
+      type: CandidateType,
+      q: string,
+      signal?: AbortSignal,
+      match?: Match,
+    ) =>
       read(
         pageSchema(entitySchemas[type]),
-        `/${type}${query({ q, includePending: true, limit: 20 })}`,
+        `/${type}${query({ q, match, includePending: true, limit: 20 })}`,
+        withSignal(signal),
+      ),
+    // Relações de um ponto, pendentes inclusive, de um predicado só.
+    nodeRelations: (nodeId: string, type: string, signal?: AbortSignal) =>
+      read(
+        pageSchema(relationSchema),
+        `/relations${query({ nodeId, type, includePending: true, limit: 50 })}`,
         withSignal(signal),
       ),
     node: (id: string, signal?: AbortSignal) =>
@@ -126,6 +148,13 @@ export function createApi(send: Transport) {
       read(importDetailSchema, `/imports/${encodeURIComponent(id)}`, {
         signal,
       }),
+    // A chave do cabeçalho Idempotency-Key tem de ser a idempotencyKey do corpo.
+    importBatch: (body: ImportBatch, key: string) =>
+      read(importResultSchema, '/imports', {
+        method: 'POST',
+        body,
+        idempotencyKey: key,
+      }),
     undo: (id: string, expectedVersion: number, reason: string, key: string) =>
       read(undoResultSchema, `/imports/${encodeURIComponent(id)}/undo`, {
         method: 'POST',
@@ -153,6 +182,21 @@ export function createApi(send: Transport) {
             expectedVersion: item.batchVersion,
             reason,
             selection: { entityId },
+          },
+          idempotencyKey: key,
+        },
+      ),
+    // Descartar não toca em registro algum: a pendência sai da fila (entityId nulo).
+    discard: (item: PendingItem, reason: string, key: string) =>
+      read(
+        resolveResultSchema,
+        `/pending/${encodeURIComponent(item.id)}/resolve`,
+        {
+          method: 'POST',
+          body: {
+            expectedVersion: item.batchVersion,
+            reason,
+            selection: { discard: true },
           },
           idempotencyKey: key,
         },

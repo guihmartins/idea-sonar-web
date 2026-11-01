@@ -8,7 +8,12 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { Link, NavLink, useSearchParams } from 'react-router-dom';
 import { useServices } from '../app/services';
 import { Failure, SafeLink, editorialLabels } from '../components/Feedback';
@@ -37,7 +42,9 @@ import {
 } from '../components/labels';
 import type { Positions, Viewport } from '../graph/layout/positions';
 import { restoreView } from '../graph/restore';
-import { formatPeriod } from '../components/period';
+import { CandidatePicker } from './editor/pickers';
+import { formatPeriod, hasPeriod } from '../components/period';
+import { NodeIdentifiers } from '../components/NodeIdentifiers';
 import { contextColors, neutralColor } from '../graph/styles/palette';
 const initialViewport: Viewport = { zoom: 1, pan: { x: 0, y: 0 } };
 function prefersReducedMotion() {
@@ -45,6 +52,33 @@ function prefersReducedMotion() {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function')
     return false;
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+// Só os contextos dos pontos visíveis (legenda, títulos no mapa, painel), pelo
+// ID: a lista inteira de contextos não é carregada.
+function useVisibleContexts(nodes: Node[]) {
+  const { api } = useServices();
+  const cache = useQueryClient();
+  const ids = useMemo(
+    () => [...new Set(nodes.flatMap((n) => n.contexts))].sort(),
+    [nodes],
+  );
+  const { data, error } = useQueries({
+    queries: ids.map((id) => ({
+      queryKey: ['contexts', id],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        api.detail('contexts', id, signal),
+    })),
+    combine: (results) => ({
+      data: results.flatMap((r) => (r.data ? [r.data as Context] : [])),
+      error: results.find((r) => r.error)?.error ?? null,
+    }),
+  });
+  const refetch = () =>
+    cache.refetchQueries({
+      queryKey: ['contexts'],
+      predicate: (query) => query.state.status === 'error',
+    });
+  return { data, error, refetch };
 }
 function useMapController() {
   const { api } = useServices();
@@ -91,19 +125,6 @@ function useMapController() {
     queryKey: ['catalog'],
     queryFn: ({ signal }) => api.catalog(signal),
   });
-  const contexts = useQuery({
-    queryKey: ['map-contexts'],
-    queryFn: async ({ signal }) => {
-      const all: Context[] = [];
-      let cursor: string | null = null;
-      do {
-        const page = await api.list('contexts', cursor, signal);
-        all.push(...(page.items as Context[]));
-        cursor = page.nextCursor;
-      } while (cursor);
-      return all;
-    },
-  });
   const results = useInfiniteQuery({
     queryKey: ['search', term, filters],
     initialPageParam: null as string | null,
@@ -113,6 +134,7 @@ function useMapController() {
     enabled: term.length > 0,
   });
   const data = useMemo(() => visible(ledger), [ledger]);
+  const contexts = useVisibleContexts(data.nodes);
   const cancel = useCallback(() => {
     controllers.current.forEach((c) => c.abort());
     controllers.current.clear();
@@ -638,6 +660,22 @@ function RelationSources({ id, heading }: { id: string; heading?: string }) {
     </>
   );
 }
+// Período, descrição, identificadores, outros nomes e escopo do ponto.
+function NodeFacts({ n }: { n: Node }) {
+  return (
+    <>
+      {hasPeriod(n) && <p className="period">{formatPeriod(n)}</p>}
+      <p>{n.description}</p>
+      <NodeIdentifiers identifiers={n.identifiers} />
+      {n.aliases.length > 0 && (
+        <p>
+          Também chamado: {n.aliases.map((alias) => alias.alias).join(', ')}
+        </p>
+      )}
+      {n.conceptScope && <p>Escopo: {conceptScopeLabels[n.conceptScope]}</p>}
+    </>
+  );
+}
 function NodePanel({
   id,
   contexts,
@@ -688,13 +726,7 @@ function NodePanel({
             .join(' / ')}
         </p>
       )}
-      <p>{n.description}</p>
-      {n.aliases.length > 0 && (
-        <p>
-          Também chamado: {n.aliases.map((alias) => alias.alias).join(', ')}
-        </p>
-      )}
-      {n.conceptScope && <p>Escopo: {conceptScopeLabels[n.conceptScope]}</p>}
+      <NodeFacts n={n} />
       <h3>Relações</h3>
       <NodeRelationsList
         nodeId={n.id}
@@ -886,25 +918,17 @@ function FilterControls({ model }: { model: MapModel }) {
               ))}
             </select>
           </label>
-          <label>
-            Contexto
-            <select
-              value={model.filters.contextId}
-              onChange={(e) =>
-                model.changeFilters({
-                  ...model.filters,
-                  contextId: e.target.value,
-                })
-              }
-            >
-              <option value="">Todos</option>
-              {model.contexts.data?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <CandidatePicker
+            type="contexts"
+            label="Contexto"
+            values={model.filters.contextId ? [model.filters.contextId] : []}
+            onChange={(ids) =>
+              model.changeFilters({
+                ...model.filters,
+                contextId: ids[0] ?? '',
+              })
+            }
+          />
           <label>
             Ano inicial (astronômico)
             <input
@@ -1132,7 +1156,7 @@ function contextGroups(nodes: Node[], contexts: Context[]) {
 }
 function MapDisplay({ model, catalog }: { model: MapModel; catalog: Catalog }) {
   const groups = useMemo(
-    () => contextGroups(model.data.nodes, model.contexts.data ?? []),
+    () => contextGroups(model.data.nodes, model.contexts.data),
     [model.data.nodes, model.contexts.data],
   );
   return (
@@ -1230,7 +1254,7 @@ function MapDetails({ model, catalog }: { model: MapModel; catalog: Catalog }) {
           <NodePanel
             key={model.selection.id}
             id={model.selection.id}
-            contexts={model.contexts.data ?? []}
+            contexts={model.contexts.data}
             relations={model.data.relations}
             catalog={catalog}
             nodes={model.data.nodes}
@@ -1256,26 +1280,29 @@ const kindGlyphs = {
   ),
   concept: <polygon points="7,1.25 12.75,7 7,12.75 1.25,7" />,
   work: <rect x="1.5" y="2.75" width="11" height="8.5" />,
+  figure: <polygon points="7,1.75 12.75,12.25 1.25,12.25" />,
 } as const;
 function KindKey() {
   return (
     <ul className="kind-key">
-      {(['person', 'tradition', 'concept', 'work'] as const).map((kind) => (
-        <li key={kind}>
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 14 14"
-            aria-hidden="true"
-            fill={`${neutralColor}26`}
-            stroke={neutralColor}
-            strokeWidth="1.25"
-          >
-            {kindGlyphs[kind]}
-          </svg>
-          {kindLabels[kind]}
-        </li>
-      ))}
+      {(['person', 'tradition', 'concept', 'work', 'figure'] as const).map(
+        (kind) => (
+          <li key={kind}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              aria-hidden="true"
+              fill={`${neutralColor}26`}
+              stroke={neutralColor}
+              strokeWidth="1.25"
+            >
+              {kindGlyphs[kind]}
+            </svg>
+            {kindLabels[kind]}
+          </li>
+        ),
+      )}
     </ul>
   );
 }
@@ -1296,7 +1323,7 @@ function MapLegend({ model }: { model: MapModel }) {
                     style={{ color, background: `${color}26` }}
                     aria-hidden="true"
                   />
-                  {model.contexts.data?.find((c) => c.id === id)?.label ?? id}
+                  {model.contexts.data.find((c) => c.id === id)?.label ?? id}
                 </li>
               );
             })}

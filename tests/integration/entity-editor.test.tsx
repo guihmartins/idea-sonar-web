@@ -86,7 +86,7 @@ describe('EntityEditor — roteamento', () => {
     ).toBeDisabled();
   });
 
-  it('mostra falha de catálogo e de opções com tentar novamente', async () => {
+  it('mostra falha de catálogo com tentar novamente', async () => {
     const services = createFixtureServices();
     await services.session.login();
     const catalog = vi
@@ -94,27 +94,29 @@ describe('EntityEditor — roteamento', () => {
       .mockRejectedValueOnce(new Error('Falha no catálogo'))
       .mockResolvedValue({
         nodeKinds: ['person'],
+        identifierSchemes: [],
         relationTypes: [],
         evidenceStatuses: ['documented'],
         editorialStatuses: ['active'],
         intensities: [],
       });
-    const list = vi
-      .spyOn(services.api, 'list')
-      .mockRejectedValueOnce(new Error('Falha nas opções'))
-      .mockResolvedValue({ items: [], nextCursor: null });
+    const list = vi.spyOn(services.api, 'list');
     renderEditor('/edit/sources', services);
     expect(await screen.findByText('Falha no catálogo')).toBeInTheDocument();
-    expect(screen.getByText('Falha nas opções')).toBeInTheDocument();
-    const user = userEvent.setup();
-    await user.click(
-      screen.getAllByRole('button', { name: 'Tentar novamente' })[0]!,
-    );
+    expect(
+      screen.getByRole('button', { name: 'Salvar registro' }),
+    ).toBeDisabled();
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: 'Tentar novamente' }));
     expect(catalog).toHaveBeenCalledTimes(2);
-    await user.click(
-      screen.getAllByRole('button', { name: 'Tentar novamente' })[0]!,
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Salvar registro' }),
+      ).not.toBeDisabled(),
     );
-    expect(list).toHaveBeenCalled();
+    // Fontes e contextos são buscados por nome, não listados por inteiro.
+    expect(list).not.toHaveBeenCalled();
   });
 });
 
@@ -169,10 +171,23 @@ describe('EntityEditor — pontos', () => {
       screen.getByRole('combobox', { name: 'Escopo do conceito' }),
       'broad',
     );
-    const contextCheckbox = await screen.findByRole('checkbox', {
-      name: 'Contexto fictício',
-    });
-    await user.click(contextCheckbox);
+    const picker = screen.getByRole('group', { name: 'Contextos' });
+    expect(within(picker).queryByRole('checkbox')).not.toBeInTheDocument();
+    await user.type(
+      within(picker).getByRole('textbox', { name: 'Buscar candidato' }),
+      'fict',
+    );
+    await user.click(
+      await within(picker).findByRole('checkbox', {
+        name: 'Contexto fictício',
+      }),
+    );
+    expect(
+      await within(picker).findByRole('checkbox', {
+        name: 'Contexto fictício',
+        checked: true,
+      }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Salvar registro' }));
     expect(await screen.findByText('Registro salvo.')).toBeInTheDocument();
     expect(save).toHaveBeenCalledWith(
@@ -209,13 +224,11 @@ describe('EntityEditor — pontos', () => {
     );
   });
 
-  it('desabilita tipo e escopo ao editar um ponto existente e mostra ausência de contextos', async () => {
+  it('desabilita tipo e escopo ao editar um ponto existente e não lista contextos sem busca', async () => {
     const services = createFixtureServices();
     await services.session.login();
-    vi.spyOn(services.api, 'list').mockResolvedValue({
-      items: [],
-      nextCursor: null,
-    });
+    const list = vi.spyOn(services.api, 'list');
+    const candidates = vi.spyOn(services.api, 'candidates');
     renderEditor(`/edit/nodes/${ids.concept}`, services);
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Editar ponto' }),
@@ -224,9 +237,145 @@ describe('EntityEditor — pontos', () => {
     expect(
       screen.getByRole('combobox', { name: 'Escopo do conceito' }),
     ).toBeDisabled();
+    const picker = screen.getByRole('group', { name: 'Contextos' });
+    expect(within(picker).queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(list).not.toHaveBeenCalled();
+    expect(candidates).not.toHaveBeenCalled();
+  });
+
+  it('marca e desmarca o mesmo candidato sem tirá-lo da lista', async () => {
+    const services = createFixtureServices();
+    const save = vi.spyOn(services.api, 'save');
+    renderEditor('/edit/nodes', services);
+    const user = userEvent.setup();
+    await user.type(
+      await screen.findByRole('textbox', { name: 'Nome' }),
+      'Pessoa com contexto',
+    );
+    await user.type(
+      screen.getByRole('textbox', { name: 'Descrição' }),
+      'Descrição qualquer',
+    );
+    const picker = screen.getByRole('group', { name: 'Contextos' });
+    await user.type(
+      within(picker).getByRole('textbox', { name: 'Buscar candidato' }),
+      'fict',
+    );
+    const option = await within(picker).findByRole('checkbox', {
+      name: 'Contexto fictício',
+    });
+    expect(option).not.toBeChecked();
+    await user.click(option);
+    expect(option).toBeChecked();
     expect(
-      await screen.findByText('Nenhum contexto cadastrado.'),
+      await within(picker).findByRole('button', {
+        name: 'Remover Contexto fictício',
+      }),
     ).toBeInTheDocument();
+    await user.click(option);
+    expect(option).not.toBeChecked();
+    expect(
+      within(picker).queryByRole('button', { name: /^Remover/ }),
+    ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Salvar registro' }),
+      ).not.toBeDisabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'Salvar registro' }));
+    expect(await screen.findByText('Registro salvo.')).toBeInTheDocument();
+    expect(save).toHaveBeenCalledWith(
+      'nodes',
+      expect.objectContaining({ contexts: [] }),
+      expect.any(String),
+      undefined,
+    );
+  });
+
+  it('mostra pelo nome os contextos já escolhidos e permite removê-los', async () => {
+    const services = createFixtureServices();
+    const save = vi.spyOn(services.api, 'save');
+    renderEditor(`/edit/nodes/${ids.jung}`, services);
+    const user = userEvent.setup();
+    const picker = await screen.findByRole('group', { name: 'Contextos' });
+    expect(await within(picker).findByText('Contexto fictício')).toBeVisible();
+    await user.click(
+      within(picker).getByRole('button', { name: 'Remover Contexto fictício' }),
+    );
+    expect(
+      within(picker).queryByText('Contexto fictício'),
+    ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Salvar registro' }),
+      ).not.toBeDisabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'Salvar registro' }));
+    expect(await screen.findByText('Registro salvo.')).toBeInTheDocument();
+    expect(save).toHaveBeenCalledWith(
+      'nodes',
+      expect.objectContaining({ contexts: [] }),
+      expect.any(String),
+      expect.objectContaining({ id: ids.jung }),
+    );
+  });
+
+  it('mantém o ID de um contexto que não existe mais e avisa da falha', async () => {
+    const services = createFixtureServices();
+    await services.session.login();
+    const detail = services.api.detail;
+    vi.spyOn(services.api, 'detail').mockImplementation(
+      async (type, id, signal) => {
+        if (type === 'contexts') throw new Error('Contexto indisponível');
+        const node = await detail(type, id, signal);
+        return { ...node, contexts: ['contexto-removido'] };
+      },
+    );
+    renderEditor(`/edit/nodes/${ids.jung}`, services);
+    const picker = await screen.findByRole('group', { name: 'Contextos' });
+    expect(await within(picker).findByText('contexto-removido')).toBeVisible();
+    expect(
+      within(picker).getByRole('button', { name: 'Remover contexto-removido' }),
+    ).toBeInTheDocument();
+    expect(await within(picker).findByRole('alert')).toHaveTextContent(
+      'Contexto indisponível',
+    );
+  });
+
+  it('avisa quando há mais candidatos que o limite e quando não há nenhum', async () => {
+    const services = createFixtureServices();
+    await services.session.login();
+    const found = (await services.api.candidates('contexts', 'fict')).items;
+    const candidates = vi
+      .spyOn(services.api, 'candidates')
+      .mockResolvedValueOnce({ items: [], nextCursor: null })
+      .mockResolvedValueOnce({ items: found, nextCursor: 'mais' });
+    renderEditor('/edit/nodes', services);
+    const user = userEvent.setup();
+    const picker = await screen.findByRole('group', { name: 'Contextos' });
+    const search = within(picker).getByRole('textbox', {
+      name: 'Buscar candidato',
+    });
+    await user.type(search, 'zzz');
+    expect(
+      await within(picker).findByText('Nenhum candidato.'),
+    ).toBeInTheDocument();
+    expect(candidates).toHaveBeenLastCalledWith(
+      'contexts',
+      'zzz',
+      expect.anything(),
+    );
+    await user.clear(search);
+    await user.type(search, 'fict');
+    expect(
+      await within(picker).findByRole('checkbox', {
+        name: 'Contexto fictício',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(picker).getByText('Há mais resultados. Refine a busca.'),
+    ).toBeInTheDocument();
+    expect(within(picker).queryByText('Nenhum candidato.')).toBeNull();
   });
 });
 
@@ -426,9 +575,14 @@ describe('EntityEditor — contextos', () => {
 });
 
 describe('EntityEditor — relações', () => {
-  async function pickNode(label: string, query: string, optionText: string) {
+  async function pickNode(
+    label: string,
+    query: string,
+    optionText: string,
+    index = 0,
+  ) {
     const user = userEvent.setup();
-    const fieldset = screen.getByRole('group', { name: label });
+    const fieldset = screen.getAllByRole('group', { name: label })[index]!;
     await user.type(
       within(fieldset).getByRole('textbox', { name: 'Buscar candidato' }),
       query,
@@ -444,15 +598,12 @@ describe('EntityEditor — relações', () => {
   it('mostra os valores iniciais seguros para uma relação nova', async () => {
     renderEditor('/edit/relations');
     await screen.findByRole('group', { name: 'Ponto de origem' });
-    expect(
-      screen.getAllByRole('textbox', { name: 'Buscar candidato' }),
-    ).toHaveLength(2);
-    expect(
-      screen.getAllByRole('textbox', { name: 'Buscar candidato' })[0],
-    ).toHaveValue('');
-    expect(
-      screen.getAllByRole('textbox', { name: 'Buscar candidato' })[1],
-    ).toHaveValue('');
+    // Origem, destino e contexto.
+    const searches = screen.getAllByRole('textbox', {
+      name: 'Buscar candidato',
+    });
+    expect(searches).toHaveLength(3);
+    searches.forEach((search) => expect(search).toHaveValue(''));
     expect(screen.getByRole('combobox', { name: 'Predicado' })).toHaveValue('');
     expect(screen.getByRole('combobox', { name: 'Predicado' })).toBeRequired();
     expect(screen.getByRole('textbox', { name: 'Afirmação' })).toHaveValue('');
@@ -463,7 +614,11 @@ describe('EntityEditor — relações', () => {
     expect(
       screen.getByRole('textbox', { name: 'Justificativa' }),
     ).toBeRequired();
-    expect(screen.getByRole('combobox', { name: 'Contexto' })).toHaveValue('');
+    expect(
+      within(screen.getByRole('group', { name: 'Contexto' })).queryByText(
+        /Selecionado:/,
+      ),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole('combobox', { name: 'Classificação da evidência' }),
     ).toHaveValue('inference');
@@ -549,7 +704,11 @@ describe('EntityEditor — relações', () => {
     await user.click(
       screen.getByRole('button', { name: 'Adicionar evidência' }),
     );
-    expect(screen.getByRole('combobox', { name: 'Fonte' })).toHaveValue('');
+    expect(
+      within(screen.getByRole('group', { name: 'Fonte' })).queryByText(
+        /Selecionado:/,
+      ),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole('combobox', { name: 'Papel da evidência' }),
     ).toHaveValue('supports');
@@ -567,10 +726,12 @@ describe('EntityEditor — relações', () => {
       screen.getByRole('combobox', { name: 'Papel da evidência' }),
       'supports',
     );
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: 'Fonte' }),
-      ids.source,
-    );
+    await pickNode('Fonte', 'sint', 'Fonte sintética de demonstração');
+    expect(
+      await screen.findByText(
+        'Selecionado: Fonte sintética de demonstração · Autor fictício',
+      ),
+    ).toBeInTheDocument();
     const evidenceGroups = screen.getAllByRole('textbox', {
       name: 'Localizador / página',
     });
@@ -584,10 +745,10 @@ describe('EntityEditor — relações', () => {
       'secondary',
     );
     await user.type(screen.getByRole('textbox', { name: 'Trecho' }), 'Trecho');
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: 'Contexto' }),
-      ids.context,
-    );
+    await pickNode('Contexto', 'fict', 'Contexto fictício');
+    expect(
+      await screen.findByText('Selecionado: Contexto fictício'),
+    ).toBeInTheDocument();
     await user.selectOptions(
       screen.getByRole('combobox', { name: 'Intensidade' }),
       '2',
@@ -676,10 +837,7 @@ describe('EntityEditor — relações', () => {
     await user.click(
       screen.getByRole('button', { name: 'Adicionar evidência' }),
     );
-    await user.selectOptions(
-      screen.getAllByRole('combobox', { name: 'Fonte' })[0]!,
-      ids.source,
-    );
+    await pickNode('Fonte', 'sint', 'Fonte sintética de demonstração', 0);
     await user.selectOptions(
       screen.getAllByRole('combobox', { name: 'Papel da evidência' })[0]!,
       'supports',
@@ -692,10 +850,7 @@ describe('EntityEditor — relações', () => {
       screen.getAllByRole('textbox', { name: 'Explicação da evidência' })[0]!,
       'A fonte sustenta a afirmação.',
     );
-    await user.selectOptions(
-      screen.getAllByRole('combobox', { name: 'Fonte' })[1]!,
-      ids.source,
-    );
+    await pickNode('Fonte', 'sint', 'Fonte sintética de demonstração', 1);
     await user.selectOptions(
       screen.getAllByRole('combobox', { name: 'Papel da evidência' })[1]!,
       'challenges',
@@ -1047,10 +1202,16 @@ describe('EntityEditor — conflito de edição', () => {
       label: 'Versão atual da API',
       contexts: [],
     };
+    // Pontos: leitura inicial e depois a versão atual; contextos seguem reais.
+    const realDetail = services.api.detail;
+    let nodeReads = 0;
     const detail = vi
       .spyOn(services.api, 'detail')
-      .mockResolvedValueOnce(original)
-      .mockResolvedValueOnce(latest);
+      .mockImplementation(async (type, id, signal) => {
+        if (type !== 'nodes') return realDetail(type, id, signal);
+        nodeReads += 1;
+        return nodeReads === 1 ? original : latest;
+      });
     const save = vi
       .spyOn(services.api, 'save')
       .mockRejectedValueOnce(new ApiError(409, 'Conflito de edição'))
@@ -1082,12 +1243,50 @@ describe('EntityEditor — conflito de edição', () => {
     await user.click(screen.getByRole('button', { name: 'Salvar registro' }));
 
     expect(await screen.findByText('Registro salvo.')).toBeInTheDocument();
-    expect(detail).toHaveBeenNthCalledWith(2, 'nodes', ids.jung);
+    expect(detail).toHaveBeenCalledWith('nodes', ids.jung);
     expect(save).toHaveBeenLastCalledWith(
       'nodes',
       expect.objectContaining({ label: 'Rascunho preservado' }),
       expect.any(String),
       expect.objectContaining({ version: 2 }),
+    );
+  });
+
+  it('409 por dependências mostra a mensagem da API sem abrir a comparação', async () => {
+    const services = createFixtureServices();
+    await services.session.login();
+    const { ApiError } = await import('../../src/api/client');
+    const detail = vi.spyOn(services.api, 'detail');
+    vi.spyOn(services.api, 'save').mockRejectedValueOnce(
+      new ApiError(409, 'Ponto tem relações ativas', {
+        code: 'DEPENDENCIES',
+        message: 'Ponto tem relações ativas',
+        details: [{ path: 'relations', message: ids.relation }],
+        requestId: 'req-dep',
+      }),
+    );
+    renderEditor(`/edit/nodes/${ids.jung}`, services);
+    const user = userEvent.setup();
+    await user.selectOptions(
+      await screen.findByRole('combobox', { name: 'Estado editorial' }),
+      'pending',
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Salvar registro' }),
+      ).not.toBeDisabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'Salvar registro' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Ponto tem relações ativas',
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(ids.relation);
+    expect(
+      screen.queryByRole('group', { name: 'Conflito de edição' }),
+    ).not.toBeInTheDocument();
+    // Só a leitura inicial do ponto: sem recarga para comparar versões.
+    expect(detail.mock.calls.filter(([type]) => type === 'nodes')).toHaveLength(
+      1,
     );
   });
 

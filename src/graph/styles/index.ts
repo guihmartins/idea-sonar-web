@@ -20,6 +20,7 @@ const glyphs: Record<string, string> = {
   hexagon: '≡',
   diamond: '◇',
   rectangle: '□',
+  triangle: '△',
 };
 const nodeLabel = (node: Element) =>
   `${glyphs[String(node.data('shape'))] ?? '•'} ${String(node.data('label'))}`;
