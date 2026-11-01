@@ -15,6 +15,12 @@ Em 01/11/2026 o snapshot de `contracts/openapi.json` da API foi atualizado para 
 
 No web, `ContractCheck` compara `Node`, `Catalog` e `ImportResult` com os tipos gerados; `importItemSchema.candidates` tem padrão `[]` e `importDetailSchema.result.discarded` tem padrão 0 (lotes gravados antes do modelo v2 não têm o campo). O editor de ponto tem período (mesma conversão a.C./astronômico do contexto, limites conferidos antes de enviar) e linhas de identificador (erro da API na linha do valor; `DUPLICATE` não abre a comparação de versão). `Descartar pendência` envia `{discard: true}` e o detalhe do lote lista "Descartados" e os candidatos de cada pendência com link para o editor.
 
+### Busca nas listas (Pontos, Fontes, Contextos)
+
+`api.list(type, cursor, signal, filters)` aceita `q`, `match` (`contains`, o padrão, ou `exact`), `includePending` e, só para pontos, `kind`, `startYear`, `endYear` e `includeUnknownPeriod`; o `query()` do adapter omite o vazio. `q` acha, sem acento nem caixa, o nome ou outro nome do ponto, o título da fonte e o nome do contexto, e também o dono de um identificador inteiro (QID ou endereço da Wikidata em pontos; DOI ou URL em fontes). `exact` pede o nome inteiro.
+
+`RecordsPage` guarda a busca na URL (`useSearchParams`) com os mesmos nomes; vazio e padrão da API (`match=contains`, `includePending=false`, `includeUnknownPeriod=true`) ficam fora da URL e da requisição, e parâmetro inválido ou alheio ao tipo é ignorado. A API recusa o cursor de uma busca com outros filtros, então os filtros fazem parte da chave da consulta (`['list', type, filters]`) e mudar um deles recomeça a paginação. Relações e Views não têm busca. As fixtures aplicam as mesmas regras (texto, DOI/URL exatos, `includePending`) e recusam o cursor de outra busca com 400.
+
 ## Contrato 1.1.0
 
 Nenhuma rota ou campo foi removido; o que mudou é o comportamento e alguns limites:

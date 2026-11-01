@@ -267,7 +267,8 @@ mesmo traço neutro `#767c6b` (≥3:1 sobre o marfim) e o mesmo preenchimento a
 ## Components
 
 - **Botão primário**: fundo `accent-strong`, texto branco, canto reto. Um único
-  por tela — no mapa é "Buscar"; em registros é "Cadastrar".
+  por tela — no mapa é "Buscar"; em registros é "Cadastrar" (o "Buscar" da busca
+  das listas é secundário).
 - **Botão secundário**: contorno `line-strong`, texto 14px/500, hover `hover`
   com borda `ink-2`. Padrão de todo `button`.
 - **Campos**: fundo transparente, contorno `line-strong`, canto reto. `select` e
@@ -278,6 +279,25 @@ mesmo traço neutro `#767c6b` (≥3:1 sobre o marfim) e o mesmo preenchimento a
 - **Linhas de registro**: fio separando itens, título à esquerda, ação alinhada à
   direita, última linha do registro em mono como metadado. Sem cartões.
 - **Resultados de busca**: linhas com o ID em mono à direita, não cartões.
+- **Busca das listas** (Pontos, Fontes e Contextos; Relações e Views não têm):
+  `form role="search"` logo abaixo do título, sem cartão. Uma linha com o campo
+  "Buscar" (cresce) e os botões secundários "Buscar" e "Limpar" (quebram para
+  baixo no celular), depois as marcas "Nome ou identificador exato" e "Incluir
+  pendentes". Em Pontos entra o grupo "Tipo e período", um `fieldset` com etiqueta
+  mono e fio como os demais: Tipo (inclui Figura) e dois pares ano + era (o
+  `YearField` do editor de período, com os mesmos limites e a conversão a.C./d.C.
+  para ano astronômico), que ficam juntos mesmo quando a linha quebra, e a marca
+  "Incluir período desconhecido" (ligada, como o padrão da API). Fontes e
+  Contextos não têm tipo nem período. O estado vive na URL com os nomes da API
+  (`q`, `match=exact`, `includePending=true`, `kind`, `startYear`, `endYear`,
+  `includeUnknownPeriod=false`): vazio e padrão ficam de fora, uma busca é
+  favorito e voltar/avançar a refazem. O formulário edita um rascunho; só
+  "Buscar" ou Enter o aplicam. Abaixo, a linha de estado em mono (dado, não
+  leitura) é uma região `aria-live="polite"` com "N registros carregados" e
+  " · há mais" quando existe `nextCursor`; o estado vazio nomeia a busca ("Nenhum
+  ponto encontrado para “x”") e, no modo exato, sugere desmarcar "exato". Ano
+  inválido ou inicial depois do final aparece em `.field-error` (`role="alert"`,
+  ligado aos campos por `aria-describedby`), sem sair da tela.
 - **Seletor por busca** (pontos, contextos e fontes no editor; contexto no filtro
   do mapa): `fieldset` com etiqueta mono, campo "Buscar candidato", o que já está
   escolhido escrito pelo nome (rádio para um, lista com "Remover" para vários) e
