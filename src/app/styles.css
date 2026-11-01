@@ -616,6 +616,30 @@ ol > .card time {
   background: currentColor;
   flex: none;
 }
+.status--warning {
+  color: var(--warning);
+}
+.status--warning p {
+  margin: 0 0 0.5rem;
+}
+.status--warning ul {
+  margin: 0 0 0.5rem;
+  padding-left: 1.1rem;
+}
+.status--warning code,
+.link-summary .period {
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+}
+.link-summary {
+  margin: 0 0 0.5rem;
+  color: var(--ink);
+  font-size: var(--text-sm);
+}
+.link-summary .period,
+.check .period {
+  display: block;
+}
 .error {
   padding: 0.9rem 1rem;
   background: var(--error-bg);

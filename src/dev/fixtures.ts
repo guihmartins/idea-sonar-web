@@ -1,6 +1,7 @@
 // EXCLUSIVAMENTE DEV/TEST. Todos os nomes/afirmações/trechos abaixo são fictícios.
 // Formatos seguem o contrato da API (contracts/openapi.json).
 import { createApi } from '../api/adapter';
+import { applyBatch, apiFailure, restProblem } from './fixture-batch';
 import { ApiError } from '../api/client';
 import type { RequestOptions } from '../api/client';
 import { defaultFilters, toStoredFilters } from '../api/domain';
@@ -9,6 +10,7 @@ import type {
   Context,
   Entity,
   HistoryEntry,
+  ImportBatch,
   ImportDetail,
   Node,
   PendingItem,
@@ -415,12 +417,58 @@ function buildFixtureServices(
     item.version += 1;
     return { batchId: item.id, status: 'undone', reason: body.reason };
   }
+  // POST /imports: aplica o lote sobre uma cópia e só a mantém se não for
+  // simulação (dryRun), como a transação da API.
+  function submitBatch(options: RequestOptions) {
+    const batch = options.body as ImportBatch;
+    if (options.idempotencyKey !== batch.idempotencyKey)
+      throw apiFailure(400, 'IDEMPOTENCY_MISMATCH', 'Chaves diferentes');
+    const work = {
+      nodes: structuredClone(db.nodes as Node[]),
+      relations: structuredClone(db.relations as Relation[]),
+    };
+    const now = new Date().toISOString();
+    const result = applyBatch(work, batch, now);
+    if (batch.dryRun) return result;
+    db.nodes = work.nodes;
+    db.relations = work.relations;
+    const content = { ...batch, dryRun: undefined };
+    imports.unshift({
+      id: result.batchId,
+      origin: batch.origin,
+      inputSummary: batch.inputSummary,
+      status: result.status,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+      result: {
+        created: result.created,
+        updated: result.updated,
+        reused: result.reused,
+        pending: result.pending,
+        items: result.items,
+      },
+    });
+    for (const item of result.items.filter((i) => i.outcome === 'pending'))
+      pending.push({
+        id: crypto.randomUUID(),
+        batchId: result.batchId,
+        batchVersion: 1,
+        clientRef: item.clientRef,
+        entityType: item.entityType as PendingItem['entityType'],
+        reason: item.reason,
+        dependencies: [],
+        payload: content,
+      });
+    return result;
+  }
   function importResult(
     id: string,
     url: URL,
     operation: string,
     options: RequestOptions,
   ) {
+    if (!id && options.method === 'POST') return submitBatch(options);
     const item = imports.find((i) => i.id === id);
     if (operation === 'undo' && item) return undoImport(item, options);
     // A listagem real omite `result`; o schema de resumo descarta o campo.
@@ -460,6 +508,17 @@ function buildFixtureServices(
       (entity.status === 'pending' && params.get('includePending') === 'true')
     );
   }
+  // Filtros de relação da API: `nodeId` (origem ou destino) e `type` (predicado).
+  function matchesRelation(relation: Relation, params: URLSearchParams) {
+    const nodeId = params.get('nodeId');
+    const type = params.get('type');
+    return (
+      (!nodeId ||
+        relation.sourceId === nodeId ||
+        relation.targetId === nodeId) &&
+      (!type || relation.type === type)
+    );
+  }
   function readCollection(
     type: string,
     id: string,
@@ -471,6 +530,8 @@ function buildFixtureServices(
     const items = collection.filter(
       (entity) =>
         visibleStatus(entity, url.searchParams) &&
+        (type !== 'relations' ||
+          matchesRelation(entity as Relation, url.searchParams)) &&
         searchText(entity).toLocaleLowerCase('pt-BR').includes(q) &&
         (type !== 'nodes' || matches(entity as Node, url.searchParams)),
     );
@@ -497,6 +558,7 @@ function buildFixtureServices(
         version: current.version + 1,
         updatedAt: now,
       } as Entity;
+      assertWritable(type, updated);
       collection[index] = updated;
       record(type, current, updated);
       return updated;
@@ -509,9 +571,21 @@ function buildFixtureServices(
       createdAt: now,
       updatedAt: now,
     } as unknown as Entity;
+    assertWritable(type, created);
     collection.push(created);
     record(type, undefined, created);
     return created;
+  }
+  // Como a API: o REST recusa conceito contextual ativo e relação ativa com
+  // ponto inativo; só o lote grava os dois juntos.
+  function assertWritable(type: string, entity: Entity) {
+    if (type !== 'nodes' && type !== 'relations') return;
+    const failure = restProblem(
+      { nodes: db.nodes as Node[], relations: db.relations as Relation[] },
+      type,
+      entity as Node | Relation,
+    );
+    if (failure) throw failure;
   }
   function routeResult(
     type: string,

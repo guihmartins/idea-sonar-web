@@ -4,23 +4,40 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { useServices } from '../app/services';
 import { isVersionConflict } from '../api/client';
-import type { Entity, EntityType, Context } from '../api/domain';
+import type {
+  Context,
+  Entity,
+  EntityType,
+  ImportResult,
+  Node,
+} from '../api/domain';
 import { Failure } from '../components/Feedback';
 import {
   conceptScopeLabels,
   kindLabels,
   precisionLabels,
-  sourceKindLabels,
-  stanceLabels,
 } from '../components/labels';
 import {
   buildEditorBody,
-  emptyEvidence,
   evidenceDraft,
   formatAliases,
 } from './editor/payload';
-import type { Editable, EvidenceDraft } from './editor/payload';
+import type { EditorDraft, Editable } from './editor/payload';
+import {
+  BatchResultPanel,
+  ContextualizationGroup,
+} from './editor/Contextualization';
+import {
+  activateContextualBatch,
+  contextualFlow,
+  createContextualBatch,
+  isContextualConcept,
+  pendingContextualizations,
+  savedNodeId,
+} from './editor/contextual';
+import type { BatchOutcome, ContextualFlow } from './editor/contextual';
 import { CandidatePicker, NodePicker } from './editor/pickers';
+import { Choice, EvidenceEditor, EvidenceStatusFields } from './editor/fields';
 import { typeLabels } from './RecordsPage';
 const editable = ['nodes', 'relations', 'sources', 'contexts'] as const;
 const isEditable = (type: string | undefined): type is Editable =>
@@ -96,12 +113,15 @@ function useEditorForm(type: Editable, initial: Entity | undefined) {
   const [contexts, setContexts] = useState(metadata.contexts);
   const [evidence, setEvidence] = useState(metadata.evidence);
   const [contested, setContested] = useState(metadata.contested);
-  const [actionKey, setActionKey] = useState(() => crypto.randomUUID());
+  const [actionKey, setActionKey] = useState<string>(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [message, setMessage] = useState('');
   const [conflict, setConflict] = useState<Entity | null>(null);
   const [archive, setArchive] = useState(false);
+  const [batch, setBatch] = useState<BatchOutcome | null>(null);
+  const [relationChoice, setRelationChoice] = useState('');
+  const flow = contextualFlow(type, fields, baseline);
   const catalog = useQuery({
     queryKey: ['catalog'],
     queryFn: ({ signal }) => api.catalog(signal),
@@ -139,34 +159,78 @@ function useEditorForm(type: Editable, initial: Entity | undefined) {
       </div>
     );
   }
+  async function savePlain() {
+    const body = await buildEditorBody(
+      type,
+      { fields, contexts, evidence, contested },
+      catalog.data,
+      api,
+    );
+    const saved = await api.save(type, body, actionKey, baseline);
+    setBaseline(saved);
+    setMessage('Registro salvo.');
+    setActionKey(crypto.randomUUID());
+    await cache.invalidateQueries();
+  }
+  // Conceito contextual: ponto e contextualização vão em um lote só, porque o
+  // REST não ativa um sem o outro. A relação a ativar é relida na hora, com a
+  // versão atual, em vez de confiar no que a tela carregou.
+  async function activationBatch(draft: EditorDraft) {
+    const node = baseline as Node;
+    const links = await cache.fetchQuery({
+      queryKey: ['contextualizations', node.id],
+      queryFn: ({ signal }) =>
+        api.nodeRelations(node.id, 'contextualizes', signal),
+      staleTime: 0,
+    });
+    const options = pendingContextualizations(links.items, node);
+    const chosen = options.find((r) => r.id === relationChoice) ?? options[0];
+    return activateContextualBatch(draft, node, chosen, actionKey);
+  }
+  async function reloadAfterBatch(kind: ContextualFlow, result: ImportResult) {
+    const id = savedNodeId(kind, baseline, result);
+    if (!id) return;
+    const fresh = await api.detail('nodes', id);
+    setBaseline(fresh);
+    // Com pendências o rascunho da contextualização fica para a nova tentativa.
+    if (result.pending > 0) return;
+    setFields(initialFields(fresh));
+    setEvidence([]);
+  }
+  async function saveContextual(kind: ContextualFlow) {
+    const draft = { fields, contexts, evidence, contested };
+    const body =
+      kind === 'create'
+        ? createContextualBatch(draft, actionKey)
+        : await activationBatch(draft);
+    const result = await api.importBatch(body, actionKey);
+    setBatch({ flow: kind, result });
+    setActionKey(crypto.randomUUID());
+    await cache.invalidateQueries();
+    await reloadAfterBatch(kind, result);
+  }
+  async function failSave(e: unknown) {
+    setError(e);
+    if (!isVersionConflict(e) || !baseline) return;
+    try {
+      setConflict(await api.detail(type, baseline.id));
+    } catch {
+      setMessage(
+        'Não foi possível carregar a versão atual. Tente salvar novamente para recarregar o conflito.',
+      );
+    }
+  }
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     setBusy(true);
     setMessage('');
+    setBatch(null);
     try {
-      const body = await buildEditorBody(
-        type,
-        { fields, contexts, evidence, contested },
-        catalog.data,
-        api,
-      );
-      const saved = await api.save(type, body, actionKey, baseline);
-      setBaseline(saved);
-      setMessage('Registro salvo.');
-      setActionKey(crypto.randomUUID());
-      await cache.invalidateQueries();
+      if (flow) await saveContextual(flow);
+      else await savePlain();
     } catch (e) {
-      setError(e);
-      if (isVersionConflict(e) && baseline) {
-        try {
-          setConflict(await api.detail(type, baseline.id));
-        } catch {
-          setMessage(
-            'Não foi possível carregar a versão atual. Tente salvar novamente para recarregar o conflito.',
-          );
-        }
-      }
+      await failSave(e);
     } finally {
       setBusy(false);
     }
@@ -207,6 +271,10 @@ function useEditorForm(type: Editable, initial: Entity | undefined) {
     conflict,
     archive,
     catalog,
+    flow,
+    batch,
+    relationChoice,
+    setRelationChoice,
     update,
     text,
     submit,
@@ -276,103 +344,10 @@ function EditorForm({
       </form>
       {model.error !== null && <Failure error={model.error} />}
       {model.message && <p role="status">{model.message}</p>}
+      <BatchResultPanel outcome={model.batch} />
       <ConflictPanel model={model} />
       <EditorActions model={model} />
     </section>
-  );
-}
-
-function EvidenceFields({
-  entry,
-  onChange,
-  onRemove,
-}: {
-  entry: EvidenceDraft;
-  onChange: (entry: EvidenceDraft) => void;
-  onRemove: () => void;
-}) {
-  return (
-    <div className="evidence">
-      <CandidatePicker
-        type="sources"
-        label="Fonte"
-        values={entry.sourceId ? [entry.sourceId] : []}
-        onChange={(ids) => onChange({ ...entry, sourceId: ids[0] ?? '' })}
-      />
-      <label>
-        Papel da evidência
-        <select
-          value={entry.stance}
-          onChange={(e) =>
-            onChange({
-              ...entry,
-              stance: e.target.value as EvidenceDraft['stance'],
-            })
-          }
-        >
-          {Object.entries(stanceLabels).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Tipo de fonte
-        <select
-          value={entry.sourceKind}
-          onChange={(e) =>
-            onChange({
-              ...entry,
-              sourceKind: e.target.value as EvidenceDraft['sourceKind'],
-            })
-          }
-        >
-          {Object.entries(sourceKindLabels).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Localizador / página
-        <input
-          required
-          value={entry.locator}
-          onChange={(e) => onChange({ ...entry, locator: e.target.value })}
-        />
-      </label>
-      <label>
-        Trecho
-        <textarea
-          value={entry.excerpt}
-          onChange={(e) => onChange({ ...entry, excerpt: e.target.value })}
-        />
-      </label>
-      <label>
-        Explicação da evidência
-        <textarea
-          required
-          value={entry.explanation}
-          onChange={(e) => onChange({ ...entry, explanation: e.target.value })}
-        />
-      </label>
-      {entry.sourceKind === 'conversation' && (
-        <label>
-          Referência da conversa
-          <input
-            value={entry.conversationReference}
-            onChange={(e) =>
-              onChange({ ...entry, conversationReference: e.target.value })
-            }
-          />
-        </label>
-      )}
-      <button type="button" onClick={onRemove}>
-        Remover evidência
-      </button>
-    </div>
   );
 }
 
@@ -386,37 +361,6 @@ function periodFields(period: Pick<Context, 'startYear' | 'endYear'>) {
     data[`${key}Era`] = year !== null && year <= 0 ? 'bce' : 'ce';
   }
   return data;
-}
-
-function Choice({
-  model,
-  field,
-  label,
-  options,
-  disabled = false,
-}: {
-  model: EditorModel;
-  field: string;
-  label: string;
-  options: Record<string, string>;
-  disabled?: boolean;
-}) {
-  return (
-    <label>
-      {label}
-      <select
-        value={model.fields[field]}
-        disabled={disabled}
-        onChange={(e) => model.update(field, e.target.value)}
-      >
-        {Object.entries(options).map(([value, text]) => (
-          <option key={value} value={value}>
-            {text}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
 }
 
 function NodeFields({ model }: { model: EditorModel }) {
@@ -458,6 +402,15 @@ function NodeFields({ model }: { model: EditorModel }) {
           model.setActionKey(crypto.randomUUID());
         }}
       />
+      {model.flow && <ContextualizationGroup model={model} />}
+      {!model.flow &&
+        isContextualConcept(model.fields) &&
+        model.fields.status === 'pending' && (
+          <p className="muted">
+            Conceito contextual pendente não precisa de relação agora: ela é
+            exigida quando ele for ativado.
+          </p>
+        )}
     </>
   );
 }
@@ -519,23 +472,9 @@ function ContextFields({ model }: { model: EditorModel }) {
 }
 
 function RelationClassification({ model }: { model: EditorModel }) {
-  const status = model.fields.evidenceStatus;
   return (
     <>
-      <Choice
-        model={model}
-        field="evidenceStatus"
-        label="Classificação da evidência"
-        options={{
-          documented: 'Documentada',
-          attributed_interpretation: 'Interpretação atribuída',
-          inference: 'Inferência / hipótese',
-        }}
-      />
-      {status === 'attributed_interpretation' &&
-        model.text('attributionText', 'Atribuição (quem interpreta)', true)}
-      {status === 'inference' &&
-        model.text('inferenceAuthor', 'Autoria da inferência', true)}
+      <EvidenceStatusFields model={model} />
       <Choice
         model={model}
         field="intensity"
@@ -603,37 +542,7 @@ function RelationFields({ model }: { model: EditorModel }) {
         onChange={(ids) => model.update('contextId', ids[0] ?? '')}
       />
       <RelationClassification model={model} />
-      <fieldset>
-        <legend>Evidências</legend>
-        <p>Adicionar uma URL não promove a classificação automaticamente.</p>
-        {model.evidence.map((entry, i) => (
-          <EvidenceFields
-            key={i}
-            entry={entry}
-            onChange={(next) => {
-              model.setEvidence((values) =>
-                values.map((v, index) => (index === i ? next : v)),
-              );
-              model.setActionKey(crypto.randomUUID());
-            }}
-            onRemove={() => {
-              model.setEvidence((values) =>
-                values.filter((_, index) => index !== i),
-              );
-              model.setActionKey(crypto.randomUUID());
-            }}
-          />
-        ))}
-        <button
-          type="button"
-          onClick={() => {
-            model.setEvidence((values) => [...values, { ...emptyEvidence }]);
-            model.setActionKey(crypto.randomUUID());
-          }}
-        >
-          Adicionar evidência
-        </button>
-      </fieldset>
+      <EvidenceEditor model={model} />
     </>
   );
 }
@@ -763,10 +672,25 @@ interface FieldChange {
   latest: string;
   multiline?: boolean;
 }
+// Campos do grupo de contextualização: só existem no rascunho do ponto.
+const contextualizationKeys = new Set([
+  'targetId',
+  'claim',
+  'justification',
+  'evidenceStatus',
+  'attributionText',
+  'inferenceAuthor',
+]);
 function conflictChanges(model: EditorModel, conflict: Entity): FieldChange[] {
-  const changes: FieldChange[] = Object.entries(initialFields(conflict)).map(
-    ([label, latest]) => ({ label, latest, draft: model.fields[label] ?? '' }),
-  );
+  const own = (label: string) =>
+    !('kind' in conflict) || !contextualizationKeys.has(label);
+  const changes: FieldChange[] = Object.entries(initialFields(conflict))
+    .filter(([label]) => own(label))
+    .map(([label, latest]) => ({
+      label,
+      latest,
+      draft: model.fields[label] ?? '',
+    }));
   if ('contexts' in conflict)
     changes.push({
       label: 'Contextos',

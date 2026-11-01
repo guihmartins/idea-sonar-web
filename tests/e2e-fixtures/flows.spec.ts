@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 test.beforeEach(async ({ page }) => {
   await page.goto('/map');
@@ -268,4 +269,75 @@ test('preserva posição arrastada ao expandir e ao alternar modo lista', async 
   expect(before?.positions[root]).not.toEqual({ x: 410, y: 220 });
   expect(after?.positions[root]).toEqual(before?.positions[root]);
   expect(Object.keys(after?.positions ?? {})).toHaveLength(3);
+});
+
+test('cria um conceito contextual e a contextualização em um único lote', async ({
+  page,
+}) => {
+  await page.getByRole('link', { name: 'Novo ponto', exact: true }).click();
+  await page
+    .getByLabel('Nome', { exact: true })
+    .fill('Conceito contextual fictício E2E');
+  await page
+    .getByLabel('Descrição', { exact: true })
+    .fill('Registro sintético criado pelo E2E.');
+  await page
+    .getByRole('combobox', { name: 'Tipo', exact: true })
+    .selectOption('concept');
+  await page
+    .getByRole('combobox', { name: 'Escopo do conceito', exact: true })
+    .selectOption('contextual');
+  const contexts = page.getByRole('group', { name: 'Contextos', exact: true });
+  await contexts
+    .getByRole('textbox', { name: 'Buscar candidato' })
+    .fill('fict');
+  await contexts.getByRole('checkbox', { name: 'Contexto fictício' }).check();
+  const group = page.getByRole('group', {
+    name: 'Contextualização',
+    exact: true,
+  });
+  await expect(group).toBeVisible();
+  const broad = group.getByRole('group', { name: 'Conceito amplo' });
+  await broad
+    .getByRole('textbox', { name: 'Buscar candidato' })
+    .fill('compart');
+  await broad
+    .getByRole('radio', { name: /Conceito compartilhado fictício/ })
+    .check();
+  await group
+    .getByRole('textbox', { name: 'Afirmação da contextualização' })
+    .fill('Afirmação sintética da contextualização.');
+  await group
+    .getByRole('textbox', { name: 'Justificativa da contextualização' })
+    .fill('Justificativa sintética do teste.');
+  await group
+    .getByRole('textbox', { name: 'Autoria da inferência' })
+    .fill('Curadoria de teste');
+  const result = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+    .analyze();
+  expect(result.violations).toEqual([]);
+  await page.getByRole('button', { name: 'Salvar registro' }).click();
+  await expect(
+    page.getByText(/Conceito contextual criado e ativado\./),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Ver importação' }),
+  ).toHaveAttribute('href', /\/imports\/.+/);
+  await expect(
+    page.getByRole('heading', { name: 'Editar ponto' }),
+  ).toBeVisible();
+  await expect(group).toHaveCount(0);
+  await page.getByRole('link', { name: 'Ver importação' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Detalhes da importação' }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Conceito contextual criado no editor'),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  ).toBe(false);
 });

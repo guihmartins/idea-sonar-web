@@ -257,6 +257,23 @@ SVG desenhado, com o mesmo traço do mapa, não com glifos unicode.
 - **Linhas de registro**: fio separando itens, título à esquerda, ação alinhada à
   direita, última linha do registro em mono como metadado. Sem cartões.
 - **Resultados de busca**: linhas com o ID em mono à direita, não cartões.
+- **Seletor por busca** (pontos, contextos e fontes no editor; contexto no filtro
+  do mapa): `fieldset` com etiqueta mono, campo "Buscar candidato", o que já está
+  escolhido escrito pelo nome (rádio para um, lista com "Remover" para vários) e
+  resultados em linhas de rádio ou caixa, no máximo 20, com rolagem própria. Nada
+  é listado por inteiro: sem texto de busca não há resultados. O controle marcado
+  fica onde estava, para o foco do teclado não se perder.
+- **Grupo "Contextualização"** (formulário de ponto, só conceito contextual
+  ativo): mesma vocação de `fieldset` com etiqueta, sem cartão. Pede o conceito
+  amplo (seletor por busca, só conceitos amplos ativos), afirmação, justificativa,
+  classificação da evidência com autoria ou atribuição, e as evidências do
+  formulário de relação. Para um ponto pendente com relação pendente, vira um
+  resumo da relação (afirmação em texto, conceito amplo e estado em mono) que
+  será ativada junto; o conceito e a relação são gravados em um único lote.
+- **Resultado de lote**: sucesso é uma linha com marcador verde (`.status`) e o
+  link "Ver importação"; pendência é a mesma linha em âmbar (`.status--warning`,
+  `role="alert"`) com a lista de itens e motivos, e nunca diz que deu certo. A
+  cor não é o único sinal: o texto diz "ficou pendente".
 - **Prancha do mapa**: barra de título em mono (ponto raiz e "N/500 pontos ·
   M relações"), barra de controles, superfície de desenho, painel de detalhes
   separado por fio, rodapé em mono com legenda de contextos e "Como ler o mapa".

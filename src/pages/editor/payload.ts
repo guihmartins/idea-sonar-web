@@ -34,8 +34,8 @@ export function evidenceDraft(entry: Evidence): EvidenceDraft {
     conversationReference: entry.conversationReference ?? '',
   };
 }
-const text = (value: string | undefined) => (value ?? '').trim();
-const orNull = (value: string | undefined) => text(value) || null;
+export const text = (value: string | undefined) => (value ?? '').trim();
+export const orNull = (value: string | undefined) => text(value) || null;
 // "Nome (idioma)"; sem idioma, usa "und" (indeterminado, BCP 47).
 const aliasPattern = /^(.*\S)\s*\(([A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*)\)$/u;
 export function parseAliases(value: string): Node['aliases'] {
@@ -56,7 +56,7 @@ export function formatAliases(aliases: Node['aliases']): string {
     .map((a) => (a.language === 'und' ? a.alias : `${a.alias} (${a.language})`))
     .join(', ');
 }
-function nodeBody({ fields, contexts }: EditorDraft) {
+export function nodeBody({ fields, contexts }: EditorDraft) {
   const concept = fields.kind === 'concept';
   if (concept && !fields.conceptScope)
     throw new Error('Conceitos exigem escopo: amplo ou contextualizado.');
@@ -144,7 +144,7 @@ async function validateEndpoints(
       'Tipos incompatíveis com o predicado retornado pelo catálogo.',
     );
 }
-function evidenceInput(entry: EvidenceDraft) {
+export function evidenceInput(entry: EvidenceDraft) {
   if (!text(entry.locator) || !text(entry.explanation))
     throw new Error('Cada evidência exige localizador e explicação.');
   return {
@@ -159,7 +159,7 @@ function evidenceInput(entry: EvidenceDraft) {
 }
 type EvidenceInput = ReturnType<typeof evidenceInput>;
 // Mesmas regras da API, com mensagens antes do envio.
-function validateSupport(
+export function validateSupport(
   status: string | undefined,
   evidence: EvidenceInput[],
 ) {
@@ -176,7 +176,7 @@ function validateSupport(
       'Uma fonte é obrigatória para relação documentada ou interpretação atribuída: adicione evidência que a sustente.',
     );
 }
-function validateAttribution(fields: Record<string, string>) {
+export function validateAttribution(fields: Record<string, string>) {
   if (fields.evidenceStatus === 'inference' && !text(fields.inferenceAuthor))
     throw new Error('Inferência exige autoria da inferência.');
   if (

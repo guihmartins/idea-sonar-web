@@ -21,6 +21,15 @@ No web, `ApiError.code` expõe o código do envelope e `Failure` lista cada `det
 
 Conceito contextual ativo exige contexto e uma relação `contextualizes` ativa com um conceito amplo ativo, e a relação ativa exige os dois pontos ativos: pelo REST um não ativa antes do outro. Só o lote cria ou atualiza os dois na mesma transação (o escopo contextual só é conferido no fim do lote).
 
+### Conceito contextual no editor
+
+`importBatch(body, key)` (`adapter.ts`) faz `POST /imports` com `Idempotency-Key` igual à `idempotencyKey` do corpo e valida a resposta com `importResultSchema` (comparado ao `ImportResult` gerado pelo `ContractCheck`). O corpo é do tipo `ImportBatch`, derivado dos itens gerados do `ImportBatchV1`.
+
+- **Criar** (ponto novo, conceito, escopo contextual, estado ativo): `origin: "manual"`, `inputSummary` "Conceito contextual criado no editor", `nodes[0]` create e `relations[0]` create (`contextualizes`, `source` `{clientRef}`, `target` `{id}` do conceito amplo ativo), `dryRun: false`. Exige ao menos um contexto.
+- **Ativar** (ponto pendente ou arquivado, estado → Ativo): o editor lê `GET /relations?nodeId=&type=contextualizes&includePending=true` na hora de salvar e envia update parcial do ponto e de uma relação pendente (`{op:"update", id, expectedVersion, status:"active"}`, mais os campos do ponto que mudaram no formulário). Sem relação pendente, o mesmo lote cria uma, com `source` `{id}` do ponto.
+- Conceito contextual pendente criado como rascunho segue o `POST /nodes`. Ponto já ativo segue o `PATCH`.
+- Com `pending > 0` o editor lista cada item pendente e o motivo, não diz que deu certo e mantém o rascunho; o link vai para `/imports/{batchId}`.
+
 ## Importar versão publicada
 
 1. Obter snapshot autorizado da API em commit/tag explícito. Revisar exemplos: sintéticos, sem dados pessoais/segredos/hosts internos. Não é necessário checkout do backend.
