@@ -24,6 +24,7 @@ import type {
   Filters,
   Entity,
   ImportBatch,
+  Kind,
   PendingItem,
 } from './domain';
 import type { RequestOptions, Transport } from './client';
@@ -37,6 +38,17 @@ const entitySchemas = {
 export type CandidateType = 'nodes' | 'sources' | 'contexts';
 // `exact`: nome ou alias inteiro, ou identificador (a API ignora o resto).
 export type Match = 'contains' | 'exact';
+// Filtros das listas: `q`/`match`/`includePending` valem para pontos, fontes e
+// contextos; `kind` e o período, só para pontos. Vazio é omitido da query.
+export interface ListFilters {
+  q?: string | undefined;
+  match?: Match | undefined;
+  includePending?: boolean | undefined;
+  kind?: Kind | undefined;
+  startYear?: number | null | undefined;
+  endYear?: number | null | undefined;
+  includeUnknownPeriod?: boolean | undefined;
+}
 function query(
   values: Record<string, string | number | boolean | null | undefined>,
 ): string {
@@ -114,10 +126,26 @@ export function createApi(send: Transport) {
         `/nodes/${encodeURIComponent(id)}/neighbors${query({ ...filters, cursor, limit: 50 })}`,
         { signal },
       ),
-    list: (type: EntityType, cursor: string | null, signal?: AbortSignal) =>
+    // O cursor só vale para os filtros que o emitiram: mudou o filtro, recomece.
+    list: (
+      type: EntityType,
+      cursor: string | null,
+      signal?: AbortSignal,
+      filters: ListFilters = {},
+    ) =>
       read(
         pageSchema(entitySchemas[type]),
-        `/${type}${query({ cursor, limit: 50 })}`,
+        `/${type}${query({
+          q: filters.q,
+          match: filters.match,
+          kind: filters.kind,
+          includePending: filters.includePending,
+          startYear: filters.startYear,
+          endYear: filters.endYear,
+          includeUnknownPeriod: filters.includeUnknownPeriod,
+          cursor,
+          limit: 50,
+        })}`,
         withSignal(signal),
       ),
     detail: (type: EntityType, id: string, signal?: AbortSignal) =>

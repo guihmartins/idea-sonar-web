@@ -118,6 +118,66 @@ describe('adapter — URLs de leitura', () => {
     },
   );
 
+  it('list: filtros de busca com os nomes da API, na ordem fixa, depois do cursor', async () => {
+    const { api, send } = setup();
+    await api.list('nodes', 'c2', signal, {
+      includeUnknownPeriod: false,
+      endYear: 0,
+      startYear: -499,
+      includePending: true,
+      kind: 'figure',
+      match: 'exact',
+      q: 'Q42',
+    });
+    expect(path(send)).toBe(
+      '/nodes?q=Q42&match=exact&kind=figure&includePending=true&startYear=-499&endYear=0&includeUnknownPeriod=false&cursor=c2&limit=50',
+    );
+    expect(send.mock.calls[0]?.[1]).toEqual({ signal });
+  });
+
+  it('list: omite filtro vazio, nulo ou indefinido e mantém zero e falso', async () => {
+    const { api, send } = setup();
+    await api.list('nodes', null, undefined, {
+      q: '',
+      match: undefined,
+      kind: undefined,
+      includePending: undefined,
+      startYear: null,
+      endYear: null,
+      includeUnknownPeriod: undefined,
+    });
+    expect(path(send)).toBe('/nodes?limit=50');
+    await api.list('nodes', null, undefined, {});
+    expect(path(send, 1)).toBe('/nodes?limit=50');
+    await api.list('nodes', null, undefined, {
+      startYear: 0,
+      endYear: 0,
+      includePending: false,
+    });
+    expect(path(send, 2)).toBe(
+      '/nodes?includePending=false&startYear=0&endYear=0&limit=50',
+    );
+  });
+
+  it.each<EntityType>(['sources', 'contexts'])(
+    'list de %s: busca, modo exato e pendentes',
+    async (type) => {
+      const { api, send } = setup();
+      await api.list(type, null, signal, {
+        q: 'Édipo & filhos',
+        match: 'exact',
+        includePending: true,
+      });
+      expect(path(send)).toBe(
+        `/${type}?q=%C3%89dipo+%26+filhos&match=exact&includePending=true&limit=50`,
+      );
+      await api.list(type, 'c1', signal, { q: 'a', match: 'contains' });
+      expect(path(send, 1)).toBe(
+        `/${type}?q=a&match=contains&cursor=c1&limit=50`,
+      );
+    },
+  );
+
   it('history: caminho por tipo e cursor opcional, sem limite', async () => {
     const { api, send } = setup();
     await api.history('nodes', 'n 1', null, signal);
