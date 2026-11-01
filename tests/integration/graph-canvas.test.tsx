@@ -11,6 +11,8 @@ interface ElementState {
   position: { x: number; y: number };
   selected: boolean;
   classes: Set<string>;
+  /** Pontos de controle devolvidos por `controlPoints()` (como o Cytoscape real). */
+  controls: unknown;
 }
 interface ElementHandle {
   id: () => string;
@@ -29,6 +31,11 @@ interface ElementHandle {
   neighborhood: (kind: string) => FakeCollection;
   closedNeighborhood: () => FakeCollection;
   connectedEdges: () => FakeCollection;
+  filter: (predicate: (h: ElementHandle) => boolean) => FakeCollection;
+  toArray: () => ElementHandle[];
+  sourceEndpoint: () => { x: number; y: number };
+  targetEndpoint: () => { x: number; y: number };
+  controlPoints: () => unknown;
   outerWidth: () => number;
   outerHeight: () => number;
   length: number;
@@ -47,6 +54,11 @@ const emptyHandle: ElementHandle = {
   neighborhood: () => new FakeCollection([]),
   closedNeighborhood: () => new FakeCollection([emptyHandle]),
   connectedEdges: () => new FakeCollection([]),
+  filter: () => new FakeCollection([]),
+  toArray: () => [],
+  sourceEndpoint: () => ({ x: 0, y: 0 }),
+  targetEndpoint: () => ({ x: 0, y: 0 }),
+  controlPoints: () => [],
   length: 0,
 };
 class FakeCollection {
@@ -128,21 +140,23 @@ function makeHandle(state: ElementState): ElementHandle {
     addClass: (c) => state.classes.add(c),
     removeClass: (c) => state.classes.delete(c),
     neighborhood: (kind) => fakeCore!.neighborhoodOf(state, kind),
+    // Como no Cytoscape: o elemento, os pontos vizinhos e as relações entre eles.
     closedNeighborhood: () =>
       new FakeCollection([
         makeHandle(state),
         ...fakeCore!.neighborhoodOf(state, 'node').items,
+        ...(state.group === 'nodes' ? fakeCore!.edgesOf(state.id) : []),
       ]),
-    connectedEdges: () =>
+    connectedEdges: () => new FakeCollection(fakeCore!.edgesOf(state.id)),
+    // Um elemento também é uma coleção de um item, como no Cytoscape.
+    filter: (predicate) =>
       new FakeCollection(
-        [...fakeCore!.elementsMap.values()]
-          .filter(
-            (edge) =>
-              edge.group === 'edges' &&
-              (edge.data.source === state.id || edge.data.target === state.id),
-          )
-          .map(makeHandle),
+        predicate(makeHandle(state)) ? [makeHandle(state)] : [],
       ),
+    toArray: () => [makeHandle(state)],
+    sourceEndpoint: () => fakeCore!.positionOf(String(state.data.source)),
+    targetEndpoint: () => fakeCore!.positionOf(String(state.data.target)),
+    controlPoints: () => state.controls,
     length: 1,
   };
 }
@@ -153,13 +167,20 @@ class FakeCore {
   canvasHeight = 600;
   panValue = { x: 0, y: 0 };
   destroyedFlag = false;
-  handlers = new Map<string, (event: unknown) => void>();
+  handlers = new Map<string, ((event: unknown) => void)[]>();
+  addCalls: string[] = [];
+  zoomCalls: unknown[] = [];
   styleUpdate = vi.fn();
+  edgeStyleUpdate = vi.fn();
   center = vi.fn();
   fit = vi.fn();
   resize = vi.fn();
   add(item: { group: 'nodes' | 'edges'; data: Record<string, unknown> }) {
     const id = String(item.data.id);
+    // O Cytoscape recusa um segundo elemento com o mesmo id.
+    if (this.elementsMap.has(id))
+      throw new Error(`Can not create second element with ID \`${id}\``);
+    this.addCalls.push(id);
     const state: ElementState = {
       id,
       data: { ...item.data },
@@ -167,6 +188,7 @@ class FakeCore {
       position: { x: 0, y: 0 },
       selected: false,
       classes: new Set(),
+      controls: [],
     };
     this.elementsMap.set(id, state);
     return makeHandle(state);
@@ -180,6 +202,21 @@ class FakeCore {
   }
   elements() {
     return new FakeCollection([...this.elementsMap.values()].map(makeHandle));
+  }
+  edges() {
+    return { updateStyle: this.edgeStyleUpdate };
+  }
+  positionOf(id: string) {
+    return { ...(this.elementsMap.get(id)?.position ?? { x: 0, y: 0 }) };
+  }
+  edgesOf(id: string) {
+    return [...this.elementsMap.values()]
+      .filter(
+        (edge) =>
+          edge.group === 'edges' &&
+          (edge.data.source === id || edge.data.target === id),
+      )
+      .map(makeHandle);
   }
   getElementById(id: string) {
     const state = this.elementsMap.get(id);
@@ -201,9 +238,15 @@ class FakeCore {
     const callback =
       typeof selectorOrHandler === 'function' ? selectorOrHandler : handler;
     if (!callback) throw new Error(`handler ausente para ${event}`);
-    this.handlers.set(selector ? `${event}:${selector}` : event, callback);
+    const key = selector ? `${event}:${selector}` : event;
+    this.handlers.set(key, [...(this.handlers.get(key) ?? []), callback]);
   }
-  zoom() {
+  zoom(options?: { level: number }) {
+    if (options) {
+      this.zoomCalls.push(options);
+      this.zoomValue = options.level;
+      return undefined;
+    }
     return this.zoomValue;
   }
   width() {
@@ -228,6 +271,10 @@ class FakeCore {
   neighborhoodOf(state: ElementState, kind: string) {
     if (kind !== 'node') return new FakeCollection([]);
     const neighborIds = new Set<string>();
+    if (state.group === 'edges') {
+      neighborIds.add(String(state.data.source));
+      neighborIds.add(String(state.data.target));
+    }
     for (const e of this.elementsMap.values()) {
       if (e.group !== 'edges') continue;
       const source = e.data.source as string;
@@ -242,15 +289,19 @@ class FakeCore {
         .map(makeHandle),
     );
   }
+  trigger(key: string, event: unknown = {}) {
+    (this.handlers.get(key) ?? []).forEach((handler) => handler(event));
+  }
   triggerTap(id: string, edge: boolean) {
-    const handler = this.handlers.get('tap:node, edge');
-    handler?.({ target: { id: () => id, isEdge: () => edge } });
+    this.trigger('tap:node, edge', {
+      target: { id: () => id, isEdge: () => edge },
+    });
   }
   triggerDragfree() {
-    this.handlers.get('dragfree:node')?.({});
+    this.trigger('dragfree:node');
   }
   triggerZoomPan() {
-    this.handlers.get('zoom pan')?.({});
+    this.trigger('zoom pan');
   }
 }
 let fakeCore: FakeCore | null = null;
@@ -364,9 +415,44 @@ function baseProps() {
   };
 }
 
+/** requestAnimationFrame controlado: nada roda até `flush`. */
+function stubFrames() {
+  let next = 0;
+  const queue = new Map<number, FrameRequestCallback>();
+  const raf = vi.fn((callback: FrameRequestCallback) => {
+    next += 1;
+    queue.set(next, callback);
+    return next;
+  });
+  const caf = vi.fn((id: number) => {
+    queue.delete(id);
+  });
+  vi.stubGlobal('requestAnimationFrame', raf);
+  vi.stubGlobal('cancelAnimationFrame', caf);
+  return {
+    raf,
+    caf,
+    pending: () => queue.size,
+    /** Executa os quadros pendentes uma vez, no instante `now`. */
+    flush(now = 0) {
+      const due = [...queue.values()];
+      queue.clear();
+      act(() => due.forEach((callback) => callback(now)));
+    },
+  };
+}
+let frames!: ReturnType<typeof stubFrames>;
+let documentHidden = false;
+
 describe('GraphCanvas', () => {
   beforeEach(() => {
     FakeResizeObserver.instances = [];
+    frames = stubFrames();
+    documentHidden = false;
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      get: () => documentHidden,
+    });
     vi.stubGlobal('ResizeObserver', FakeResizeObserver);
     vi.stubGlobal('document', document);
     Object.defineProperty(document, 'fonts', {
@@ -376,6 +462,7 @@ describe('GraphCanvas', () => {
   });
   afterEach(() => {
     vi.unstubAllGlobals();
+    Reflect.deleteProperty(document, 'hidden');
     fakeCore = null;
     cytoscapeState.style = null;
   });
@@ -610,5 +697,446 @@ describe('GraphCanvas', () => {
     unmount();
 
     expect(observer?.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('liga os eventos do Cytoscape aos nomes e seletores esperados', () => {
+    render(<GraphCanvas {...baseProps()} />);
+    expect([...(fakeCore?.handlers.keys() ?? [])].sort()).toEqual([
+      'add remove:edge',
+      'dragfree:node',
+      'position:node',
+      'tap:node, edge',
+      'zoom pan',
+    ]);
+    // 'zoom pan' tem dois ouvintes: a geometria e o snapshot.
+    expect(fakeCore?.handlers.get('zoom pan')).toHaveLength(2);
+  });
+
+  it('notifica a seleção de uma aresta tocada', () => {
+    const props = baseProps();
+    render(<GraphCanvas {...props} />);
+    fakeCore?.triggerTap('r1', true);
+    expect(props.onSelect).toHaveBeenCalledWith('r1', true);
+  });
+
+  it('envia ao pai as posições e o viewport depois de montar os elementos', () => {
+    const props = { ...baseProps(), positions: { n1: { x: 5, y: 6 } } };
+    render(<GraphCanvas {...props} />);
+    const [positions, viewport] = props.onSnapshot.mock.calls.at(-1) ?? [];
+    expect(Object.keys(positions ?? {}).sort()).toEqual(['n1', 'n2']);
+    expect(positions?.n1).toEqual({ x: 5, y: 6 });
+    expect(viewport).toEqual({ zoom: 1, pan: { x: 0, y: 0 } });
+  });
+
+  it('não recria elementos que já existem e atualiza os dados deles', () => {
+    const props = baseProps();
+    const { rerender } = render(<GraphCanvas {...props} />);
+    expect(fakeCore?.addCalls.sort()).toEqual(['n1', 'n2', 'r1']);
+    rerender(
+      <GraphCanvas
+        {...props}
+        nodes={[makeNode('n1', { label: 'Renomeado' }), props.nodes[1]!]}
+      />,
+    );
+    expect(fakeCore?.addCalls).toHaveLength(3);
+    expect(fakeCore?.elementsMap.get('n1')?.data.label).toBe('Renomeado');
+    rerender(
+      <GraphCanvas
+        {...props}
+        nodes={[...props.nodes, makeNode('n3')]}
+        relations={[]}
+      />,
+    );
+    expect(fakeCore?.addCalls).toHaveLength(4);
+    expect(fakeCore?.addCalls.at(-1)).toBe('n3');
+    expect(fakeCore?.elementsMap.has('r1')).toBe(false);
+    expect(fakeCore?.elementsMap.has('n2')).toBe(true);
+  });
+
+  it('reagenda a geometria quando os dados mudam, sem trocar os grupos', () => {
+    const props = baseProps();
+    const { rerender } = render(<GraphCanvas {...props} />);
+    frames.flush();
+    frames.raf.mockClear();
+    rerender(
+      <GraphCanvas {...props} nodes={[...props.nodes, makeNode('n3')]} />,
+    );
+    expect(frames.raf).toHaveBeenCalledTimes(1);
+    frames.flush();
+    expect(fakeCore?.edgeStyleUpdate).toHaveBeenCalledTimes(2);
+  });
+
+  it('não centraliza de novo na mesma revisão de foco', () => {
+    const props = baseProps();
+    const { rerender } = render(<GraphCanvas {...props} />);
+    rerender(<GraphCanvas {...props} focus="n1" focusRevision={1} />);
+    rerender(<GraphCanvas {...props} focus="n2" focusRevision={1} />);
+    expect(fakeCore?.center).toHaveBeenCalledTimes(1);
+    rerender(<GraphCanvas {...props} focus="n2" focusRevision={2} />);
+    expect(fakeCore?.center).toHaveBeenCalledTimes(2);
+  });
+
+  it('aplica o comando de zoom ao centro do canvas, multiplicando o zoom atual', () => {
+    const props = baseProps();
+    const { rerender } = render(<GraphCanvas {...props} />);
+    expect(fakeCore?.zoomCalls).toEqual([]);
+    rerender(
+      <GraphCanvas {...props} zoomCommand={{ revision: 1, factor: 1.25 }} />,
+    );
+    expect(fakeCore?.zoomCalls).toEqual([
+      { level: 1.25, renderedPosition: { x: 400, y: 300 } },
+    ]);
+    rerender(
+      <GraphCanvas {...props} zoomCommand={{ revision: 2, factor: 0.5 }} />,
+    );
+    expect(fakeCore?.zoomCalls.at(-1)).toEqual({
+      level: 0.625,
+      renderedPosition: { x: 400, y: 300 },
+    });
+  });
+
+  describe('seleção', () => {
+    const props = () => ({
+      ...baseProps(),
+      nodes: [...baseProps().nodes, makeNode('n3')],
+    });
+
+    it('destaca a relação da seleção, esmaece o resto e limpa ao trocar', () => {
+      const { rerender } = render(<GraphCanvas {...props()} selected="n1" />);
+      const state = (id: string) => fakeCore?.elementsMap.get(id);
+      expect(state('n1')?.selected).toBe(true);
+      expect(state('r1')?.classes.has('selected-edge')).toBe(true);
+      expect(state('n2')?.classes.has('neighbor')).toBe(true);
+      expect(state('n3')?.classes.has('faded')).toBe(true);
+      for (const id of ['n1', 'n2', 'r1'])
+        expect(state(id)?.classes.has('faded')).toBe(false);
+      rerender(<GraphCanvas {...props()} selected="n3" />);
+      expect(state('r1')?.classes.has('selected-edge')).toBe(false);
+      expect(state('r1')?.classes.has('faded')).toBe(true);
+      expect(state('n3')?.classes.has('faded')).toBe(false);
+    });
+
+    it('selecionar uma aresta destaca só ela e as pontas', () => {
+      const { rerender } = render(<GraphCanvas {...props()} selected="r1" />);
+      const state = (id: string) => fakeCore?.elementsMap.get(id);
+      expect(state('r1')?.selected).toBe(true);
+      expect(state('r1')?.classes.has('selected-edge')).toBe(true);
+      expect(state('n3')?.classes.has('faded')).toBe(true);
+      expect(state('n3')?.classes.has('selected-edge')).toBe(false);
+      rerender(<GraphCanvas {...props()} selected="" />);
+      for (const [, element] of fakeCore?.elementsMap ?? [])
+        expect([...element.classes]).toEqual([]);
+    });
+
+    it('um id inexistente limpa a seleção anterior', () => {
+      const { rerender } = render(<GraphCanvas {...props()} selected="n1" />);
+      rerender(<GraphCanvas {...props()} selected="não-existe" />);
+      for (const [, element] of fakeCore?.elementsMap ?? []) {
+        expect(element.selected).toBe(false);
+        expect([...element.classes]).toEqual([]);
+      }
+    });
+  });
+
+  describe('grupos de contexto', () => {
+    const group = {
+      id: 'g1',
+      label: 'Contexto A',
+      period: 'séc. XX',
+      nodeIds: ['n1', 'n2', 'fantasma'],
+    };
+    const withGroups = (groups: (typeof group)[]) => ({
+      ...baseProps(),
+      positions: { n1: { x: 100, y: 200 }, n2: { x: 300, y: 260 } },
+      viewport: { zoom: 2, pan: { x: 10, y: 20 } },
+      groups,
+    });
+
+    it('agenda um quadro só para vários eventos e o libera depois de rodar', () => {
+      render(<GraphCanvas {...withGroups([])} />);
+      frames.flush();
+      expect(fakeCore?.edgeStyleUpdate).toHaveBeenCalledTimes(1);
+      frames.raf.mockClear();
+      fakeCore?.trigger('position:node');
+      fakeCore?.trigger('add remove:edge');
+      fakeCore?.trigger('zoom pan');
+      expect(frames.raf).toHaveBeenCalledTimes(1);
+      frames.flush();
+      expect(fakeCore?.edgeStyleUpdate).toHaveBeenCalledTimes(2);
+      fakeCore?.trigger('position:node');
+      expect(frames.raf).toHaveBeenCalledTimes(2);
+    });
+
+    it('posiciona o nome do grupo acima do ponto mais alto, centrado, em pixels do contêiner', () => {
+      const { container } = render(<GraphCanvas {...withGroups([group])} />);
+      expect(container.querySelector('.context-group')).toBeNull();
+      frames.flush();
+      const label = container.querySelector<HTMLElement>('.context-group');
+      // x = (100 + 300) / 2; topo = min(200, 260) - 34/2; y = topo - 22.
+      // Pixels: x * 2 + 10, y * 2 + 20.
+      expect(label?.style.left).toBe('410px');
+      expect(label?.style.top).toBe('342px');
+      expect(label?.querySelector('.context-group-name')?.textContent).toBe(
+        'Contexto A',
+      );
+      expect(label?.querySelector('.context-group-period')?.textContent).toBe(
+        'séc. XX',
+      );
+    });
+
+    it('não desenha grupo sem nenhum ponto no mapa e recalcula ao trocar os grupos', () => {
+      const props = withGroups([{ ...group, nodeIds: ['x', 'y'] }]);
+      const { container, rerender } = render(<GraphCanvas {...props} />);
+      frames.flush();
+      expect(container.querySelector('.context-group')).toBeNull();
+      frames.raf.mockClear();
+      rerender(<GraphCanvas {...props} groups={[group]} />);
+      expect(frames.raf).toHaveBeenCalledTimes(1);
+      frames.flush();
+      expect(container.querySelectorAll('.context-group')).toHaveLength(1);
+    });
+
+    it('depois de desmontar, o quadro pendente é cancelado e um tardio não faz nada', () => {
+      const { unmount } = render(<GraphCanvas {...withGroups([group])} />);
+      const core = fakeCore;
+      const late = frames.raf.mock.calls.at(-1)?.[0];
+      const id = frames.raf.mock.results.at(-1)?.value;
+      unmount();
+      expect(frames.caf).toHaveBeenCalledWith(id);
+      late?.(0);
+      expect(core?.edgeStyleUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('fluxo da relação selecionada', () => {
+    const flowProps = (extra: Record<string, unknown> = {}) => ({
+      ...baseProps(),
+      positions: { n1: { x: 0, y: 0 }, n2: { x: 400, y: 0 } },
+      viewport: { zoom: 1.2, pan: { x: 5, y: 7 } },
+      selected: 'n1',
+      flowEnabled: true,
+      ...extra,
+    });
+    const layer = (container: HTMLElement) =>
+      container.querySelector('svg.flow-layer') as SVGSVGElement;
+    // Posição inicial da bolinha: soma dos códigos do id módulo 100 (r1 = 0,63).
+    const arrow = (container: HTMLElement) => {
+      const polygon = layer(container).querySelector('polygon');
+      const match = /translate\(([\d.-]+) ([\d.-]+)\) rotate\(([\d.-]+)\)/.exec(
+        polygon?.getAttribute('transform') ?? '',
+      );
+      return match
+        ? { x: Number(match[1]), y: Number(match[2]), angle: Number(match[3]) }
+        : null;
+    };
+
+    it('desenha a seta sobre a relação direcional e a faz andar pelo comprimento do trajeto', () => {
+      vi.spyOn(Element.prototype, 'clientWidth', 'get').mockReturnValue(640);
+      vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(480);
+      const { container } = render(<GraphCanvas {...flowProps()} />);
+      expect(layer(container).innerHTML).toBe('');
+      frames.flush(1000);
+      // 0,63 * 400 = 252 no modelo; * 1,2 + 5 e * 0 + 7 em pixels.
+      expect(arrow(container)).toEqual({ x: 307.4, y: 7, angle: 0 });
+      const polygon = layer(container).querySelector('polygon');
+      expect(polygon?.getAttribute('points')).toBe('-3.4,-3 4,0 -3.4,3');
+      expect(polygon?.getAttribute('fill')).toBe('#2145d8');
+      expect(layer(container).getAttribute('width')).toBe('640');
+      expect(layer(container).getAttribute('height')).toBe('480');
+      // Duração = 400 * 1,2 * 9 = 4320 ms: 2160 ms andam meia volta.
+      frames.flush(3160);
+      expect(arrow(container)?.x).toBe(67.4);
+      // Relógio que volta não faz a seta recuar.
+      frames.flush(2000);
+      expect(arrow(container)?.x).toBe(67.4);
+      // O laço continua: sempre há um próximo quadro.
+      expect(frames.pending()).toBeGreaterThan(0);
+    });
+
+    it('limita a duração entre 3 e 5 segundos', () => {
+      const short = render(
+        <GraphCanvas
+          {...flowProps({
+            positions: { n1: { x: 0, y: 0 }, n2: { x: 100, y: 0 } },
+            viewport: { zoom: 1, pan: { x: 0, y: 0 } },
+          })}
+        />,
+      );
+      frames.flush(0);
+      expect(arrow(short.container)?.x).toBe(63);
+      // 100 * 1 * 9 = 900 sobe para 3000: 1500 ms são meia volta.
+      frames.flush(1500);
+      expect(arrow(short.container)?.x).toBe(13);
+      short.unmount();
+
+      const long = render(
+        <GraphCanvas
+          {...flowProps({
+            positions: { n1: { x: 0, y: 0 }, n2: { x: 1000, y: 0 } },
+            viewport: { zoom: 1, pan: { x: 0, y: 0 } },
+          })}
+        />,
+      );
+      frames.flush(0);
+      expect(arrow(long.container)?.x).toBe(630);
+      // 1000 * 9 = 9000 desce para 5000: 2500 ms são meia volta.
+      frames.flush(2500);
+      expect(arrow(long.container)?.x).toBe(130);
+    });
+
+    it('relação simétrica não ganha seta', () => {
+      const props = flowProps();
+      const symmetric = {
+        ...catalog,
+        relationTypes: [{ ...catalog.relationTypes[0]!, symmetric: true }],
+      };
+      const { container } = render(
+        <GraphCanvas {...props} catalog={symmetric} />,
+      );
+      frames.flush(1000);
+      expect(layer(container).querySelector('polygon')).toBeNull();
+    });
+
+    it('segue a curva dos pontos de controle e aceita aresta sem controles', () => {
+      const { container } = render(<GraphCanvas {...flowProps()} />);
+      const edge = fakeCore!.elementsMap.get('r1')!;
+      edge.controls = [{ x: 200, y: 100 }];
+      frames.flush(1000);
+      expect(arrow(container)?.y).toBeGreaterThan(20);
+      edge.controls = undefined;
+      frames.flush(1000);
+      expect(arrow(container)?.y).toBe(7);
+    });
+
+    it('refaz o trajeto quando a geometria da aresta muda', () => {
+      const { container } = render(
+        <GraphCanvas
+          {...flowProps({ viewport: { zoom: 1, pan: { x: 0, y: 0 } } })}
+        />,
+      );
+      frames.flush(0);
+      expect(arrow(container)?.x).toBe(252);
+      fakeCore!.elementsMap.get('n2')!.position = { x: 100, y: 0 };
+      frames.flush(0);
+      expect(arrow(container)?.x).toBe(63);
+    });
+
+    it('pula a aresta com ponta ou controle não finito', () => {
+      const { container } = render(<GraphCanvas {...flowProps()} />);
+      const edge = fakeCore!.elementsMap.get('r1')!;
+      for (const controls of [
+        [{ x: Number.NaN, y: 0 }],
+        [{ x: 0, y: Number.POSITIVE_INFINITY }],
+      ]) {
+        edge.controls = controls;
+        frames.flush(1000);
+        expect(layer(container).querySelector('polygon')).toBeNull();
+      }
+      edge.controls = [];
+      fakeCore!.elementsMap.get('n2')!.position = { x: Number.NaN, y: 0 };
+      frames.flush(1000);
+      expect(layer(container).querySelector('polygon')).toBeNull();
+    });
+
+    it('pula o trajeto sem comprimento e desenha o de comprimento exatamente 1', () => {
+      const { container } = render(
+        <GraphCanvas
+          {...flowProps({
+            positions: { n1: { x: 0, y: 0 }, n2: { x: 0, y: 0 } },
+            viewport: { zoom: 1, pan: { x: 0, y: 0 } },
+          })}
+        />,
+      );
+      frames.flush(0);
+      expect(layer(container).querySelector('polygon')).toBeNull();
+      fakeCore!.elementsMap.get('n2')!.position = { x: 1, y: 0 };
+      frames.flush(0);
+      expect(arrow(container)).not.toBeNull();
+    });
+
+    it('para de desenhar uma relação que saiu do mapa antes de o resto reagir', () => {
+      const { container } = render(<GraphCanvas {...flowProps()} />);
+      frames.flush(1000);
+      expect(arrow(container)).not.toBeNull();
+      fakeCore!.elementsMap.delete('r1');
+      frames.flush(1100);
+      expect(layer(container).innerHTML).toBe('');
+    });
+
+    it('sem o fluxo ligado não agenda quadros; desligar cancela e limpa a camada', () => {
+      const off = flowProps({ flowEnabled: false });
+      const { container, rerender } = render(<GraphCanvas {...off} />);
+      frames.flush(1000);
+      frames.flush(2000);
+      expect(layer(container).querySelector('polygon')).toBeNull();
+      rerender(<GraphCanvas {...flowProps()} />);
+      frames.flush(3000);
+      expect(arrow(container)).not.toBeNull();
+      const scheduled = frames.raf.mock.results.at(-1)?.value;
+      rerender(<GraphCanvas {...off} />);
+      expect(frames.caf).toHaveBeenCalledWith(scheduled);
+      expect(layer(container).innerHTML).toBe('');
+      frames.flush(4000);
+      expect(layer(container).innerHTML).toBe('');
+    });
+
+    it('com a aba oculta não anima; ao voltar, retoma sem pular o tempo escondido', () => {
+      documentHidden = true;
+      const { container } = render(<GraphCanvas {...flowProps()} />);
+      // O único quadro agendado é o da geometria; nenhum de fluxo.
+      frames.flush(1000);
+      expect(layer(container).querySelector('polygon')).toBeNull();
+      expect(frames.pending()).toBe(0);
+
+      documentHidden = false;
+      vi.spyOn(performance, 'now').mockReturnValue(50_000);
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      expect(frames.pending()).toBe(1);
+      // Um segundo evento de aba visível não duplica o laço.
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      expect(frames.pending()).toBe(1);
+      frames.flush(50_000);
+      const first = arrow(container)?.x ?? 0;
+      frames.flush(51_000);
+      expect(arrow(container)?.x).toBeGreaterThan(first);
+
+      // Ocultar cancela o quadro e limpa a camada.
+      const scheduled = frames.raf.mock.results.at(-1)?.value;
+      documentHidden = true;
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      expect(frames.caf).toHaveBeenCalledWith(scheduled);
+      expect(layer(container).innerHTML).toBe('');
+
+      // Voltar zera o relógio de cada trajeto: o primeiro quadro não avança.
+      documentHidden = false;
+      vi.spyOn(performance, 'now').mockReturnValue(900_000);
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      frames.flush(900_300);
+      const resumed = arrow(container)?.x ?? 0;
+      // 300 ms de uma volta de 4320 ms, a partir da posição de antes.
+      const expected =
+        (((first / 1.2 - 5 / 1.2) / 400 + 1000 / 4320 + 300 / 4320) % 1) * 400;
+      expect(resumed).toBeCloseTo(expected * 1.2 + 5, 0);
+    });
+
+    it('ao desmontar, cancela o quadro e deixa de ouvir a visibilidade da aba', () => {
+      const { unmount } = render(<GraphCanvas {...flowProps()} />);
+      const scheduled = frames.raf.mock.results.at(-1)?.value;
+      frames.raf.mockClear();
+      unmount();
+      expect(frames.caf).toHaveBeenCalledWith(scheduled);
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      expect(frames.raf).not.toHaveBeenCalled();
+    });
   });
 });

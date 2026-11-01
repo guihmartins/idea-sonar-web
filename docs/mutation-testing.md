@@ -2,8 +2,6 @@
 
 StrykerJS 10.1.1 com runner Vitest 10.1.1 e checker TypeScript 10.1.1, Node 24.19.0, TypeScript 5.9.3 e Vitest 5.0.5. Dependências exatas e lockfile versionados.
 
-> **Medição pendente.** Nenhuma nota abaixo vale para a `main` atual: a última rodada completa é anterior ao merge do Atlas e à ampliação do escopo. Uma nova medição da `main` está planejada para uma fase posterior; até lá, os números da seção histórica servem só como referência de método.
-
 ## Escopo atual
 
 Todo o código de `src`, o mesmo escopo da cobertura (`qualityExclude` em `vitest.config.ts`, espelhado em `mutate` de `stryker.config.mjs`). Ficam de fora:
@@ -30,6 +28,14 @@ Arquivos: `stryker.config.mjs` e `vitest.mutation.config.ts`.
 - **Relatórios:** texto no terminal, HTML em `reports/mutation/index.html` e JSON em `reports/mutation/mutation.json`. `reports/` e `.stryker-tmp/` são ignorados no Git, no Docker e no formatter.
 - **Supressões:** `// Stryker disable` só para mutante de fato equivalente, com o motivo no comentário. Para texto PT-BR, a regra é asserção no texto, não supressão.
 
+## Portão por arquivo do núcleo
+
+O `break` de 80% é global: a média de arquivos simples cobre um arquivo central fraco. `npm run test:mutation:gate` (`scripts/mutation-gate.mjs`) lê `reports/mutation/mutation.json`, calcula a nota de cada arquivo do núcleo com a mesma fórmula do Stryker e sai com código 1 se algum ficar abaixo de 80%. Não refaz a mutação: roda depois do `npm run test:mutation`, em um segundo.
+
+- **Núcleo:** `src/api/**` (transporte, adapter e schemas), `src/graph/**` (ledger, elementos, estilos, layout, fluxo, restauração e canvas) e `src/pages/editor/payload.ts` (o que vira corpo de gravação). Telas e componentes de apresentação ficam só no piso global.
+- **Uso:** `node scripts/mutation-gate.mjs [relatório.json] [mínimo]`; os padrões são `reports/mutation/mutation.json` e `80`.
+- O script imprime a nota global, as notas do núcleo e quantos mutantes seguem abertos em cada arquivo; falha também se o relatório não trouxer nenhum arquivo do núcleo (escopo do Stryker alterado por engano).
+
 O Stryker não gera mutante para atributo nem para texto de JSX (`className`, `role`, `aria-label`, conteúdo de elemento). Os mutantes de tela são condicionais, operadores lógicos e relacionais, literais em expressões, arrays e objetos; é neles que os testes de tela precisam afirmar algo.
 
 ## Reprodução
@@ -43,16 +49,58 @@ npx stryker run --force          # ignora o estado incremental
 
 Não exige API, token nem variáveis de provedor. O workflow **Mutation tests** (`.github/workflows/mutation.yml`) só roda por `workflow_dispatch` e guarda o relatório como artefato; não roda em push nem em PR. O CI automático segue arquivado em `.github/workflows-disabled/`.
 
+Cuidados com o estado incremental:
+
+- O Stryker só reexecuta um mutante **sobrevivente** quando um teste novo passa a cobri-lo. Mutantes **estáticos** (constantes e literais avaliados na carga do módulo, como `palette.ts`, tabelas e `useState` inicial) não têm cobertura por teste, então um sobrevivente estático nunca é reavaliado por teste novo. Depois de escrever testes para um arquivo, remova do `reports/stryker-incremental.json` os sobreviventes com `"static": true` desse arquivo (ou use `--force`) antes de remedir.
+- Para iterar em poucos arquivos sem tocar no estado principal, use um arquivo de configuração temporário que importe `stryker.config.mjs` e troque `incrementalFile`, `jsonReporter.fileName` e `reporters`; rode com `npx stryker run <config> --mutate 'src/graph/*.ts'`. O `--mutate` aceita lista separada por vírgula, mas não expande `{ts,tsx}` dentro dela.
+- O `tsconfig.json` também checa os testes: erro de tipo em teste derruba o checker do Stryker na inicialização, antes de qualquer mutante.
+
 A nota usa `(Killed + Timeout) / (Killed + Timeout + Survived + NoCoverage)`. Erros de compilação não entram na conta. Sobrevivência não prova bug: pode ser falta de teste ou alteração equivalente sob dados válidos do contrato, e cada mutante deve ser lido pelo efeito.
 
-## Pontos fracos conhecidos
+## Rodada atual: fase 6 (01/11/2026)
 
-Do último relatório (anterior ao merge do Atlas), os dois arquivos que mais pesavam eram `src/app/App.tsx`, com nota **0%**, e `src/api/adapter.ts`, com **68%**. Foram reforçados depois, ainda sem nova medição:
+Execução completa sobre o escopo atual, que já inclui o Atlas (estilos, canvas, layout e MapPage). A medição anterior do mesmo código, antes desta fase, deu **72,69%** e reprovava o `break`; depois dos testes novos: **90,70%** (3216 mutantes válidos, 299 abertos), `npm run test:mutation` com código de saída 0 e `npm run test:mutation:gate` também.
 
-- `tests/integration/app-routes.test.tsx`: título de cada rota, redirecionamentos de `/`, `/login` e `/callback`, página não encontrada, cabeçalho e navegação fora do mapa, foco no conteúdo ao navegar.
-- `tests/unit/adapter-requests.test.ts`: URLs exatas de `search`, `candidates`, `neighbors`, `list` e `history`, vazios e nulos omitidos, método, corpo e cabeçalhos de `save`, `undo`, `resolve` e `importBatch`, também pelo transporte real.
+| Arquivo                                    |        Antes |       Depois | Abertos depois |
+| ------------------------------------------ | -----------: | -----------: | -------------: |
+| `src/graph/styles/index.ts` (núcleo)       |        19,1% |        95,5% |              7 |
+| `src/graph/GraphCanvas.tsx` (núcleo)       |        31,5% |        98,2% |              3 |
+| `src/graph/styles/palette.ts` (núcleo)     |        41,7% |         100% |              0 |
+| `src/graph/layout/positions.ts` (núcleo)   |        62,7% |        98,8% |              1 |
+| `src/graph/adapter/elements.ts` (núcleo)   |        81,8% |        95,5% |              1 |
+| `src/api/domain.ts` (núcleo)               |        76,9% |         100% |              0 |
+| `src/pages/editor/payload.ts` (núcleo)     |        87,4% |        97,8% |              4 |
+| `src/graph/flow.ts`, `restore.ts` (núcleo) | 91,4%, 86,3% | 93,5%, 86,3% |           6, 7 |
+| `src/api/client.ts`, `adapter.ts` (núcleo) | 92,3%, 92,5% |  92,3%, 100% |          14, 0 |
+| `src/pages/MapPage.tsx`                    |        60,7% |        83,0% |            105 |
+| `src/pages/editor/Contextualization.tsx`   |        67,5% |        92,8% |              6 |
+| `src/pages/EntityEditor.tsx`               |        72,2% |        84,0% |             62 |
+| `src/app/services.tsx`                     |        73,7% |        91,9% |              8 |
+| `src/pages/editor/pickers.tsx`             |        75,9% |        92,0% |             11 |
+| `src/pages/RecordsPage.tsx`                |        80,9% |        91,4% |             28 |
 
-Desde aquele relatório entraram o Atlas, os seletores por busca, o grupo de contextualização do editor e o lote de importação; esse código também ainda não foi medido.
+O que os testes novos afirmam (comportamento, não constante):
+
+- **Estilo do grafo:** glifo por tipo (incluindo a figura em triângulo), traço por status de evidência, espessura por intensidade (e +0,3 na relação selecionada), seta só em relação direcional, cor por índice de contexto, nó selecionado invertido, leque de relações paralelas (as duas direções caem em lados opostos) e cada ramo da curva em S, com coordenadas exatas sobre um Cytoscape real sem tela. Os valores da paleta são afirmados exatos de propósito: são o contrato visual de `DESIGN.md` ("Grafo sobre a prancha"), com 3:1 de contraste sobre o marfim conferido por conta.
+- **Layout:** centro do canvas com zoom e pan, caixa do rótulo e colisão (encostar conta como colisão, 1px de folga não), e o slot de cada tentativa.
+- **`GraphCanvas`:** nomes e seletores dos eventos, snapshot de posições e viewport, seleção e destaque da vizinhança, grupos de contexto em pixels do contêiner, comando de zoom, foco, ajuste, cancelamento ao desmontar e o fluxo animado (duração entre 3 e 5 s, retomada da aba oculta sem pular o tempo). O Cytoscape é um dublê que, como o real, recusa id repetido.
+- **Telas:** trilho de seções, painéis do ponto e da relação, legenda, modo lista, foco, restauração de view, estados de carregamento, vazio e erro com nova tentativa, seletores por busca, grupo de contextualização, forma dos campos do editor, ciclo de salvar, arquivar e conflito, e as telas do portão de sessão.
+
+### Mutantes abertos que não valem um teste
+
+Nenhum `// Stryker disable` foi usado; os abertos ficam no relatório. Os do núcleo que são equivalentes:
+
+- `styles/index.ts` `hashSign`, `hash * 31 - código`: só a paridade do hash é usada, e `31` é ímpar, então `+` e `-` dão a mesma paridade.
+- `styles/index.ts` `parallelSlot`, comparador do `sort` (cinco mutantes): os ids são únicos, e o `sort` do V8 só olha se o resultado é negativo; devolver `0` no lugar de `1` não muda a ordem. `index <= 0 ? 0 : index` também não: com índice 0 os dois lados dão 0.
+- `positions.ts` `attempt <= maxAttempts`: a tentativa 47 já aceita à força (`attempt === maxAttempts - 1`) e sai do laço antes da 48.
+- `GraphCanvas.tsx` `[]` trocado por `["…"]` nas dependências do efeito de montagem: uma constante se comporta como `[]`. `stop()` dentro de `!flowEnabled`: o efeito anterior já chama `stop()` na limpeza. `state.key !== key` para `true`: só refaz o trajeto amostrado a cada quadro, mesmo resultado, mais custo.
+- `elements.ts` `n.contexts[0] ?? ''`: ramo inalcançável, porque o ramo já exige lista não vazia.
+
+Os demais abertos do núcleo (`client.ts` 14, `restore.ts` 7, `flow.ts` 6, `payload.ts` 4) são guardas sobrepostas, mensagens de erro raras e limites de laço do cálculo de amostragem, sem teste dedicado. Nenhum arquivo do núcleo está abaixo de 80%.
+
+### Fora do núcleo, ainda abertos
+
+`MapPage.tsx` (105) e `EntityEditor.tsx` (62) concentram quase metade dos abertos. A maioria é `queryKey`, textos de aria e ícones SVG, estados de interface que só aparecem em corrida (desmontar durante uma chamada) e `setX` de reinício que não muda o que se vê. `config/schema.ts` (14, 86,1%) tem validações sobrepostas, descritas na rodada histórica abaixo.
 
 ## Histórico: rodada do marco 1 (seis módulos)
 

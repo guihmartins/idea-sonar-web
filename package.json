@@ -28,6 +28,7 @@
     "format:check": "prettier --check src tests scripts *.ts *.mjs *.json *.yml docs README.md .github",
     "test:mutation": "stryker run",
     "test:mutation:baseline": "vitest run --config vitest.mutation.config.ts",
+    "test:mutation:gate": "node scripts/mutation-gate.mjs",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix --max-warnings 0"
   },

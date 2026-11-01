@@ -53,6 +53,7 @@ npm run build             # contracts:check + lint + typecheck + vite build + ch
 npm run contracts:import -- <openapi.json> <commit-40-hex>   # novo snapshot da API
 npm run contracts:generate                                   # regenera src/api/generated
 npm run test:mutation     # Stryker — só manual
+npm run test:mutation:gate # piso de 80% por arquivo do núcleo, sobre o último relatório
 ```
 
 Antes de concluir: `lint`, `typecheck`, `test:coverage`, `format:check` e, se
@@ -81,6 +82,11 @@ essa API descartável no futuro.
   mudaram, e `--force` refaz tudo. Relatório em `reports/mutation/`.
   `vitest.mutation.config.ts` roda testes unitários e de integração de tela,
   exceto os três que sobem subprocessos (`build-env`, `lint`, `contracts`).
+- Portão por arquivo: o 80% global deixa um arquivo central fraco passar na
+  média dos simples. `test:mutation:gate` (`scripts/mutation-gate.mjs`) lê
+  `reports/mutation/mutation.json` e exige 80% em cada arquivo do núcleo
+  (`src/api/**`, `src/graph/**`, `src/pages/editor/payload.ts`); sai com 1 se
+  algum ficar abaixo. Roda depois do `test:mutation`, sem refazer a mutação.
 - `// Stryker disable` só para mutante de fato equivalente, com o motivo no
   comentário. Para texto PT-BR, prefira asserções no texto a supressões.
 

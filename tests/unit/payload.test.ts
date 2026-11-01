@@ -8,6 +8,7 @@ import {
   identifiersBody,
   parseAliases,
   type EditorDraft,
+  type EvidenceDraft,
 } from '../../src/pages/editor/payload';
 import type { Api } from '../../src/api/adapter';
 import { ApiError } from '../../src/api/client';
@@ -639,5 +640,232 @@ describe('buildEditorBody — relations', () => {
       fakeApi({ a: 'person', b: 'person' }),
     );
     expect(body).toMatchObject({ contested: false, contestationNote: null });
+  });
+});
+
+describe('payload — bordas que as regras sobrepostas escondiam', () => {
+  it('nome com idioma sem espaço antes do parêntese, e parêntese no meio não é idioma', () => {
+    expect(parseAliases('Jung(de)')).toEqual([
+      { alias: 'Jung', language: 'de' },
+    ]);
+    expect(parseAliases('Jung (de) filho')).toEqual([
+      { alias: 'Jung (de) filho', language: 'und' },
+    ]);
+    expect(parseAliases('(de)')).toEqual([{ alias: '(de)', language: 'und' }]);
+    expect(parseAliases('Carl  (pt-BR)')).toEqual([
+      { alias: 'Carl', language: 'pt-BR' },
+    ]);
+  });
+
+  it('período com início e fim no mesmo ano é aceito; o fim anterior não', async () => {
+    const base = {
+      kind: 'person',
+      label: 'X',
+      description: 'd',
+      precision: 'exact',
+      startEra: 'ce',
+      endEra: 'ce',
+    };
+    const body = (await buildEditorBody(
+      'nodes',
+      draft({ fields: { ...base, start: '50', end: '50' } }),
+      catalog,
+      {} as Api,
+    )) as { startYear: number; endYear: number };
+    expect([body.startYear, body.endYear]).toEqual([50, 50]);
+    await expect(
+      buildEditorBody(
+        'nodes',
+        draft({ fields: { ...base, start: '50', end: '49' } }),
+        catalog,
+        {} as Api,
+      ),
+    ).rejects.toThrow('O fim do período deve ser posterior ao início.');
+  });
+
+  it('sem era informada, o ano vale como d.C.; campos de ano ausentes são período aberto', async () => {
+    const body = (await buildEditorBody(
+      'nodes',
+      draft({
+        fields: {
+          kind: 'person',
+          label: 'X',
+          description: 'd',
+          precision: 'approximate',
+          start: '10',
+        },
+      }),
+      catalog,
+      {} as Api,
+    )) as { startYear: number | null; endYear: number | null };
+    expect(body.startYear).toBe(10);
+    expect(body.endYear).toBeNull();
+    const bce = (await buildEditorBody(
+      'nodes',
+      draft({
+        fields: {
+          kind: 'person',
+          label: 'X',
+          description: 'd',
+          precision: 'approximate',
+          start: '10',
+          startEra: 'bce',
+        },
+      }),
+      catalog,
+      {} as Api,
+    )) as { startYear: number };
+    expect(bce.startYear).toBe(-9);
+  });
+
+  it('erros de identificador com índice de dois dígitos e sem prefixo de campo', () => {
+    const rows = Array.from({ length: 12 }, (_, i) => ({
+      scheme: 'wikidata' as const,
+      value: `Q${i}`,
+    }));
+    const error = new ApiError(400, 'inválido', {
+      details: [
+        { path: 'identifiers.10.value', message: 'décima primeira linha' },
+        { path: 'identifiers.1.value', message: 'segunda linha' },
+        { path: 'xidentifiers.3.value', message: 'não é do campo' },
+        { path: 'identifiers.3.valuex', message: 'sufixo estranho' },
+      ],
+    } as never);
+    const issues = identifierIssues(error, rows);
+    expect(issues.rows[10]).toBe('décima primeira linha');
+    expect(issues.rows[1]).toBe('segunda linha');
+    expect(Object.keys(issues.rows)).toEqual(['1', '10']);
+    expect(issues.general).toEqual([]);
+  });
+});
+
+describe('buildEditorBody — regras de relação que dependem de cada condição', () => {
+  const baseFields = {
+    status: 'active',
+    sourceId: 'a',
+    targetId: 'b',
+    type: 'parallel_to',
+    claim: 'afirmação',
+    justification: 'justificativa',
+    evidenceStatus: 'documented',
+  };
+  const support: EvidenceDraft = {
+    ...emptyEvidence,
+    sourceId: 's',
+    stance: 'supports' as const,
+    sourceKind: 'secondary' as const,
+    locator: 'p.1',
+    explanation: 'ok',
+  };
+  const relation = (
+    kinds: Record<string, Node['kind']>,
+    evidence = [support],
+    extra: Partial<EditorDraft> = {},
+  ) =>
+    buildEditorBody(
+      'relations',
+      draft({ fields: baseFields, evidence, ...extra }),
+      catalog,
+      fakeApi(kinds),
+    );
+
+  it('origem e destino precisam casar juntos com um par permitido (pessoa → conceito)', async () => {
+    await expect(
+      relation({ a: 'person', b: 'concept' }),
+    ).resolves.toMatchObject({ sourceId: 'a', targetId: 'b' });
+    // Origem certa, destino errado.
+    await expect(relation({ a: 'person', b: 'person' })).rejects.toThrow(
+      'Tipos incompatíveis',
+    );
+    // Destino certo, origem errada.
+    await expect(relation({ a: 'concept', b: 'concept' })).rejects.toThrow(
+      'Tipos incompatíveis',
+    );
+  });
+
+  it('o suporte precisa ser "sustenta", ter fonte e não ser conversa, tudo ao mesmo tempo', async () => {
+    const kinds = { a: 'person', b: 'concept' } as const;
+    const failing = [
+      { ...support, stance: 'challenges' as const },
+      { ...support, stance: 'contextualizes' as const },
+      { ...support, sourceId: '' },
+      { ...support, sourceKind: 'conversation' as const },
+    ];
+    for (const entry of failing)
+      await expect(relation(kinds, [entry])).rejects.toThrow(
+        'fonte é obrigatória',
+      );
+    // Basta uma evidência boa entre as ruins.
+    await expect(relation(kinds, [...failing, support])).resolves.toBeDefined();
+  });
+
+  it('contestada com evidências pró e contra ainda exige a nota, e a nota em branco não vale', async () => {
+    const challenge = {
+      ...support,
+      sourceId: 't',
+      stance: 'challenges' as const,
+    };
+    const kinds = { a: 'person', b: 'concept' } as const;
+    await expect(
+      relation(kinds, [support, challenge], { contested: true }),
+    ).rejects.toThrow('Explique a contestação.');
+    const blank = buildEditorBody(
+      'relations',
+      draft({
+        fields: { ...baseFields, contestationNote: '   ' },
+        evidence: [support, challenge],
+        contested: true,
+      }),
+      catalog,
+      fakeApi(kinds),
+    );
+    await expect(blank).rejects.toThrow('Explique a contestação.');
+  });
+});
+
+describe('buildEditorBody — URL de fonte e apelidos ausentes', () => {
+  const source = (canonicalUrl: string) =>
+    buildEditorBody(
+      'sources',
+      draft({
+        fields: {
+          status: 'active',
+          title: 'Título',
+          authorText: 'Autor',
+          canonicalUrl,
+        },
+      }),
+      catalog,
+      fakeApi({}),
+    );
+
+  it('aceita http e https; texto que não é URL e outros protocolos são recusados', async () => {
+    await expect(source('http://example.com/a')).resolves.toMatchObject({
+      canonicalUrl: 'http://example.com/a',
+    });
+    await expect(source('https://example.com/a')).resolves.toMatchObject({
+      canonicalUrl: 'https://example.com/a',
+    });
+    await expect(source('example.com/a')).rejects.toThrow('URL HTTP(S)');
+    await expect(source('mailto:alguem@example.com')).rejects.toThrow(
+      'URL HTTP(S)',
+    );
+  });
+
+  it('ponto sem o campo de outros nomes não leva apelidos', async () => {
+    const body = (await buildEditorBody(
+      'nodes',
+      draft({
+        fields: {
+          kind: 'person',
+          label: 'X',
+          description: 'd',
+          precision: 'unknown',
+        },
+      }),
+      catalog,
+      fakeApi({}),
+    )) as { aliases: unknown[] };
+    expect(body.aliases).toEqual([]);
   });
 });
