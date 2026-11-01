@@ -27,10 +27,12 @@ src/
   auth/                 sessão PKCE (Auth0), usada só com VITE_AUTH_MODE=oidc
   graph/                ledger de expansões, adaptação para Cytoscape, layout, restore
   pages/                MapPage, RecordsPage (listas/imports/pendências/histórico), EntityEditor
+  pages/editor/         payload, seletores por busca, campos comuns e contextualização (lote)
   components/           Feedback, labels (rótulos PT-BR), period (anos astronômicos)
   dev/fixtures.ts       API fictícia em memória, só em dev com VITE_ENABLE_FIXTURES=true
+  dev/fixture-batch.ts  lote de importação e recusas do REST da API fictícia
 contracts/              openapi.json (snapshot da API) + source.json (commit/SHA-256)
-tests/                  unit/, integration/, e2e/ (API real), e2e-fixtures/ (fictício)
+tests/                  unit/, integration/, e2e/ (dist, rede simulada), e2e-fixtures/ (fictício), e2e-real/ (API real descartável)
 infra/docker/           Dockerfile (build Node → nginx não root :8080) e default.conf
 ```
 
@@ -45,6 +47,7 @@ npm run typecheck
 npm test                  # Vitest
 npm run test:coverage     # Vitest + cobertura v8, quebra abaixo de 80%
 npm run test:e2e:fixtures # Playwright desktop+mobile com fixtures (npx playwright install chromium)
+npm run test:e2e:real     # Playwright (só chromium) contra API REAL descartável; veja abaixo
 npm run format:check      # Prettier (npm run format corrige)
 npm run build             # contracts:check + lint + typecheck + vite build + check-dist
 npm run contracts:import -- <openapi.json> <commit-40-hex>   # novo snapshot da API
@@ -54,6 +57,16 @@ npm run test:mutation     # Stryker — só manual
 
 Antes de concluir: `lint`, `typecheck`, `test:coverage`, `format:check` e, se
 tocou telas, `test:e2e:fixtures`. O build exige `VITE_API_BASE_URL`.
+
+`test:e2e:real` (`playwright.real.config.ts`, `tests/e2e-real/`) exige uma **API
+descartável**: em `AUTH_MODE=local`, com um banco de teste que pode ficar sujo e
+`ALLOWED_ORIGINS` incluindo `http://127.0.0.1:4173`. Defina `E2E_API_URL` com a
+origem dela (ex.: `E2E_API_URL=http://127.0.0.1:3000 npm run test:e2e:real`). O
+config faz `vite build` com `VITE_API_BASE_URL=$E2E_API_URL` em `dist-e2e-real/`
+(não mexe no `dist`) e serve com `vite preview` em 127.0.0.1:4173. Sem
+`E2E_API_URL` o teste é pulado com uma mensagem. Nunca aponte para dados reais:
+o teste cria e desfaz um lote sintético. Um `make e2e` do workspace deve subir
+essa API descartável no futuro.
 
 ## Portões de qualidade
 
