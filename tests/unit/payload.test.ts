@@ -8,6 +8,7 @@ import {
   identifiersBody,
   parseAliases,
   type EditorDraft,
+  type EvidenceDraft,
 } from '../../src/pages/editor/payload';
 import type { Api } from '../../src/api/adapter';
 import { ApiError } from '../../src/api/client';
@@ -735,5 +736,136 @@ describe('payload — bordas que as regras sobrepostas escondiam', () => {
     expect(issues.rows[1]).toBe('segunda linha');
     expect(Object.keys(issues.rows)).toEqual(['1', '10']);
     expect(issues.general).toEqual([]);
+  });
+});
+
+describe('buildEditorBody — regras de relação que dependem de cada condição', () => {
+  const baseFields = {
+    status: 'active',
+    sourceId: 'a',
+    targetId: 'b',
+    type: 'parallel_to',
+    claim: 'afirmação',
+    justification: 'justificativa',
+    evidenceStatus: 'documented',
+  };
+  const support: EvidenceDraft = {
+    ...emptyEvidence,
+    sourceId: 's',
+    stance: 'supports' as const,
+    sourceKind: 'secondary' as const,
+    locator: 'p.1',
+    explanation: 'ok',
+  };
+  const relation = (
+    kinds: Record<string, Node['kind']>,
+    evidence = [support],
+    extra: Partial<EditorDraft> = {},
+  ) =>
+    buildEditorBody(
+      'relations',
+      draft({ fields: baseFields, evidence, ...extra }),
+      catalog,
+      fakeApi(kinds),
+    );
+
+  it('origem e destino precisam casar juntos com um par permitido (pessoa → conceito)', async () => {
+    await expect(
+      relation({ a: 'person', b: 'concept' }),
+    ).resolves.toMatchObject({ sourceId: 'a', targetId: 'b' });
+    // Origem certa, destino errado.
+    await expect(relation({ a: 'person', b: 'person' })).rejects.toThrow(
+      'Tipos incompatíveis',
+    );
+    // Destino certo, origem errada.
+    await expect(relation({ a: 'concept', b: 'concept' })).rejects.toThrow(
+      'Tipos incompatíveis',
+    );
+  });
+
+  it('o suporte precisa ser "sustenta", ter fonte e não ser conversa, tudo ao mesmo tempo', async () => {
+    const kinds = { a: 'person', b: 'concept' } as const;
+    const failing = [
+      { ...support, stance: 'challenges' as const },
+      { ...support, stance: 'contextualizes' as const },
+      { ...support, sourceId: '' },
+      { ...support, sourceKind: 'conversation' as const },
+    ];
+    for (const entry of failing)
+      await expect(relation(kinds, [entry])).rejects.toThrow(
+        'fonte é obrigatória',
+      );
+    // Basta uma evidência boa entre as ruins.
+    await expect(relation(kinds, [...failing, support])).resolves.toBeDefined();
+  });
+
+  it('contestada com evidências pró e contra ainda exige a nota, e a nota em branco não vale', async () => {
+    const challenge = {
+      ...support,
+      sourceId: 't',
+      stance: 'challenges' as const,
+    };
+    const kinds = { a: 'person', b: 'concept' } as const;
+    await expect(
+      relation(kinds, [support, challenge], { contested: true }),
+    ).rejects.toThrow('Explique a contestação.');
+    const blank = buildEditorBody(
+      'relations',
+      draft({
+        fields: { ...baseFields, contestationNote: '   ' },
+        evidence: [support, challenge],
+        contested: true,
+      }),
+      catalog,
+      fakeApi(kinds),
+    );
+    await expect(blank).rejects.toThrow('Explique a contestação.');
+  });
+});
+
+describe('buildEditorBody — URL de fonte e apelidos ausentes', () => {
+  const source = (canonicalUrl: string) =>
+    buildEditorBody(
+      'sources',
+      draft({
+        fields: {
+          status: 'active',
+          title: 'Título',
+          authorText: 'Autor',
+          canonicalUrl,
+        },
+      }),
+      catalog,
+      fakeApi({}),
+    );
+
+  it('aceita http e https; texto que não é URL e outros protocolos são recusados', async () => {
+    await expect(source('http://example.com/a')).resolves.toMatchObject({
+      canonicalUrl: 'http://example.com/a',
+    });
+    await expect(source('https://example.com/a')).resolves.toMatchObject({
+      canonicalUrl: 'https://example.com/a',
+    });
+    await expect(source('example.com/a')).rejects.toThrow('URL HTTP(S)');
+    await expect(source('mailto:alguem@example.com')).rejects.toThrow(
+      'URL HTTP(S)',
+    );
+  });
+
+  it('ponto sem o campo de outros nomes não leva apelidos', async () => {
+    const body = (await buildEditorBody(
+      'nodes',
+      draft({
+        fields: {
+          kind: 'person',
+          label: 'X',
+          description: 'd',
+          precision: 'unknown',
+        },
+      }),
+      catalog,
+      fakeApi({}),
+    )) as { aliases: unknown[] };
+    expect(body.aliases).toEqual([]);
   });
 });
