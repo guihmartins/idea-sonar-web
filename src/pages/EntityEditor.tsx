@@ -12,15 +12,12 @@ import type {
   Node,
 } from '../api/domain';
 import { Failure } from '../components/Feedback';
-import {
-  conceptScopeLabels,
-  kindLabels,
-  precisionLabels,
-} from '../components/labels';
+import { conceptScopeLabels, kindLabels } from '../components/labels';
 import {
   buildEditorBody,
   evidenceDraft,
   formatAliases,
+  identifierIssues,
 } from './editor/payload';
 import type { EditorDraft, Editable } from './editor/payload';
 import {
@@ -37,7 +34,13 @@ import {
 } from './editor/contextual';
 import type { BatchOutcome, ContextualFlow } from './editor/contextual';
 import { CandidatePicker, NodePicker } from './editor/pickers';
-import { Choice, EvidenceEditor, EvidenceStatusFields } from './editor/fields';
+import {
+  Choice,
+  EvidenceEditor,
+  EvidenceStatusFields,
+  IdentifiersEditor,
+  PeriodFields,
+} from './editor/fields';
 import { typeLabels } from './RecordsPage';
 const editable = ['nodes', 'relations', 'sources', 'contexts'] as const;
 const isEditable = (type: string | undefined): type is Editable =>
@@ -113,6 +116,7 @@ function useEditorForm(type: Editable, initial: Entity | undefined) {
   const [contexts, setContexts] = useState(metadata.contexts);
   const [evidence, setEvidence] = useState(metadata.evidence);
   const [contested, setContested] = useState(metadata.contested);
+  const [identifiers, setIdentifiers] = useState(metadata.identifiers);
   const [actionKey, setActionKey] = useState<string>(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -162,12 +166,14 @@ function useEditorForm(type: Editable, initial: Entity | undefined) {
   async function savePlain() {
     const body = await buildEditorBody(
       type,
-      { fields, contexts, evidence, contested, identifiers: [] },
+      { fields, contexts, evidence, contested, identifiers },
       catalog.data,
       api,
     );
     const saved = await api.save(type, body, actionKey, baseline);
     setBaseline(saved);
+    // A API guarda o identificador normalizado (URL do registro vira o código).
+    if ('identifiers' in saved) setIdentifiers(saved.identifiers);
     setMessage('Registro salvo.');
     setActionKey(crypto.randomUUID());
     await cache.invalidateQueries();
@@ -192,13 +198,14 @@ function useEditorForm(type: Editable, initial: Entity | undefined) {
     if (!id) return;
     const fresh = await api.detail('nodes', id);
     setBaseline(fresh);
+    if ('identifiers' in fresh) setIdentifiers(fresh.identifiers);
     // Com pendências o rascunho da contextualização fica para a nova tentativa.
     if (result.pending > 0) return;
     setFields(initialFields(fresh));
     setEvidence([]);
   }
   async function saveContextual(kind: ContextualFlow) {
-    const draft = { fields, contexts, evidence, contested, identifiers: [] };
+    const draft = { fields, contexts, evidence, contested, identifiers };
     const body =
       kind === 'create'
         ? createContextualBatch(draft, actionKey)
@@ -265,6 +272,7 @@ function useEditorForm(type: Editable, initial: Entity | undefined) {
     contexts,
     evidence,
     contested,
+    identifiers,
     busy,
     error,
     message,
@@ -282,6 +290,7 @@ function useEditorForm(type: Editable, initial: Entity | undefined) {
     setContexts,
     setEvidence,
     setContested,
+    setIdentifiers,
     setActionKey,
     setConflict,
     setError,
@@ -392,6 +401,16 @@ function NodeFields({ model }: { model: EditorModel }) {
         'aliases',
         'Outros nomes (separados por vírgula; idioma opcional, ex.: Jung (de))',
       )}
+      <PeriodFields model={model} />
+      <IdentifiersEditor
+        identifiers={model.identifiers}
+        schemes={model.catalog.data?.identifierSchemes ?? []}
+        issues={identifierIssues(model.error, model.identifiers)}
+        onChange={(next) => {
+          model.setIdentifiers(next);
+          model.setActionKey(crypto.randomUUID());
+        }}
+      />
       <CandidatePicker
         type="contexts"
         label="Contextos"
@@ -434,38 +453,7 @@ function ContextFields({ model }: { model: EditorModel }) {
     <>
       {model.text('label', 'Nome', true)}
       {model.text('regionLabel', 'Região')}
-      {model.text('periodLabel', 'Rótulo do período')}
-      <p>Deixe os anos vazios para período desconhecido.</p>
-      {(['start', 'end'] as const).map((key) => (
-        <div className="form-grid" key={key}>
-          <label>
-            {key === 'start' ? 'Ano inicial' : 'Ano final'}
-            <input
-              type="number"
-              min="1"
-              step="1"
-              value={model.fields[key]}
-              onChange={(e) => model.update(key, e.target.value)}
-            />
-          </label>
-          <label>
-            Era do {key === 'start' ? 'início' : 'fim'}
-            <select
-              value={model.fields[`${key}Era`]}
-              onChange={(e) => model.update(`${key}Era`, e.target.value)}
-            >
-              <option value="ce">d.C.</option>
-              <option value="bce">a.C.</option>
-            </select>
-          </label>
-        </div>
-      ))}
-      <Choice
-        model={model}
-        field="precision"
-        label="Precisão do período"
-        options={precisionLabels}
-      />
+      <PeriodFields model={model} />
       {model.text('notes', 'Notas', false, true)}
     </>
   );
@@ -590,6 +578,7 @@ function ConflictPanel({ model }: { model: EditorModel }) {
           model.setContexts(metadata.contexts);
           model.setEvidence(metadata.evidence);
           model.setContested(metadata.contested);
+          model.setIdentifiers(metadata.identifiers);
           model.setBaseline(conflict);
           model.setConflict(null);
           model.setError(null);
@@ -654,6 +643,7 @@ function editorMetadata(entity: Entity | undefined) {
     evidence:
       entity && 'evidence' in entity ? entity.evidence.map(evidenceDraft) : [],
     contested: entity && 'contested' in entity ? entity.contested : false,
+    identifiers: entity && 'identifiers' in entity ? entity.identifiers : [],
   };
 }
 function TypeFields({ model }: { model: EditorModel }) {
@@ -666,6 +656,8 @@ function TypeFields({ model }: { model: EditorModel }) {
   const Fields = fields[model.type];
   return <Fields model={model} />;
 }
+const formatIdentifiers = (list: { scheme: string; value: string }[]) =>
+  list.map(({ scheme, value }) => `${scheme}: ${value}`).join(', ');
 interface FieldChange {
   label: string;
   draft: string;
@@ -703,6 +695,12 @@ function conflictChanges(model: EditorModel, conflict: Entity): FieldChange[] {
       draft: JSON.stringify(model.evidence, null, 2),
       latest: JSON.stringify(conflict.evidence.map(evidenceDraft), null, 2),
       multiline: true,
+    });
+  if ('identifiers' in conflict)
+    changes.push({
+      label: 'Identificadores',
+      draft: formatIdentifiers(model.identifiers),
+      latest: formatIdentifiers(conflict.identifiers),
     });
   if ('contested' in conflict)
     changes.push({
