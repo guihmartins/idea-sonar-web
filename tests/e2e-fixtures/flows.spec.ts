@@ -341,3 +341,128 @@ test('cria um conceito contextual e a contextualização em um único lote', asy
     ),
   ).toBe(false);
 });
+
+test('cria uma figura com período e identificador e vê tudo no painel do mapa', async ({
+  page,
+}) => {
+  await page.getByRole('link', { name: 'Novo ponto', exact: true }).click();
+  await page.getByLabel('Nome', { exact: true }).fill('Hermes fictício E2E');
+  await page
+    .getByLabel('Descrição', { exact: true })
+    .fill('Figura mítica sintética criada pelo E2E.');
+  await page
+    .getByRole('combobox', { name: 'Tipo', exact: true })
+    .selectOption('figure');
+  await expect(
+    page.getByRole('combobox', { name: 'Escopo do conceito' }),
+  ).toHaveCount(0);
+  await page.getByLabel('Rótulo do período').fill('séc. V a.C.');
+  await page
+    .getByRole('spinbutton', { name: 'Ano inicial', exact: true })
+    .fill('500');
+  await page
+    .getByRole('combobox', { name: 'Era do início', exact: true })
+    .selectOption('bce');
+  await page
+    .getByRole('spinbutton', { name: 'Ano final', exact: true })
+    .fill('400');
+  await page
+    .getByRole('combobox', { name: 'Era do fim', exact: true })
+    .selectOption('bce');
+  await page
+    .getByRole('combobox', { name: 'Precisão do período' })
+    .selectOption('approximate');
+  const identifiers = page.getByRole('group', {
+    name: 'Identificadores',
+    exact: true,
+  });
+  await identifiers
+    .getByRole('button', { name: 'Adicionar identificador' })
+    .click();
+  await identifiers.getByRole('textbox', { name: 'Valor 1' }).fill('abc');
+  await page.getByRole('button', { name: 'Salvar registro' }).click();
+  await expect(
+    identifiers.getByText('Identificador inválido para wikidata'),
+  ).toBeVisible();
+  const invalid = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+    .analyze();
+  expect(invalid.violations).toEqual([]);
+  await identifiers
+    .getByRole('textbox', { name: 'Valor 1' })
+    .fill('https://www.wikidata.org/wiki/Q1000123');
+  await page.getByRole('button', { name: 'Salvar registro' }).click();
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Registro salvo.' }),
+  ).toHaveText('Registro salvo.');
+  await expect(
+    identifiers.getByRole('textbox', { name: 'Valor 1' }),
+  ).toHaveValue('Q1000123');
+  const saved = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+    .analyze();
+  expect(saved.violations).toEqual([]);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  ).toBe(false);
+
+  await page.getByRole('link', { name: 'Pontos', exact: true }).click();
+  // A API fictícia pagina de 2 em 2: o ponto novo é o último dos cinco.
+  await page.getByRole('button', { name: 'Carregar mais' }).click();
+  await page.getByRole('button', { name: 'Carregar mais' }).click();
+  await expect(
+    page.getByText(
+      /Figura · Aproximadamente 500 a\.C\. — 400 a\.C\. \(séc\. V a\.C\.\)/,
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: /Wikidata: Q1000123/ }).first(),
+  ).toHaveAttribute('href', 'https://www.wikidata.org/wiki/Q1000123');
+
+  await page.getByRole('link', { name: 'Explorar mapa', exact: true }).click();
+  await page.getByLabel('Buscar ponto').fill('Hermes');
+  await page.getByRole('button', { name: 'Buscar', exact: true }).click();
+  await page
+    .getByRole('button', { name: /Hermes fictício E2E.*Figura/ })
+    .click();
+  const panel = page.locator('.details-panel');
+  await expect(panel.getByText(/Aproximadamente 500 a\.C\./)).toBeVisible();
+  const link = panel.getByRole('link', { name: /Wikidata: Q1000123/ });
+  await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  await expect(link).toHaveAttribute('target', '_blank');
+  await page.getByText('Como ler o mapa').click();
+  await expect(page.locator('.kind-key li')).toHaveCount(5);
+  await expect(
+    page.locator('.kind-key li', { hasText: 'Figura' }).locator('svg polygon'),
+  ).toHaveCount(1);
+});
+
+test('descarta uma pendência e o lote passa a listá-la como descartada', async ({
+  page,
+}) => {
+  await page.getByRole('link', { name: 'Pendências', exact: true }).click();
+  await page.getByRole('button', { name: 'Descartar pendência' }).click();
+  await expect(page.getByRole('alert')).toContainText(
+    'Informe a justificativa da resolução para descartar.',
+  );
+  await page
+    .getByLabel('Justificativa da resolução')
+    .fill('Duplicata do que já está no mapa.');
+  const axe = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+    .analyze();
+  expect(axe.violations).toEqual([]);
+  await page.getByRole('button', { name: 'Descartar pendência' }).click();
+  await expect(page.getByText('Pendência descartada.')).toBeVisible();
+  await expect(page.getByText('Nenhuma pendência encontrada.')).toBeVisible();
+  await page.getByRole('link', { name: 'Importações', exact: true }).click();
+  await page.getByRole('link', { name: 'Importação fictícia' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Descartados', level: 3 }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/homonimo \(nodes\) — Duplicata do que já está no mapa\./),
+  ).toBeVisible();
+});
