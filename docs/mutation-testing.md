@@ -102,6 +102,22 @@ Os demais abertos do núcleo (`client.ts` 14, `restore.ts` 7, `flow.ts` 6, `payl
 
 `MapPage.tsx` (105) e `EntityEditor.tsx` (62) concentram quase metade dos abertos. A maioria é `queryKey`, textos de aria e ícones SVG, estados de interface que só aparecem em corrida (desmontar durante uma chamada) e `setX` de reinício que não muda o que se vê. `config/schema.ts` (14, 86,1%) tem validações sobrepostas, descritas na rodada histórica abaixo.
 
+## Rodada: busca nas listas (01/11/2026)
+
+Execução incremental depois da busca nas listas de pontos, fontes e contextos (só os mutantes dos arquivos e testes tocados foram refeitos): **91,35%** (3398 mutantes válidos), contra 90,70% da fase 6. `npm run test:mutation` e `npm run test:mutation:gate` saíram com código 0; nenhum arquivo do núcleo mudou de nota além de `src/api/adapter.ts`, que segue em 100%.
+
+| Arquivo                        |   Nota | Abertos |
+| ------------------------------ | -----: | ------: |
+| `src/pages/searchFilters.ts`   |   100% |       0 |
+| `src/pages/RecordSearch.tsx`   |   100% |       0 |
+| `src/components/YearField.tsx` |   100% |       0 |
+| `src/components/period.ts`     |   100% |       0 |
+| `src/api/adapter.ts` (núcleo)  |   100% |       0 |
+| `src/pages/editor/fields.tsx`  | 91,89% |       9 |
+| `src/pages/RecordsPage.tsx`    | 91,82% |      27 |
+
+Na primeira passada ficaram vivos oito mutantes dos arquivos novos, e seis viraram asserção: o cancelamento do envio do formulário (`preventDefault`), a era do fim, a dica de cada campo (`placeholder`) e os filtros na chave `['list', type, filters]`. Dois eram equivalentes e o código foi simplificado em vez de suprimido: `value ?? ''` em `isKind` e o `target === applied ? null : target` do pedido pendente, que o próximo `setPending(null)` já anulava. Como os literais de `searchHints` são mutantes estáticos, os sobreviventes estáticos desses arquivos saíram do estado incremental antes da segunda passada.
+
 ## Histórico: rodada do marco 1 (seis módulos)
 
 > **Histórico, não vale para o código atual.** Os números abaixo são da primeira configuração, que mutava apenas seis módulos (`src/config/schema.ts`, `src/api/client.ts`, `src/auth/auth0.ts`, `src/graph/visibility/ledger.ts`, `src/graph/adapter/elements.ts` e `src/components/period.ts`), antes da refatoração para ESLint com complexidade 10 e da ampliação para todo o `src`. Os arquivos foram reorganizados depois e a nota não foi recalculada. Aquela configuração não incluía telas, estilos, layout/canvas, adapter HTTP, schemas DTO, gerados, fixtures nem scripts de build, e usava timeout adicional de 2 s com fator 1,5 e dois processos concorrentes (um checker e um runner).
