@@ -84,9 +84,9 @@ const nodeUrl =
 
 describe('busca nas listas — quais telas e quais campos', () => {
   it.each([
-    ['nodes', 'Pontos', 'Buscar pontos'],
-    ['sources', 'Fontes', 'Buscar fontes'],
-    ['contexts', 'Contextos', 'Buscar contextos'],
+    ['nodes', 'Pontos', 'Busca de pontos'],
+    ['sources', 'Fontes', 'Busca de fontes'],
+    ['contexts', 'Contextos', 'Busca de contextos'],
   ] as const)(
     '%s tem a busca, o botão secundário e a contagem',
     async (type, title, name) => {
@@ -138,7 +138,9 @@ describe('busca nas listas — quais telas e quais campos', () => {
 
   it('pontos: tipo (com Figura), período em ano e era, e período desconhecido', async () => {
     await setup('/nodes');
-    const form = await screen.findByRole('search', { name: 'Buscar pontos' });
+    const form = await screen.findByRole('search', { name: 'Busca de pontos' });
+    // O nome do formulário não pode casar com o "Buscar ponto" do campo do mapa.
+    expect(screen.queryByLabelText(/Buscar ponto/i)).toBeNull();
     const kind = within(form).getByRole('combobox', { name: 'Tipo' });
     expect(
       within(kind)
@@ -180,8 +182,8 @@ describe('busca nas listas — quais telas e quais campos', () => {
   });
 
   it.each([
-    ['sources', 'Buscar fontes'],
-    ['contexts', 'Buscar contextos'],
+    ['sources', 'Busca de fontes'],
+    ['contexts', 'Busca de contextos'],
   ] as const)('%s não tem tipo nem período', async (type, name) => {
     await setup(`/${type}`);
     const form = await screen.findByRole('search', { name });
@@ -885,6 +887,8 @@ describe('busca nas listas — linha de estado', () => {
     await userEvent.type(box(), 'rascunho');
     rerender(tree('sources'));
     expect(box()).toHaveValue('');
-    expect(screen.getByRole('search', { name: 'Buscar fontes' })).toBeVisible();
+    expect(
+      screen.getByRole('search', { name: 'Busca de fontes' }),
+    ).toBeVisible();
   });
 });

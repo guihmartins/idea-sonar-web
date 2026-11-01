@@ -146,9 +146,9 @@ export function filtersFromDraft(
 }
 
 export const searchLabels: Record<SearchableType, string> = {
-  nodes: 'Buscar pontos',
-  sources: 'Buscar fontes',
-  contexts: 'Buscar contextos',
+  nodes: 'Busca de pontos',
+  sources: 'Busca de fontes',
+  contexts: 'Busca de contextos',
 };
 export const searchHints: Record<SearchableType, string> = {
   nodes: 'Nome, outro nome ou identificador',
