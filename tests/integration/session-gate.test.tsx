@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, MemoryRouter, useLocation } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import { createQueryClient } from '../../src/app/queryClient';
@@ -247,5 +248,83 @@ describe('SessionGate — estados de autenticação', () => {
         'Sessão local encerrada. Não foi possível encerrar a sessão do provedor.',
       ),
     ).toBeInTheDocument();
+  });
+});
+
+describe('SessionGate — navegar dentro da sessão', () => {
+  function Pages({ onMount }: { onMount: () => void }) {
+    useEffect(onMount, [onMount]);
+    return (
+      <>
+        <Link to="/pontos">pontos</Link>
+        <Link to="/fontes">fontes</Link>
+        <RouteProbe />
+      </>
+    );
+  }
+
+  it('trocar de rota não refaz a verificação nem desmonta o conteúdo', async () => {
+    const api = readyApi();
+    const session = fakeSession();
+    const mounted = vi.fn();
+    renderGate(
+      { api, session, fictitious: false },
+      '/map',
+      <Pages onMount={mounted} />,
+    );
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('link', { name: 'pontos' }));
+    expect(await screen.findByText('/pontos')).toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: 'fontes' }));
+    expect(await screen.findByText('/fontes')).toBeInTheDocument();
+    expect(screen.queryByText('Verificando acesso…')).not.toBeInTheDocument();
+    expect(api.me).toHaveBeenCalledTimes(1);
+    expect(session.authenticated).toHaveBeenCalledTimes(1);
+    expect(mounted).toHaveBeenCalledTimes(1);
+  });
+
+  it('continua verificando de novo quando o estado de acesso muda de verdade', async () => {
+    const me = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Falha temporária'))
+      .mockResolvedValue({ issuer: 'i', subject: 's', scopes: [] });
+    const api = { ...readyApi(), me };
+    const mounted = vi.fn();
+    renderGate(
+      { api, session: fakeSession(), fictitious: false },
+      '/map',
+      <Pages onMount={mounted} />,
+    );
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole('button', { name: 'Tentar novamente' }),
+    );
+    expect(await screen.findByRole('link', { name: 'pontos' })).toBeVisible();
+    expect(me).toHaveBeenCalledTimes(2);
+    // E depois de pronto, navegar de novo não chama /me outra vez.
+    await user.click(screen.getByRole('link', { name: 'pontos' }));
+    await waitFor(() =>
+      expect(screen.getByText('/pontos')).toBeInTheDocument(),
+    );
+    expect(me).toHaveBeenCalledTimes(2);
+    expect(mounted).toHaveBeenCalledTimes(1);
+  });
+
+  it('entrar no callback depois de pronto refaz o fluxo de autenticação', async () => {
+    const api = readyApi();
+    const session = fakeSession();
+    renderGate(
+      { api, session, fictitious: false },
+      '/map',
+      <>
+        <Link to="/callback?code=1">callback</Link>
+        <RouteProbe />
+      </>,
+    );
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('link', { name: 'callback' }));
+    await waitFor(() => expect(session.callback).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('/map')).toBeInTheDocument();
+    expect(api.me).toHaveBeenCalledTimes(2);
   });
 });
