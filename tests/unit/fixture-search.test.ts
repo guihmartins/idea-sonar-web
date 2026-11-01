@@ -237,13 +237,12 @@ describe('cursor preso aos filtros', () => {
       } catch (error) {
         expect(error).toBeInstanceOf(ApiError);
         const failure = error as ApiError;
-        expect([failure.status, failure.code]).toEqual([
+        // Mesmo código e mensagem da API real (repositories/list-query.ts).
+        expect([failure.status, failure.code, failure.message]).toEqual([
           400,
-          'VALIDATION_ERROR',
+          'INVALID_CURSOR',
+          'Cursor não corresponde aos filtros',
         ]);
-        expect(failure.details).toMatchObject({
-          details: [{ path: 'cursor' }],
-        });
       }
     }
   });

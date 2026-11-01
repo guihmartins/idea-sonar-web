@@ -2,12 +2,8 @@
 // texto sem acento nem caixa, DOI/URL exatos em fontes, e o cursor preso aos
 // filtros da busca que o emitiu. Compartilhado por pontos, fontes e contextos.
 import type { Context, Entity, Node, Source } from '../api/domain';
-import {
-  fold,
-  nodeMatches,
-  normalizeIdentifier,
-  validationFailure,
-} from './fixture-nodes';
+import { apiFailure } from './fixture-batch';
+import { fold, nodeMatches, normalizeIdentifier } from './fixture-nodes';
 
 // `exact`: o texto inteiro; senão, um trecho. Ambos sem acento nem caixa.
 function textMatch(text: string, q: string, match: string | null): boolean {
@@ -73,8 +69,10 @@ export function cursorStart(cursor: string | null, scope: string): number {
   const cut = cursor.indexOf(':');
   const bound = cut < 0 ? '' : cursor.slice(cut + 1);
   if (bound !== scope)
-    throw validationFailure([
-      { path: 'cursor', message: 'Cursor de outra busca: recomece a lista' },
-    ]);
+    throw apiFailure(
+      400,
+      'INVALID_CURSOR',
+      'Cursor não corresponde aos filtros',
+    );
   return Number(cut < 0 ? cursor : cursor.slice(0, cut));
 }
