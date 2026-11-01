@@ -1280,26 +1280,29 @@ const kindGlyphs = {
   ),
   concept: <polygon points="7,1.25 12.75,7 7,12.75 1.25,7" />,
   work: <rect x="1.5" y="2.75" width="11" height="8.5" />,
+  figure: <polygon points="7,1.75 12.75,12.25 1.25,12.25" />,
 } as const;
 function KindKey() {
   return (
     <ul className="kind-key">
-      {(['person', 'tradition', 'concept', 'work'] as const).map((kind) => (
-        <li key={kind}>
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 14 14"
-            aria-hidden="true"
-            fill={`${neutralColor}26`}
-            stroke={neutralColor}
-            strokeWidth="1.25"
-          >
-            {kindGlyphs[kind]}
-          </svg>
-          {kindLabels[kind]}
-        </li>
-      ))}
+      {(['person', 'tradition', 'concept', 'work', 'figure'] as const).map(
+        (kind) => (
+          <li key={kind}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              aria-hidden="true"
+              fill={`${neutralColor}26`}
+              stroke={neutralColor}
+              strokeWidth="1.25"
+            >
+              {kindGlyphs[kind]}
+            </svg>
+            {kindLabels[kind]}
+          </li>
+        ),
+      )}
     </ul>
   );
 }
