@@ -17,6 +17,9 @@ const run = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}
 const person = `Pessoa sintética E2E ${run}`;
 const concept = `Conceito sintético E2E ${run}`;
 const key = `e2e-real-${run}`;
+// O identificador é único no banco inteiro (até de ponto arquivado): um QID
+// novo a cada execução.
+const qid = `Q${Date.now()}`;
 
 function batch() {
   return {
@@ -34,6 +37,11 @@ function batch() {
         label: person,
         description:
           'Pessoa fictícia criada pelo E2E; não é registro histórico.',
+        startYear: -499,
+        endYear: -399,
+        precision: 'approximate',
+        periodLabel: 'séc. V a.C.',
+        identifiers: [{ scheme: 'wikidata', value: qid }],
       },
       {
         op: 'create',
@@ -123,6 +131,19 @@ test('lote sintético: importa pela API, aparece na tela e no mapa e é desfeito
   await page.getByLabel('Buscar ponto').fill(person);
   await page.getByRole('button', { name: 'Buscar', exact: true }).click();
   await page.getByRole('button', { name: new RegExp(person) }).click();
+  // Período e identificador do ponto, vindos da API, no painel.
+  const panel = page.locator('.details-panel');
+  await expect(
+    panel.getByText('Aproximadamente 500 a.C. — 400 a.C. (séc. V a.C.)'),
+  ).toBeVisible();
+  const wikidata = panel.getByRole('link', {
+    name: new RegExp(`Wikidata: ${qid}`),
+  });
+  await expect(wikidata).toHaveAttribute(
+    'href',
+    `https://www.wikidata.org/wiki/${qid}`,
+  );
+  await expect(wikidata).toHaveAttribute('rel', 'noopener noreferrer');
   await page.getByRole('button', { name: 'Expandir conexões' }).click();
   await expect(
     page.getByRole('img', { name: /Mapa com 2 pontos e 1 relações/ }),
