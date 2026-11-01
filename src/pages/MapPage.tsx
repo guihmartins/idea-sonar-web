@@ -43,7 +43,8 @@ import {
 import type { Positions, Viewport } from '../graph/layout/positions';
 import { restoreView } from '../graph/restore';
 import { CandidatePicker } from './editor/pickers';
-import { formatPeriod } from '../components/period';
+import { formatPeriod, hasPeriod } from '../components/period';
+import { NodeIdentifiers } from '../components/NodeIdentifiers';
 import { contextColors, neutralColor } from '../graph/styles/palette';
 const initialViewport: Viewport = { zoom: 1, pan: { x: 0, y: 0 } };
 function prefersReducedMotion() {
@@ -659,6 +660,22 @@ function RelationSources({ id, heading }: { id: string; heading?: string }) {
     </>
   );
 }
+// Período, descrição, identificadores, outros nomes e escopo do ponto.
+function NodeFacts({ n }: { n: Node }) {
+  return (
+    <>
+      {hasPeriod(n) && <p className="period">{formatPeriod(n)}</p>}
+      <p>{n.description}</p>
+      <NodeIdentifiers identifiers={n.identifiers} />
+      {n.aliases.length > 0 && (
+        <p>
+          Também chamado: {n.aliases.map((alias) => alias.alias).join(', ')}
+        </p>
+      )}
+      {n.conceptScope && <p>Escopo: {conceptScopeLabels[n.conceptScope]}</p>}
+    </>
+  );
+}
 function NodePanel({
   id,
   contexts,
@@ -709,13 +726,7 @@ function NodePanel({
             .join(' / ')}
         </p>
       )}
-      <p>{n.description}</p>
-      {n.aliases.length > 0 && (
-        <p>
-          Também chamado: {n.aliases.map((alias) => alias.alias).join(', ')}
-        </p>
-      )}
-      {n.conceptScope && <p>Escopo: {conceptScopeLabels[n.conceptScope]}</p>}
+      <NodeFacts n={n} />
       <h3>Relações</h3>
       <NodeRelationsList
         nodeId={n.id}

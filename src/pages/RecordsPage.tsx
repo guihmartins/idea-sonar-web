@@ -13,8 +13,10 @@ import type {
   EntityType,
   HistoryEntry,
   ImportDetail,
+  Node,
   PendingItem,
 } from '../api/domain';
+import { NodeIdentifiers } from '../components/NodeIdentifiers';
 import {
   entitySummary,
   entityTitle,
@@ -66,6 +68,9 @@ export function RecordsPage({ type }: { type: EntityType }) {
             <article key={item.id}>
               <h2>{entityTitle(type, item)}</h2>
               <p>{entitySummary(type, item)}</p>
+              {type === 'nodes' && (
+                <NodeIdentifiers identifiers={(item as Node).identifiers} />
+              )}
               <p>Estado: {editorialLabels[item.status]}</p>
               {type === 'views' ? (
                 <Link to={`/map?view=${item.id}`}>Restaurar view</Link>
