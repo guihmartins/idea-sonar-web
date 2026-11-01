@@ -38,8 +38,9 @@ async function setup(
   await services.session.login();
   const list = vi.spyOn(services.api, 'list');
   prepare(services);
+  const client = createQueryClient();
   render(
-    <QueryClientProvider client={createQueryClient()}>
+    <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
         <ServicesProvider services={services}>
           <Probe />
@@ -58,7 +59,7 @@ async function setup(
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  return { services, list, user: userEvent.setup() };
+  return { services, list, client, user: userEvent.setup() };
 }
 const url = () => screen.getByTestId('url').textContent;
 const box = () => screen.getByRole('searchbox', { name: 'Buscar' });
@@ -84,18 +85,20 @@ const nodeUrl =
 
 describe('busca nas listas — quais telas e quais campos', () => {
   it.each([
-    ['nodes', 'Pontos', 'Busca de pontos'],
-    ['sources', 'Fontes', 'Busca de fontes'],
-    ['contexts', 'Contextos', 'Busca de contextos'],
+    ['nodes', 'Pontos', 'Busca de pontos', 'Nome, outro nome ou identificador'],
+    ['sources', 'Fontes', 'Busca de fontes', 'Título, DOI ou endereço'],
+    ['contexts', 'Contextos', 'Busca de contextos', 'Nome do contexto'],
   ] as const)(
     '%s tem a busca, o botão secundário e a contagem',
-    async (type, title, name) => {
+    async (type, title, name, hint) => {
       await setup(`/${type}`);
       await screen.findByRole('heading', { level: 1, name: title });
       const form = screen.getByRole('search', { name });
-      expect(
-        within(form).getByRole('searchbox', { name: 'Buscar' }),
-      ).toBeVisible();
+      const field = within(form).getByRole('searchbox', { name: 'Buscar' });
+      expect(field).toBeVisible();
+      // A dica de cada lista diz o que ela busca, e o campo aceita até 200.
+      expect(field).toHaveAttribute('placeholder', hint);
+      expect(field).toHaveAttribute('maxlength', '200');
       expect(
         within(form).getByRole('checkbox', {
           name: 'Nome ou identificador exato',
@@ -529,6 +532,33 @@ describe('busca nas listas — tipo e período dos pontos', () => {
     await screen.findByText(/Nenhum ponto encontrado/);
   });
 
+  it('a era do fim também vale: a.C. nos dois anos', async () => {
+    const { list, user } = await setup('/nodes');
+    await screen.findByRole('heading', { level: 2, name: jung });
+    await user.type(
+      screen.getByRole('spinbutton', { name: 'Ano inicial' }),
+      '10',
+    );
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Era do início' }),
+      'a.C.',
+    );
+    await user.type(screen.getByRole('spinbutton', { name: 'Ano final' }), '5');
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Era do fim' }),
+      'a.C.',
+    );
+    await user.click(submit());
+    await waitFor(() => expect(url()).toBe('/nodes?startYear=-9&endYear=-4'));
+    expect(list).toHaveBeenLastCalledWith('nodes', null, expect.anything(), {
+      startYear: -9,
+      endYear: -4,
+    });
+    expect(screen.getByRole('combobox', { name: 'Era do fim' })).toHaveValue(
+      'bce',
+    );
+  });
+
   it('ano fora dos limites da API: erro no campo, nada muda', async () => {
     const { list, user } = await setup('/nodes');
     await screen.findByRole('heading', { level: 2, name: jung });
@@ -727,6 +757,27 @@ describe('busca nas listas — paginação', () => {
     });
     expect(screen.queryByRole('button', { name: 'Carregar mais' })).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('os filtros fazem parte da chave da consulta, uma por busca', async () => {
+    const { client, user } = await setup('/nodes?q=e');
+    await waitFor(() => expect(titles()).toHaveLength(2));
+    const keys = () =>
+      client
+        .getQueryCache()
+        .findAll({ queryKey: ['list'] })
+        .map((query) => query.queryKey);
+    expect(keys()).toEqual([['list', 'nodes', { q: 'e' }]]);
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Incluir pendentes' }),
+    );
+    await user.click(submit());
+    await waitFor(() => expect(keys()).toHaveLength(2));
+    expect(keys()).toContainEqual([
+      'list',
+      'nodes',
+      { q: 'e', includePending: true },
+    ]);
   });
 
   it('mudar o filtro recomeça a paginação: o cursor da busca anterior não vai junto', async () => {

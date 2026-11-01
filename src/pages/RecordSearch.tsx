@@ -51,8 +51,7 @@ export function RecordSearch({
   const change: Change = (key, value) =>
     setDraft((current) => ({ ...current, [key]: value }));
   function apply(next: ListFilters) {
-    const target = paramsFromFilters(next).toString();
-    setPending(target === applied ? null : target);
+    setPending(paramsFromFilters(next).toString());
     setError('');
     setDraft(draftFromFilters(next));
     onSearch(next);

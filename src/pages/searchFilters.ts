@@ -51,7 +51,7 @@ export function paramsFromFilters(filters: ListFilters): URLSearchParams {
 const text = (raw: string | null) =>
   (raw ?? '').trim().slice(0, maxQueryLength) || undefined;
 const isKind = (value: string | null): value is Kind =>
-  Object.keys(kindLabels).includes(value ?? '');
+  value !== null && Object.keys(kindLabels).includes(value);
 // Ano astronômico inteiro dentro dos limites da API; o resto é ignorado.
 function yearParam(raw: string | null): number | undefined {
   if (raw === null || !/^-?\d+$/.test(raw)) return undefined;

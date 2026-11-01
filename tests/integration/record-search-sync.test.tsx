@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { ListFilters } from '../../src/api/adapter';
@@ -23,6 +23,12 @@ const box = () => screen.getByRole('searchbox', { name: 'Buscar' });
 const search = () => screen.getByRole('button', { name: 'Buscar' });
 
 describe('RecordSearch — rascunho e URL', () => {
+  it('o envio não recarrega a página (o padrão do formulário é cancelado)', () => {
+    const { onSearch } = setup();
+    expect(fireEvent.submit(screen.getByRole('search'))).toBe(false);
+    expect(onSearch).toHaveBeenCalledWith({});
+  });
+
   it('o que se digita entre o envio e a URL chegar não é apagado', async () => {
     const { onSearch, arrive, user } = setup();
     await user.type(box(), 'jung');
