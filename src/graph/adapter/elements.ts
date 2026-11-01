@@ -6,6 +6,7 @@ export const shapes = {
   tradition: 'hexagon',
   concept: 'diamond',
   work: 'rectangle',
+  figure: 'triangle',
 } as const;
 export function elements(
   nodes: Node[],

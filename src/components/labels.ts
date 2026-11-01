@@ -8,12 +8,13 @@ import type {
   SavedView,
   Source,
 } from '../api/domain';
-import { formatPeriod } from './period';
+import { formatPeriod, hasPeriod } from './period';
 export const kindLabels = {
   person: 'Pessoa',
   tradition: 'Tradição',
   concept: 'Conceito',
   work: 'Obra',
+  figure: 'Figura',
 } as const;
 export const conceptScopeLabels = {
   broad: 'Conceito amplo',
@@ -35,6 +36,21 @@ export const sourceKindLabels = {
   secondary: 'Fonte secundária',
   conversation: 'Conversa',
   other: 'Outro tipo',
+} as const;
+export const identifierSchemeLabels = {
+  wikidata: 'Wikidata',
+  viaf: 'VIAF',
+  isni: 'ISNI',
+  isbn: 'ISBN',
+  doi: 'DOI',
+  openlibrary: 'Open Library',
+} as const;
+export const outcomeLabels = {
+  created: 'Criados',
+  updated: 'Atualizados',
+  reused: 'Reutilizados',
+  pending: 'Pendentes',
+  discarded: 'Descartados',
 } as const;
 export const originLabels = {
   chat: 'Chat',
@@ -62,7 +78,14 @@ const titles: Record<EntityType, (entity: Entity) => string> = {
   views: (e) => (e as SavedView).name,
 };
 const summaries: Record<EntityType, (entity: Entity) => string> = {
-  nodes: (e) => `${kindLabels[(e as Node).kind]} · ${(e as Node).description}`,
+  nodes: (e) =>
+    [
+      kindLabels[(e as Node).kind],
+      hasPeriod(e as Node) ? formatPeriod(e as Node) : '',
+      (e as Node).description,
+    ]
+      .filter(Boolean)
+      .join(' · '),
   contexts: (e) =>
     [(e as Context).regionLabel, formatPeriod(e as Context)]
       .filter(Boolean)

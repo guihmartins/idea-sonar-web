@@ -1,4 +1,4 @@
-import { ApiError } from '../api/client';
+import { ApiError, fieldIssues } from '../api/client';
 import { useServices } from '../app/services';
 export function Failure({
   error,
@@ -61,27 +61,8 @@ export const editorialLabels = {
   archived: 'Arquivado',
 };
 
-// A API aponta o campo que falhou em `error.details: [{ path, message }]`
-// (ex.: `relations.0.claim`); a lista aparece antes do JSON bruto.
-function issuesOf(details: unknown): { path: string; message: string }[] {
-  const list =
-    details && typeof details === 'object' && 'details' in details
-      ? details.details
-      : undefined;
-  if (!Array.isArray(list)) return [];
-  return list.flatMap((item: unknown) =>
-    item &&
-    typeof item === 'object' &&
-    'path' in item &&
-    'message' in item &&
-    typeof item.path === 'string' &&
-    typeof item.message === 'string'
-      ? [{ path: item.path, message: item.message }]
-      : [],
-  );
-}
 function FieldIssues({ details }: { details: unknown }) {
-  const issues = issuesOf(details);
+  const issues = fieldIssues(details);
   if (issues.length === 0) return null;
   return (
     <ul className="field-issues">

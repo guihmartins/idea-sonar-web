@@ -29,6 +29,7 @@ const ownMessageConflicts = new Set([
   'CONTEXT_DEPENDENCY',
   'IMMUTABLE_CLASSIFICATION',
   'IDEMPOTENCY_CONFLICT',
+  'DUPLICATE',
   'UNDO_CONFLICT',
 ]);
 // 409/412 por versão desatualizada: só neles vale comparar com a versão atual.
@@ -37,6 +38,27 @@ export function isVersionConflict(error: unknown): boolean {
     error instanceof ApiError &&
     [409, 412].includes(error.status) &&
     !ownMessageConflicts.has(error.code)
+  );
+}
+// A API aponta o campo que falhou em `error.details: [{ path, message }]`
+// (ex.: `relations.0.claim`); a lista aparece antes do JSON bruto.
+export function fieldIssues(
+  details: unknown,
+): { path: string; message: string }[] {
+  const list =
+    details && typeof details === 'object' && 'details' in details
+      ? details.details
+      : undefined;
+  if (!Array.isArray(list)) return [];
+  return list.flatMap((item: unknown) =>
+    item &&
+    typeof item === 'object' &&
+    'path' in item &&
+    'message' in item &&
+    typeof item.path === 'string' &&
+    typeof item.message === 'string'
+      ? [{ path: item.path, message: item.message }]
+      : [],
   );
 }
 export interface RequestOptions {

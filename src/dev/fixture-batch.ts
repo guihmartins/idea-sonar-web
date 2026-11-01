@@ -7,6 +7,14 @@
 //   conceito amplo ativo, o ponto volta a `pending` com as relações ativas;
 // - relação ativa exige pontos ativos; nome repetido vira pendência.
 import { ApiError } from '../api/client';
+import {
+  duplicateFailure,
+  homonyms,
+  nodeIssues,
+  normalizedIdentifiers,
+  owners,
+  validationFailure,
+} from './fixture-nodes';
 import type {
   Evidence,
   ImportBatch,
@@ -42,7 +50,12 @@ interface Op {
   label: string;
   description: string;
   conceptScope?: Node['conceptScope'];
+  startYear?: number | null;
+  endYear?: number | null;
+  precision?: Node['precision'];
+  periodLabel?: string | null;
   aliases?: Node['aliases'];
+  identifiers?: Node['identifiers'];
   contexts?: Ref[];
   type: string;
   source?: Ref;
@@ -79,13 +92,6 @@ export function apiFailure(status: number, code: string, message: string) {
   });
 }
 
-const normalize = (text: string) =>
-  text
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLowerCase()
-    .trim();
-
 function ref(ctx: Ctx, value: Ref): string | null {
   if (!value) return null;
   return 'id' in value ? value.id : (ctx.ids[value.clientRef] ?? null);
@@ -105,10 +111,17 @@ function settle(
     entityId,
     outcome,
     reason: null,
+    candidates: [],
   });
 }
 
-function pend(ctx: Ctx, op: Op, entityType: string, reason: string) {
+function pend(
+  ctx: Ctx,
+  op: Op,
+  entityType: string,
+  reason: string,
+  candidates: string[] = [],
+) {
   delete ctx.ids[op.clientRef];
   ctx.items.set(op.clientRef, {
     clientRef: op.clientRef,
@@ -116,6 +129,7 @@ function pend(ctx: Ctx, op: Op, entityType: string, reason: string) {
     entityId: null,
     outcome: 'pending',
     reason,
+    candidates,
   });
 }
 
@@ -147,45 +161,91 @@ function newNode(ctx: Ctx, op: Op): Node {
     label: op.label,
     description: op.description,
     conceptScope: op.conceptScope ?? null,
+    startYear: op.startYear ?? null,
+    endYear: op.endYear ?? null,
+    precision: op.precision ?? 'unknown',
+    periodLabel: op.periodLabel ?? null,
     aliases: op.aliases ?? [],
+    identifiers: normalizedIdentifiers(op.identifiers ?? []),
     contexts: (op.contexts ?? []).flatMap((value) => ref(ctx, value) ?? []),
     degreeTotal: 0,
     archivedAt: null,
   };
 }
 
-function runNode(ctx: Ctx, op: Op) {
-  if (op.op === 'reference') return settle(ctx, op, 'nodes', 'reused', op.id);
-  if (op.op === 'update') {
-    const node = mustFind(ctx.db.nodes, op, 'nodes');
-    const { status, label, description, aliases } = op;
-    Object.assign(node, {
-      ...(status ? { status } : {}),
-      ...(label ? { label } : {}),
-      ...(description ? { description } : {}),
-      ...(aliases ? { aliases } : {}),
-      ...(op.contexts
-        ? { contexts: op.contexts.flatMap((value) => ref(ctx, value) ?? []) }
-        : {}),
-      version: node.version + 1,
-      updatedAt: ctx.now,
-    });
-    return settle(ctx, op, 'nodes', 'updated', node.id);
-  }
-  const clash = ctx.db.nodes.some(
-    (n) =>
-      n.status !== 'archived' &&
-      n.kind === op.kind &&
-      normalize(n.label) === normalize(op.label),
+const ids = (nodes: { id: string }[]) => [...new Set(nodes.map((n) => n.id))];
+
+// Campos que o update trouxe (`null` limpa; ausente preserva).
+function provided(op: Op, keys: string[]) {
+  const values = op as unknown as Record<string, unknown>;
+  return Object.fromEntries(
+    keys
+      .filter((key) => values[key] !== undefined)
+      .map((key) => [key, values[key]]),
   );
-  if (clash)
-    return pend(
-      ctx,
-      op,
-      'nodes',
-      'Nome já existente; selecionar ID explicitamente',
-    );
+}
+
+// Update parcial: o que não veio fica como estava; lista enviada substitui.
+function updateNode(ctx: Ctx, op: Op, index: number) {
+  const node = mustFind(ctx.db.nodes, op, 'nodes');
+  const merged = {
+    startYear: op.startYear === undefined ? node.startYear : op.startYear,
+    endYear: op.endYear === undefined ? node.endYear : op.endYear,
+    identifiers: op.identifiers ?? node.identifiers,
+  };
+  const issues = nodeIssues(merged, `nodes.${index}.`);
+  if (issues.length) throw validationFailure(issues);
+  if (owners(ctx.db.nodes, merged.identifiers, node.id).length)
+    throw duplicateFailure();
+  Object.assign(
+    node,
+    provided(op, [
+      'status',
+      'label',
+      'description',
+      'aliases',
+      'precision',
+      'periodLabel',
+      'startYear',
+      'endYear',
+    ]),
+    { identifiers: normalizedIdentifiers(merged.identifiers) },
+    op.contexts
+      ? { contexts: op.contexts.flatMap((value) => ref(ctx, value) ?? []) }
+      : {},
+    { version: node.version + 1, updatedAt: ctx.now },
+  );
+  return settle(ctx, op, 'nodes', 'updated', node.id);
+}
+
+// Create que repete algo existente fica pendente com os candidatos; identificador
+// vale antes do nome, como na API.
+function duplicateOf(ctx: Ctx, node: Node) {
+  const found = owners(ctx.db.nodes, node.identifiers);
+  const [first] = found;
+  if (first)
+    return {
+      reason: `Identificador já cadastrado (${first.identifier.scheme}:${first.identifier.value} → ponto ${first.node.id}); use {op:"reference", id}`,
+      candidates: ids(found.map((o) => o.node)),
+    };
+  const same = homonyms(ctx.db.nodes, node);
+  return same.length
+    ? {
+        reason: `Nome já existente (candidatos: ${ids(same).join(', ')}); selecione o ID explicitamente`,
+        candidates: ids(same),
+      }
+    : null;
+}
+
+function runNode(ctx: Ctx, op: Op, index: number) {
+  if (op.op === 'reference') return settle(ctx, op, 'nodes', 'reused', op.id);
+  if (op.op === 'update') return updateNode(ctx, op, index);
   const node = newNode(ctx, op);
+  const issues = nodeIssues(node, `nodes.${index}.`);
+  if (issues.length) throw validationFailure(issues);
+  const duplicate = duplicateOf(ctx, node);
+  if (duplicate)
+    return pend(ctx, op, 'nodes', duplicate.reason, duplicate.candidates);
   ctx.db.nodes.push(node);
   return settle(ctx, op, 'nodes', 'created', node.id);
 }
@@ -345,7 +405,9 @@ function finalize(ctx: Ctx) {
 // simulação) e devolve o ImportResult.
 export function applyBatch(db: BatchDb, batch: ImportBatch, now: string) {
   const ctx: Ctx = { db, now, ids: {}, items: new Map() };
-  for (const op of (batch.nodes ?? []) as unknown as Op[]) runNode(ctx, op);
+  ((batch.nodes ?? []) as unknown as Op[]).forEach((op, index) =>
+    runNode(ctx, op, index),
+  );
   for (const op of (batch.relations ?? []) as unknown as Op[])
     runRelation(ctx, op);
   finalize(ctx);
@@ -360,6 +422,7 @@ export function applyBatch(db: BatchDb, batch: ImportBatch, now: string) {
     updated: count('updated'),
     reused: count('reused'),
     pending: count('pending'),
+    discarded: count('discarded'),
     clientRefToId: ctx.ids,
     items,
     viewUrl: `http://localhost:5173/imports/${batchId}`,

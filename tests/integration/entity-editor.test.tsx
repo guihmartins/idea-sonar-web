@@ -94,6 +94,7 @@ describe('EntityEditor — roteamento', () => {
       .mockRejectedValueOnce(new Error('Falha no catálogo'))
       .mockResolvedValue({
         nodeKinds: ['person'],
+        identifierSchemes: [],
         relationTypes: [],
         evidenceStatuses: ['documented'],
         editorialStatuses: ['active'],

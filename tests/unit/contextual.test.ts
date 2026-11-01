@@ -33,6 +33,7 @@ function draft(
       label: '  Gênese contextual  ',
       description: ' Descrição do conceito ',
       aliases: 'Genesis (en), Origem',
+      precision: 'unknown',
       targetId: BROAD,
       claim: ' Contextualiza o conceito amplo ',
       justification: ' Justificativa da contextualização ',
@@ -44,6 +45,7 @@ function draft(
     contexts: [CONTEXT],
     evidence: [],
     contested: false,
+    identifiers: [],
     ...extra,
   };
 }
@@ -58,7 +60,12 @@ const node: Node = {
   label: 'Gênese contextual',
   description: 'Descrição do conceito',
   conceptScope: 'contextual',
+  startYear: null,
+  endYear: null,
+  precision: 'unknown',
+  periodLabel: null,
   aliases: [{ alias: 'Genesis', language: 'en' }],
+  identifiers: [],
   contexts: [CONTEXT],
   degreeTotal: 0,
   archivedAt: null,
@@ -156,10 +163,15 @@ describe('createContextualBatch', () => {
           label: 'Gênese contextual',
           description: 'Descrição do conceito',
           conceptScope: 'contextual',
+          startYear: null,
+          endYear: null,
+          precision: 'unknown',
+          periodLabel: null,
           aliases: [
             { alias: 'Genesis', language: 'en' },
             { alias: 'Origem', language: 'und' },
           ],
+          identifiers: [],
           contexts: [{ id: CONTEXT }],
           status: 'active',
         },
@@ -320,6 +332,104 @@ describe('createContextualBatch', () => {
   });
 });
 
+describe('período e identificadores no lote', () => {
+  const dated = {
+    start: '500',
+    startEra: 'bce',
+    end: '400',
+    endEra: 'bce',
+    precision: 'approximate',
+    periodLabel: ' séc. V a.C. ',
+  };
+  const ids = [
+    { scheme: 'wikidata', value: ' Q1000001 ' },
+    { scheme: 'viaf', value: '  ' },
+  ] as const;
+  it('a criação leva o período e os identificadores (linhas em branco fora)', () => {
+    const body = createContextualBatch(
+      draft(dated, { identifiers: [...ids] }),
+      'k',
+    );
+    expect(body.nodes?.[0]).toMatchObject({
+      startYear: -499,
+      endYear: -399,
+      precision: 'approximate',
+      periodLabel: 'séc. V a.C.',
+      identifiers: [{ scheme: 'wikidata', value: 'Q1000001' }],
+    });
+  });
+  it('a mesma lista em outra ordem não é mudança (a API devolve ordenado)', () => {
+    const stored = {
+      ...node,
+      aliases: [
+        { alias: 'Genesis', language: 'en' },
+        { alias: 'Origem', language: 'und' },
+      ],
+      identifiers: [
+        { scheme: 'openlibrary', value: 'OL1A' },
+        { scheme: 'wikidata', value: 'Q1000001' },
+      ],
+    } as const;
+    const body = activateContextualBatch(
+      draft(
+        { aliases: 'Origem, Genesis (en)' },
+        {
+          identifiers: [
+            { scheme: 'wikidata', value: 'Q1000001' },
+            { scheme: 'openlibrary', value: 'OL1A' },
+          ],
+        },
+      ),
+      {
+        ...stored,
+        aliases: [...stored.aliases],
+        identifiers: [...stored.identifiers],
+      },
+      link,
+      'k',
+    );
+    expect(body.nodes?.[0]).not.toHaveProperty('aliases');
+    expect(body.nodes?.[0]).not.toHaveProperty('identifiers');
+  });
+  it('a ativação só leva o que mudou no período e nos identificadores', () => {
+    const unchanged = activateContextualBatch(
+      draft({ aliases: 'Genesis (en)' }),
+      node,
+      link,
+      'k',
+    );
+    for (const key of [
+      'startYear',
+      'endYear',
+      'precision',
+      'periodLabel',
+      'identifiers',
+    ])
+      expect(unchanged.nodes?.[0]).not.toHaveProperty(key);
+    const changed = activateContextualBatch(
+      draft({ ...dated, aliases: 'Genesis (en)' }, { identifiers: [ids[0]] }),
+      node,
+      link,
+      'k',
+    );
+    expect(changed.nodes?.[0]).toMatchObject({
+      startYear: -499,
+      endYear: -399,
+      precision: 'approximate',
+      periodLabel: 'séc. V a.C.',
+      identifiers: [{ scheme: 'wikidata', value: 'Q1000001' }],
+    });
+    const only = activateContextualBatch(
+      draft({ aliases: 'Genesis (en)', end: '300', endEra: 'ce' }),
+      { ...node, startYear: null, endYear: 100 },
+      link,
+      'k',
+    );
+    expect(only.nodes?.[0]).toMatchObject({ endYear: 300 });
+    expect(only.nodes?.[0]).not.toHaveProperty('startYear');
+  });
+});
+
 describe('activateContextualBatch', () => {
   it('com relação pendente, só muda o estado dos dois, em update parcial', () => {
     expect(
@@ -433,6 +543,7 @@ describe('leitura do resultado', () => {
     updated: 0,
     reused: 0,
     pending: 1,
+    discarded: 0,
     clientRefToId: { [NODE_REF]: NODE },
     items: [
       {
@@ -441,6 +552,7 @@ describe('leitura do resultado', () => {
         entityId: NODE,
         outcome: 'created',
         reason: null,
+        candidates: [],
       },
       {
         clientRef: RELATION_REF,
@@ -448,6 +560,7 @@ describe('leitura do resultado', () => {
         entityId: null,
         outcome: 'pending',
         reason: 'Relação ativa exige pontos ativos',
+        candidates: [],
       },
     ],
     viewUrl: null,

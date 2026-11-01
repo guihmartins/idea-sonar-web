@@ -53,6 +53,22 @@ describe('adapter — URLs de leitura', () => {
     expect(send.mock.calls[0]?.[1]).toEqual({ signal });
   });
 
+  it('match=exact só vai quando pedido, logo depois de q', async () => {
+    const { api, send } = setup();
+    await api.search('Jung', defaultFilters, null, signal, 'exact');
+    expect(path(send)).toBe(
+      '/nodes?q=Jung&match=exact&includePending=false&includeUnknownPeriod=true&limit=50',
+    );
+    await api.search('Jung', defaultFilters, null, signal, 'contains');
+    expect(path(send, 1)).toContain('q=Jung&match=contains&');
+    await api.candidates('nodes', 'Q1000001', signal, 'exact');
+    expect(path(send, 2)).toBe(
+      '/nodes?q=Q1000001&match=exact&includePending=true&limit=20',
+    );
+    await api.search('Jung', defaultFilters, null, signal);
+    expect(path(send, 3)).not.toContain('match');
+  });
+
   it.each<[CandidateType, string]>([
     ['nodes', '/nodes'],
     ['sources', '/sources'],
@@ -177,6 +193,39 @@ describe('adapter — URLs de leitura', () => {
 });
 
 describe('adapter — opções das escritas', () => {
+  it('discard resolve com {discard: true}, sem registro, e aceita entityId nulo', async () => {
+    const pending: PendingItem = {
+      id: 'p 1',
+      batchId: 'b',
+      batchVersion: 4,
+      clientRef: 'r',
+      entityType: 'nodes',
+      reason: null,
+      dependencies: [],
+      payload: {},
+    };
+    const { api, send } = setup({
+      id: 'p 1',
+      entityId: null,
+      version: 5,
+      reason: 'Duplicata',
+    });
+    const result = await api.discard(pending, 'Duplicata', 'k-desc');
+    expect(result.entityId).toBeNull();
+    expect(send.mock.calls[0]).toEqual([
+      '/pending/p%201/resolve',
+      {
+        method: 'POST',
+        body: {
+          expectedVersion: 4,
+          reason: 'Duplicata',
+          selection: { discard: true },
+        },
+        idempotencyKey: 'k-desc',
+      },
+    ]);
+  });
+
   it('save cria com POST e Idempotency-Key, e edita com PATCH e a versão', async () => {
     const services = createFixtureServices();
     await services.session.login();
@@ -350,6 +399,7 @@ describe('adapter + transporte — o que vai pela rede', () => {
       updated: 0,
       reused: 0,
       pending: 0,
+      discarded: 0,
       clientRefToId: {},
       items: [],
       viewUrl: null,

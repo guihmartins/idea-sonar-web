@@ -1,4 +1,5 @@
 import type { Api } from '../../api/adapter';
+import { ApiError, fieldIssues } from '../../api/client';
 import type { Catalog, Evidence, Node, RelationType } from '../../api/domain';
 import { astronomicalYear } from '../../components/period';
 export type Editable = 'nodes' | 'relations' | 'sources' | 'contexts';
@@ -11,11 +12,13 @@ export interface EvidenceDraft {
   explanation: string;
   conversationReference: string;
 }
+export type IdentifierDraft = Node['identifiers'][number];
 export interface EditorDraft {
   fields: Record<string, string>;
   contexts: string[];
   evidence: EvidenceDraft[];
   contested: boolean;
+  identifiers: IdentifierDraft[];
 }
 export const emptyEvidence: EvidenceDraft = {
   sourceId: '',
@@ -56,7 +59,30 @@ export function formatAliases(aliases: Node['aliases']): string {
     .map((a) => (a.language === 'und' ? a.alias : `${a.alias} (${a.language})`))
     .join(', ');
 }
-export function nodeBody({ fields, contexts }: EditorDraft) {
+// Período de ponto e de contexto: anos astronômicos (a.C. convertido), com
+// os limites da API, e fim não anterior ao início.
+export function periodBody(fields: Record<string, string>) {
+  const startYear = astronomicalYear(
+    fields.start ?? '',
+    fields.startEra ?? 'ce',
+  );
+  const endYear = astronomicalYear(fields.end ?? '', fields.endEra ?? 'ce');
+  if (startYear !== null && endYear !== null && endYear < startYear)
+    throw new Error('O fim do período deve ser posterior ao início.');
+  return {
+    startYear,
+    endYear,
+    precision: fields.precision as Node['precision'],
+    periodLabel: orNull(fields.periodLabel),
+  };
+}
+// Linhas sem valor são descartadas; a API normaliza e valida cada esquema.
+export function identifiersBody(identifiers: IdentifierDraft[]) {
+  return identifiers
+    .map(({ scheme, value }) => ({ scheme, value: text(value) }))
+    .filter(({ value }) => value !== '');
+}
+export function nodeBody({ fields, contexts, identifiers }: EditorDraft) {
   const concept = fields.kind === 'concept';
   if (concept && !fields.conceptScope)
     throw new Error('Conceitos exigem escopo: amplo ou contextualizado.');
@@ -65,7 +91,9 @@ export function nodeBody({ fields, contexts }: EditorDraft) {
     label: text(fields.label),
     description: text(fields.description),
     conceptScope: concept ? fields.conceptScope : null,
+    ...periodBody(fields),
     aliases: parseAliases(fields.aliases ?? ''),
+    identifiers: identifiersBody(identifiers),
     contexts,
   };
 }
@@ -96,19 +124,9 @@ function sourceBody({ fields }: EditorDraft) {
   };
 }
 function contextBody({ fields }: EditorDraft) {
-  const startYear = astronomicalYear(
-    fields.start ?? '',
-    fields.startEra ?? 'ce',
-  );
-  const endYear = astronomicalYear(fields.end ?? '', fields.endEra ?? 'ce');
-  if (startYear !== null && endYear !== null && endYear < startYear)
-    throw new Error('O fim do período deve ser posterior ao início.');
   return {
     label: text(fields.label),
-    startYear,
-    endYear,
-    precision: fields.precision,
-    periodLabel: orNull(fields.periodLabel),
+    ...periodBody(fields),
     regionLabel: orNull(fields.regionLabel),
     notes: orNull(fields.notes),
   };
@@ -256,4 +274,29 @@ export async function buildEditorBody(
     status: draft.fields.status,
     ...(await specificBody(type, draft, catalog, api)),
   };
+}
+
+export interface IdentifierIssues {
+  rows: Record<number, string>;
+  general: string[];
+}
+// Erros da API sobre identificadores, por linha do formulário. O índice da API
+// conta só as linhas enviadas (as em branco não vão), e o caminho pode vir com
+// o prefixo do lote (`nodes.0.identifiers.1.value`).
+export function identifierIssues(
+  error: unknown,
+  identifiers: IdentifierDraft[],
+): IdentifierIssues {
+  const result: IdentifierIssues = { rows: {}, general: [] };
+  if (!(error instanceof ApiError)) return result;
+  const sent = identifiers.flatMap((entry, index) =>
+    text(entry.value) ? [index] : [],
+  );
+  for (const { path, message } of fieldIssues(error.details)) {
+    const row = /(?:^|\.)identifiers\.(\d+)\.value$/.exec(path);
+    const at = row ? sent[Number(row[1])] : undefined;
+    if (at !== undefined) result.rows[at] = message;
+    else if (/(?:^|\.)identifiers$/.test(path)) result.general.push(message);
+  }
+  return result;
 }

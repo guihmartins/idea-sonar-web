@@ -4,10 +4,13 @@ import {
   emptyEvidence,
   evidenceDraft,
   formatAliases,
+  identifierIssues,
+  identifiersBody,
   parseAliases,
   type EditorDraft,
 } from '../../src/pages/editor/payload';
 import type { Api } from '../../src/api/adapter';
+import { ApiError } from '../../src/api/client';
 import type { Catalog, Evidence, Node } from '../../src/api/domain';
 
 function draft(overrides: Partial<EditorDraft> = {}): EditorDraft {
@@ -16,12 +19,14 @@ function draft(overrides: Partial<EditorDraft> = {}): EditorDraft {
     contexts: [],
     evidence: [],
     contested: false,
+    identifiers: [],
     ...overrides,
   };
 }
 
 const catalog: Catalog = {
-  nodeKinds: ['person', 'tradition', 'concept', 'work'],
+  nodeKinds: ['person', 'tradition', 'concept', 'work', 'figure'],
+  identifierSchemes: ['wikidata', 'viaf', 'isni', 'isbn', 'doi', 'openlibrary'],
   relationTypes: [
     {
       code: 'influenced',
@@ -116,6 +121,7 @@ describe('buildEditorBody — nodes', () => {
           label: ' Jung ',
           description: 'desc',
           aliases: 'Jung (de)',
+          precision: 'unknown',
         },
         contexts: ['ctx-1'],
       }),
@@ -128,9 +134,171 @@ describe('buildEditorBody — nodes', () => {
       label: 'Jung',
       description: 'desc',
       conceptScope: null,
+      startYear: null,
+      endYear: null,
+      precision: 'unknown',
+      periodLabel: null,
       aliases: [{ alias: 'Jung', language: 'de' }],
+      identifiers: [],
       contexts: ['ctx-1'],
     });
+  });
+});
+
+describe('buildEditorBody — período e identificadores do ponto', () => {
+  const fields = {
+    status: 'active',
+    kind: 'figure',
+    label: 'Hermes',
+    description: 'Figura mítica',
+    aliases: '',
+    precision: 'approximate',
+    periodLabel: ' séc. V a.C. ',
+    start: '500',
+    startEra: 'bce',
+    end: '400',
+    endEra: 'bce',
+  };
+  it('converte a.C. em ano astronômico e leva rótulo, precisão e figura sem escopo', async () => {
+    const body = await buildEditorBody(
+      'nodes',
+      draft({ fields, contexts: [] }),
+      catalog,
+      fakeApi({}),
+    );
+    expect(body).toMatchObject({
+      kind: 'figure',
+      conceptScope: null,
+      startYear: -499,
+      endYear: -399,
+      precision: 'approximate',
+      periodLabel: 'séc. V a.C.',
+    });
+  });
+  it('período vazio vira nulo e a ordem do período é conferida', async () => {
+    const empty = await buildEditorBody(
+      'nodes',
+      draft({ fields: { ...fields, start: '', end: '', periodLabel: '' } }),
+      catalog,
+      fakeApi({}),
+    );
+    expect(empty).toMatchObject({
+      startYear: null,
+      endYear: null,
+      periodLabel: null,
+    });
+    await expect(
+      buildEditorBody(
+        'nodes',
+        draft({ fields: { ...fields, start: '400', end: '500' } }),
+        catalog,
+        fakeApi({}),
+      ),
+    ).rejects.toThrow('O fim do período deve ser posterior ao início.');
+  });
+  it.each([
+    ['depois de 3000 d.C.', { start: '3001', startEra: 'ce' }],
+    ['antes de 100001 a.C.', { end: '100002', endEra: 'bce', start: '' }],
+  ])('recusa ano fora dos limites da API: %s', async (_name, change) => {
+    await expect(
+      buildEditorBody(
+        'nodes',
+        draft({ fields: { ...fields, ...change } }),
+        catalog,
+        fakeApi({}),
+      ),
+    ).rejects.toThrow('Ano fora do intervalo aceito');
+  });
+  it('contextos também respeitam os limites de ano', async () => {
+    await expect(
+      buildEditorBody(
+        'contexts',
+        draft({
+          fields: {
+            label: 'Contexto',
+            precision: 'unknown',
+            start: '3001',
+            startEra: 'ce',
+          },
+        }),
+        catalog,
+        fakeApi({}),
+      ),
+    ).rejects.toThrow('Ano fora do intervalo aceito');
+  });
+  it('identificadores: tira espaços e descarta linhas em branco', () => {
+    expect(
+      identifiersBody([
+        { scheme: 'wikidata', value: ' Q1000001 ' },
+        { scheme: 'viaf', value: '   ' },
+        { scheme: 'doi', value: '10.1000/x' },
+      ]),
+    ).toEqual([
+      { scheme: 'wikidata', value: 'Q1000001' },
+      { scheme: 'doi', value: '10.1000/x' },
+    ]);
+  });
+});
+
+describe('identifierIssues', () => {
+  const identifiers = [
+    { scheme: 'wikidata', value: 'Q1' },
+    { scheme: 'viaf', value: '' },
+    { scheme: 'isbn', value: '123' },
+  ] as const;
+  const failure = (details: unknown, status = 400, code = 'VALIDATION_ERROR') =>
+    new ApiError(status, 'x', { code, details });
+  it('liga o erro à linha enviada, pulando linhas em branco, com ou sem prefixo de lote', () => {
+    const issues = identifierIssues(
+      failure([
+        {
+          path: 'identifiers.1.value',
+          message: 'Identificador inválido para isbn',
+        },
+        {
+          path: 'nodes.0.identifiers.0.value',
+          message: 'Identificador inválido para wikidata',
+        },
+        { path: 'identifiers', message: 'Identificadores duplicados' },
+        { path: 'label', message: 'outro campo' },
+      ]),
+      [...identifiers],
+    );
+    expect(issues.rows).toEqual({
+      2: 'Identificador inválido para isbn',
+      0: 'Identificador inválido para wikidata',
+    });
+    expect(issues.general).toEqual(['Identificadores duplicados']);
+  });
+  it('erro de linha inexistente ou que não é da API não aparece', () => {
+    expect(
+      identifierIssues(
+        failure([{ path: 'identifiers.9.value', message: 'x' }]),
+        [...identifiers],
+      ),
+    ).toEqual({ rows: {}, general: [] });
+    expect(identifierIssues(new Error('x'), [...identifiers])).toEqual({
+      rows: {},
+      general: [],
+    });
+  });
+  it('409 DUPLICATE vira mensagem geral', () => {
+    const issues = identifierIssues(
+      failure(
+        [
+          {
+            path: 'identifiers',
+            message: 'Identificador já cadastrado em outro ponto',
+          },
+        ],
+        409,
+        'DUPLICATE',
+      ),
+      [...identifiers],
+    );
+    expect(issues.general).toEqual([
+      'Identificador já cadastrado em outro ponto',
+    ]);
   });
 });
 

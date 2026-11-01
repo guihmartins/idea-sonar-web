@@ -47,7 +47,9 @@ const batch: ImportBatch = {
       label: 'Conceito contextual',
       description: 'Descrição',
       conceptScope: 'contextual',
+      precision: 'unknown',
       aliases: [],
+      identifiers: [],
       contexts: [{ id: '00000000-0000-4000-8000-000000000006' }],
       status: 'active',
     },
@@ -69,6 +71,7 @@ const importResult = {
   updated: 0,
   reused: 0,
   pending: 1,
+  discarded: 0,
   clientRefToId: { conceito: 'n1' },
   items: [
     {
@@ -77,6 +80,7 @@ const importResult = {
       entityId: 'n1',
       outcome: 'created',
       reason: null,
+      candidates: [],
     },
     {
       clientRef: 'contextualizacao',
@@ -84,6 +88,7 @@ const importResult = {
       entityId: null,
       outcome: 'pending',
       reason: 'Relação ativa exige pontos ativos',
+      candidates: [],
     },
   ],
   viewUrl: 'http://localhost:8080/imports/b1',

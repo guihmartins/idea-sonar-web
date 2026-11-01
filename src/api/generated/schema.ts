@@ -155,7 +155,8 @@ export interface paths {
             parameters: {
                 query?: {
                     q?: string;
-                    kind?: "person" | "tradition" | "concept" | "work";
+                    match?: "contains" | "exact";
+                    kind?: "person" | "tradition" | "concept" | "work" | "figure";
                     nodeId?: string;
                     contextId?: string;
                     type?: string;
@@ -511,14 +512,24 @@ export interface paths {
                 content: {
                     "application/json": {
                         /** @enum {string} */
-                        kind?: "person" | "tradition" | "concept" | "work";
+                        kind?: "person" | "tradition" | "concept" | "work" | "figure";
                         label?: string;
                         description?: string;
                         /** @enum {string|null} */
                         conceptScope?: "broad" | "contextual" | null;
+                        startYear?: number | null;
+                        endYear?: number | null;
+                        /** @enum {string} */
+                        precision?: "unknown" | "approximate" | "range" | "exact";
+                        periodLabel?: string | null;
                         aliases?: {
                             alias: string;
                             language: string;
+                        }[];
+                        identifiers?: {
+                            /** @enum {string} */
+                            scheme: "wikidata" | "viaf" | "isni" | "isbn" | "doi" | "openlibrary";
+                            value: string;
                         }[];
                         contexts?: string[];
                         /** @enum {string} */
@@ -632,7 +643,8 @@ export interface paths {
             parameters: {
                 query?: {
                     q?: string;
-                    kind?: "person" | "tradition" | "concept" | "work";
+                    match?: "contains" | "exact";
+                    kind?: "person" | "tradition" | "concept" | "work" | "figure";
                     nodeId?: string;
                     contextId?: string;
                     type?: string;
@@ -1108,7 +1120,8 @@ export interface paths {
             parameters: {
                 query?: {
                     q?: string;
-                    kind?: "person" | "tradition" | "concept" | "work";
+                    match?: "contains" | "exact";
+                    kind?: "person" | "tradition" | "concept" | "work" | "figure";
                     nodeId?: string;
                     contextId?: string;
                     type?: string;
@@ -1585,7 +1598,8 @@ export interface paths {
             parameters: {
                 query?: {
                     q?: string;
-                    kind?: "person" | "tradition" | "concept" | "work";
+                    match?: "contains" | "exact";
+                    kind?: "person" | "tradition" | "concept" | "work" | "figure";
                     nodeId?: string;
                     contextId?: string;
                     type?: string;
@@ -1945,7 +1959,7 @@ export interface paths {
                         /** Format: uuid */
                         targetId?: string;
                         /** @enum {string} */
-                        type?: "influenced" | "formulated" | "developed" | "studied" | "used" | "adhered_to" | "transmitted" | "reinterpreted" | "incorporated_from" | "criticized" | "part_of" | "type_of" | "contextualizes" | "appears_in" | "parallel_to" | "differs_from";
+                        type?: "influenced" | "formulated" | "authored" | "developed" | "studied" | "used" | "adhered_to" | "transmitted" | "reinterpreted" | "incorporated_from" | "criticized" | "part_of" | "type_of" | "contextualizes" | "appears_in" | "parallel_to" | "differs_from";
                         /** Format: uuid */
                         contextId?: string | null;
                         claim?: string;
@@ -2083,7 +2097,8 @@ export interface paths {
             parameters: {
                 query?: {
                     q?: string;
-                    kind?: "person" | "tradition" | "concept" | "work";
+                    match?: "contains" | "exact";
+                    kind?: "person" | "tradition" | "concept" | "work" | "figure";
                     nodeId?: string;
                     contextId?: string;
                     type?: string;
@@ -2445,7 +2460,7 @@ export interface paths {
                         rootNodeId?: string | null;
                         filters?: {
                             /** @enum {string} */
-                            kind?: "person" | "tradition" | "concept" | "work";
+                            kind?: "person" | "tradition" | "concept" | "work" | "figure";
                             type?: string;
                             includePending?: boolean;
                             /** Format: uuid */
@@ -2577,7 +2592,8 @@ export interface paths {
             parameters: {
                 query?: {
                     q?: string;
-                    kind?: "person" | "tradition" | "concept" | "work";
+                    match?: "contains" | "exact";
+                    kind?: "person" | "tradition" | "concept" | "work" | "figure";
                     nodeId?: string;
                     contextId?: string;
                     type?: string;
@@ -2712,7 +2728,8 @@ export interface paths {
             parameters: {
                 query?: {
                     q?: string;
-                    kind?: "person" | "tradition" | "concept" | "work";
+                    match?: "contains" | "exact";
+                    kind?: "person" | "tradition" | "concept" | "work" | "figure";
                     nodeId?: string;
                     contextId?: string;
                     type?: string;
@@ -2847,7 +2864,8 @@ export interface paths {
             parameters: {
                 query?: {
                     q?: string;
-                    kind?: "person" | "tradition" | "concept" | "work";
+                    match?: "contains" | "exact";
+                    kind?: "person" | "tradition" | "concept" | "work" | "figure";
                     nodeId?: string;
                     contextId?: string;
                     type?: string;
@@ -2982,7 +3000,8 @@ export interface paths {
             parameters: {
                 query?: {
                     q?: string;
-                    kind?: "person" | "tradition" | "concept" | "work";
+                    match?: "contains" | "exact";
+                    kind?: "person" | "tradition" | "concept" | "work" | "figure";
                     nodeId?: string;
                     contextId?: string;
                     type?: string;
@@ -3472,7 +3491,8 @@ export interface paths {
             parameters: {
                 query?: {
                     q?: string;
-                    kind?: "person" | "tradition" | "concept" | "work";
+                    match?: "contains" | "exact";
+                    kind?: "person" | "tradition" | "concept" | "work" | "figure";
                     nodeId?: string;
                     contextId?: string;
                     type?: string;
@@ -3621,6 +3641,9 @@ export interface paths {
                             /** Format: uuid */
                             entityId: string;
                         } | {
+                            /** @enum {boolean} */
+                            discard: true;
+                        } | {
                             /** @enum {string} */
                             entity: "nodes";
                             data: components["schemas"]["NodeInput"];
@@ -3655,7 +3678,7 @@ export interface paths {
                             /** Format: uuid */
                             id: string;
                             /** Format: uuid */
-                            entityId: string;
+                            entityId: string | null;
                             version: number;
                             reason: string;
                         };
@@ -3880,7 +3903,7 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         Catalog: {
-            nodeKinds: ("person" | "tradition" | "concept" | "work")[];
+            nodeKinds: ("person" | "tradition" | "concept" | "work" | "figure")[];
             relationTypes: {
                 code: string;
                 label: string;
@@ -3888,11 +3911,12 @@ export interface components {
                 symmetric: boolean;
                 allowedEndpoints: {
                     /** @enum {string} */
-                    source: "person" | "tradition" | "concept" | "work";
+                    source: "person" | "tradition" | "concept" | "work" | "figure";
                     /** @enum {string} */
-                    target: "person" | "tradition" | "concept" | "work";
+                    target: "person" | "tradition" | "concept" | "work" | "figure";
                 }[];
             }[];
+            identifierSchemes: ("wikidata" | "viaf" | "isni" | "isbn" | "doi" | "openlibrary")[];
             evidenceStatuses: ("documented" | "attributed_interpretation" | "inference")[];
             editorialStatuses: ("active" | "pending" | "archived")[];
             intensities: {
@@ -3934,15 +3958,29 @@ export interface components {
         };
         NodeDetail: {
             /** @enum {string} */
-            kind: "person" | "tradition" | "concept" | "work";
+            kind: "person" | "tradition" | "concept" | "work" | "figure";
             label: string;
             description: string;
             /** @enum {string|null} */
             conceptScope?: "broad" | "contextual" | null;
+            startYear?: number | null;
+            endYear?: number | null;
+            /**
+             * @default unknown
+             * @enum {string}
+             */
+            precision: "unknown" | "approximate" | "range" | "exact";
+            periodLabel?: string | null;
             /** @default [] */
             aliases: {
                 alias: string;
                 language: string;
+            }[];
+            /** @default [] */
+            identifiers: {
+                /** @enum {string} */
+                scheme: "wikidata" | "viaf" | "isni" | "isbn" | "doi" | "openlibrary";
+                value: string;
             }[];
             /** @default [] */
             contexts: string[];
@@ -3961,15 +3999,29 @@ export interface components {
         };
         NodeInput: {
             /** @enum {string} */
-            kind: "person" | "tradition" | "concept" | "work";
+            kind: "person" | "tradition" | "concept" | "work" | "figure";
             label: string;
             description: string;
             /** @enum {string|null} */
             conceptScope?: "broad" | "contextual" | null;
+            startYear?: number | null;
+            endYear?: number | null;
+            /**
+             * @default unknown
+             * @enum {string}
+             */
+            precision: "unknown" | "approximate" | "range" | "exact";
+            periodLabel?: string | null;
             /** @default [] */
             aliases: {
                 alias: string;
                 language: string;
+            }[];
+            /** @default [] */
+            identifiers: {
+                /** @enum {string} */
+                scheme: "wikidata" | "viaf" | "isni" | "isbn" | "doi" | "openlibrary";
+                value: string;
             }[];
             /** @default [] */
             contexts: string[];
@@ -4071,7 +4123,7 @@ export interface components {
             /** Format: uuid */
             targetId: string;
             /** @enum {string} */
-            type: "influenced" | "formulated" | "developed" | "studied" | "used" | "adhered_to" | "transmitted" | "reinterpreted" | "incorporated_from" | "criticized" | "part_of" | "type_of" | "contextualizes" | "appears_in" | "parallel_to" | "differs_from";
+            type: "influenced" | "formulated" | "authored" | "developed" | "studied" | "used" | "adhered_to" | "transmitted" | "reinterpreted" | "incorporated_from" | "criticized" | "part_of" | "type_of" | "contextualizes" | "appears_in" | "parallel_to" | "differs_from";
             /** Format: uuid */
             contextId?: string | null;
             claim: string;
@@ -4119,7 +4171,7 @@ export interface components {
             /** Format: uuid */
             targetId: string;
             /** @enum {string} */
-            type: "influenced" | "formulated" | "developed" | "studied" | "used" | "adhered_to" | "transmitted" | "reinterpreted" | "incorporated_from" | "criticized" | "part_of" | "type_of" | "contextualizes" | "appears_in" | "parallel_to" | "differs_from";
+            type: "influenced" | "formulated" | "authored" | "developed" | "studied" | "used" | "adhered_to" | "transmitted" | "reinterpreted" | "incorporated_from" | "criticized" | "part_of" | "type_of" | "contextualizes" | "appears_in" | "parallel_to" | "differs_from";
             /** Format: uuid */
             contextId?: string | null;
             claim: string;
@@ -4176,7 +4228,7 @@ export interface components {
             /** @default {} */
             filters: {
                 /** @enum {string} */
-                kind?: "person" | "tradition" | "concept" | "work";
+                kind?: "person" | "tradition" | "concept" | "work" | "figure";
                 type?: string;
                 includePending?: boolean;
                 /** Format: uuid */
@@ -4220,6 +4272,7 @@ export interface components {
             updated: number;
             reused: number;
             pending: number;
+            discarded: number;
             clientRefToId: {
                 [key: string]: string;
             };
@@ -4229,8 +4282,9 @@ export interface components {
                 /** Format: uuid */
                 entityId: string | null;
                 /** @enum {string} */
-                outcome: "created" | "updated" | "reused" | "pending";
+                outcome: "created" | "updated" | "reused" | "pending" | "discarded";
                 reason: string | null;
+                candidates?: string[];
             }[];
             viewUrl: string | null;
             dryRun: boolean;
@@ -4249,15 +4303,29 @@ export interface components {
             /** @default [] */
             nodes: ({
                 /** @enum {string} */
-                kind: "person" | "tradition" | "concept" | "work";
+                kind: "person" | "tradition" | "concept" | "work" | "figure";
                 label: string;
                 description: string;
                 /** @enum {string|null} */
                 conceptScope?: "broad" | "contextual" | null;
+                startYear?: number | null;
+                endYear?: number | null;
+                /**
+                 * @default unknown
+                 * @enum {string}
+                 */
+                precision: "unknown" | "approximate" | "range" | "exact";
+                periodLabel?: string | null;
                 /** @default [] */
                 aliases: {
                     alias: string;
                     language: string;
+                }[];
+                /** @default [] */
+                identifiers: {
+                    /** @enum {string} */
+                    scheme: "wikidata" | "viaf" | "isni" | "isbn" | "doi" | "openlibrary";
+                    value: string;
                 }[];
                 /** @default [] */
                 contexts: ({
@@ -4276,14 +4344,24 @@ export interface components {
                 op: "create";
             } | {
                 /** @enum {string} */
-                kind?: "person" | "tradition" | "concept" | "work";
+                kind?: "person" | "tradition" | "concept" | "work" | "figure";
                 label?: string;
                 description?: string;
                 /** @enum {string|null} */
                 conceptScope?: "broad" | "contextual" | null;
+                startYear?: number | null;
+                endYear?: number | null;
+                /** @enum {string} */
+                precision?: "unknown" | "approximate" | "range" | "exact";
+                periodLabel?: string | null;
                 aliases?: {
                     alias: string;
                     language: string;
+                }[];
+                identifiers?: {
+                    /** @enum {string} */
+                    scheme: "wikidata" | "viaf" | "isni" | "isbn" | "doi" | "openlibrary";
+                    value: string;
                 }[];
                 contexts?: ({
                     /** Format: uuid */
@@ -4422,7 +4500,7 @@ export interface components {
             /** @default [] */
             relations: ({
                 /** @enum {string} */
-                type: "influenced" | "formulated" | "developed" | "studied" | "used" | "adhered_to" | "transmitted" | "reinterpreted" | "incorporated_from" | "criticized" | "part_of" | "type_of" | "contextualizes" | "appears_in" | "parallel_to" | "differs_from";
+                type: "influenced" | "formulated" | "authored" | "developed" | "studied" | "used" | "adhered_to" | "transmitted" | "reinterpreted" | "incorporated_from" | "criticized" | "part_of" | "type_of" | "contextualizes" | "appears_in" | "parallel_to" | "differs_from";
                 contextId?: {
                     /** Format: uuid */
                     id: string;
@@ -4486,7 +4564,7 @@ export interface components {
                 op: "create";
             } | {
                 /** @enum {string} */
-                type?: "influenced" | "formulated" | "developed" | "studied" | "used" | "adhered_to" | "transmitted" | "reinterpreted" | "incorporated_from" | "criticized" | "part_of" | "type_of" | "contextualizes" | "appears_in" | "parallel_to" | "differs_from";
+                type?: "influenced" | "formulated" | "authored" | "developed" | "studied" | "used" | "adhered_to" | "transmitted" | "reinterpreted" | "incorporated_from" | "criticized" | "part_of" | "type_of" | "contextualizes" | "appears_in" | "parallel_to" | "differs_from";
                 contextId?: {
                     /** Format: uuid */
                     id: string;

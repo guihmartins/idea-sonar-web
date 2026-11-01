@@ -2,7 +2,7 @@
   "status": "available",
   "repository": "guihmartins/idea-sonar-api",
   "path": "contracts/openapi.json",
-  "commit": "e27da26a162755707edfc4bf9e53306ba25e8ca8",
-  "infoVersion": "1.1.0",
-  "sha256": "869014cfdc95c468990cc19d41ffcaa617fd98fc35464c6bc83ae87369350777"
+  "commit": "5215021175aa1f0d409bb7f49077894d93575b9f",
+  "infoVersion": "1.2.0",
+  "sha256": "d8b32014225d052d768afed068e1483789aed1d81753da6dc152f6fa33f54940"
 }

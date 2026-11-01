@@ -2,18 +2,33 @@ import type { Context } from '../api/domain';
 export function displayYear(year: number): string {
   return year <= 0 ? `${1 - year} a.C.` : `${year} d.C.`;
 }
+// Limites da API para anos astronômicos (0 = 1 a.C.).
+export const minYear = -100000;
+export const maxYear = 3000;
 export function astronomicalYear(value: string, era: string): number | null {
   if (!value.trim()) return null;
   const year = Number(value);
   if (!Number.isSafeInteger(year) || year < 1)
     throw new Error('Informe ano inteiro positivo e escolha a era.');
-  return era === 'bce' ? 1 - year : year;
+  const astronomical = era === 'bce' ? 1 - year : year;
+  if (astronomical < minYear || astronomical > maxYear)
+    throw new Error(
+      `Ano fora do intervalo aceito: de ${displayYear(minYear)} a ${displayYear(maxYear)}.`,
+    );
+  return astronomical;
 }
+type Period = Pick<
+  Context,
+  'startYear' | 'endYear' | 'precision' | 'periodLabel'
+>;
+// Ponto sem ano nem rótulo não tem período a mostrar (contexto mostra "desconhecido").
+export const hasPeriod = (period: Period) =>
+  period.startYear !== null ||
+  period.endYear !== null ||
+  period.periodLabel !== null;
 const yearOrUnknown = (year: number | null) =>
   year === null ? '?' : displayYear(year);
-export function formatPeriod(
-  period: Pick<Context, 'startYear' | 'endYear' | 'precision' | 'periodLabel'>,
-): string {
+export function formatPeriod(period: Period): string {
   if (period.startYear === null && period.endYear === null)
     return period.periodLabel ?? 'Período desconhecido';
   const prefix = period.precision === 'approximate' ? 'Aproximadamente ' : '';

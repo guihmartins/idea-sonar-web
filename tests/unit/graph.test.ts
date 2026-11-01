@@ -25,6 +25,11 @@ const node = (id: string): Node => ({
   label: id,
   description: '',
   kind: 'concept',
+  startYear: null,
+  endYear: null,
+  precision: 'unknown',
+  periodLabel: null,
+  identifiers: [],
   aliases: [],
   conceptScope: 'broad',
   contexts: [],
@@ -54,6 +59,7 @@ const edge = (id: string, sourceId: string, targetId: string): Relation => ({
 const catalogOf = (relationTypes: Catalog['relationTypes']): Catalog => ({
   nodeKinds: [],
   relationTypes,
+  identifierSchemes: [],
   evidenceStatuses: [],
   editorialStatuses: [],
   intensities: [],
@@ -264,14 +270,14 @@ it('mapeia todos os tipos, preserva identidade/direção e usa catálogo por ID'
     relationType('studied', 'estudou', 'estudado por', false),
     relationType('parallel_to', 'paralelo a', 'paralelo a', true),
   ]);
-  const input = (['person', 'tradition', 'concept', 'work'] as const).map(
-    (kind, i) => ({
-      ...node(String(i)),
-      kind,
-      label: `Ponto ${i}`,
-      degreeTotal: i === 3 ? 10000 : i,
-    }),
-  );
+  const input = (
+    ['person', 'tradition', 'concept', 'work', 'figure'] as const
+  ).map((kind, i) => ({
+    ...node(String(i)),
+    kind,
+    label: `Ponto ${i}`,
+    degreeTotal: i === 3 ? 10000 : i,
+  }));
   const relations = [
     {
       ...edge('e1', '0', '1'),
@@ -292,11 +298,12 @@ it('mapeia todos os tipos, preserva identidade/direção e usa catálogo por ID'
     },
   ];
   const result = elements(input, relations, catalog);
-  expect(result.slice(0, 4).map((e) => e.data.shape)).toEqual([
+  expect(result.slice(0, 5).map((e) => e.data.shape)).toEqual([
     'ellipse',
     'hexagon',
     'diamond',
     'rectangle',
+    'triangle',
   ]);
   expect(dataAt(result, 0)).toMatchObject({
     id: '0',
@@ -307,7 +314,7 @@ it('mapeia todos os tipos, preserva identidade/direção e usa catálogo por ID'
   expect(dataAt(result, 3).size).toBe(68);
   expect(dataAt(result, 1).size).toBeGreaterThan(30);
   expect(dataAt(result, 2).size).toBeGreaterThan(dataAt(result, 1).size);
-  expect(dataAt(result, 4)).toMatchObject({
+  expect(dataAt(result, 5)).toMatchObject({
     id: 'e1',
     source: '0',
     target: '1',
@@ -316,15 +323,15 @@ it('mapeia todos os tipos, preserva identidade/direção e usa catálogo por ID'
     line: 'solid',
     contested: false,
   });
-  expect(dataAt(result, 5)).toMatchObject({
+  expect(dataAt(result, 6)).toMatchObject({
     id: 'e2',
     label: 'paralelo a',
     arrow: 'none',
     line: 'dashed',
     contested: true,
   });
-  expect(dataAt(result, 5).width).toBeGreaterThan(dataAt(result, 4).width);
-  expect(dataAt(result, 6)).toMatchObject({
+  expect(dataAt(result, 6).width).toBeGreaterThan(dataAt(result, 5).width);
+  expect(dataAt(result, 7)).toMatchObject({
     source: '1',
     target: '0',
     label: 'not-in-catalog',

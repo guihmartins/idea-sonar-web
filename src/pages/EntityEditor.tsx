@@ -162,7 +162,7 @@ function useEditorForm(type: Editable, initial: Entity | undefined) {
   async function savePlain() {
     const body = await buildEditorBody(
       type,
-      { fields, contexts, evidence, contested },
+      { fields, contexts, evidence, contested, identifiers: [] },
       catalog.data,
       api,
     );
@@ -198,7 +198,7 @@ function useEditorForm(type: Editable, initial: Entity | undefined) {
     setEvidence([]);
   }
   async function saveContextual(kind: ContextualFlow) {
-    const draft = { fields, contexts, evidence, contested };
+    const draft = { fields, contexts, evidence, contested, identifiers: [] };
     const body =
       kind === 'create'
         ? createContextualBatch(draft, actionKey)

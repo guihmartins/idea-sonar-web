@@ -147,7 +147,12 @@ export function createContextualBatch(
         label: body.label,
         description: body.description,
         conceptScope: 'contextual',
+        startYear: body.startYear,
+        endYear: body.endYear,
+        precision: body.precision,
+        periodLabel: body.periodLabel,
         aliases: body.aliases,
+        identifiers: body.identifiers,
         contexts: body.contexts.map(toRef),
         status: 'active',
       },
@@ -160,6 +165,12 @@ type NodeUpdate = Extract<BatchNode, { op: 'update' }>;
 
 const sameJson = (a: unknown, b: unknown) =>
   JSON.stringify(a) === JSON.stringify(b);
+// A API devolve aliases, identificadores e contextos ordenados, não na ordem
+// digitada: mudança de verdade é mudança do conjunto, não da ordem.
+const canonical = (list: unknown[]) =>
+  list.map((x) => JSON.stringify(x)).sort();
+const sameSet = (a: unknown[], b: unknown[]) =>
+  sameJson(canonical(a), canonical(b));
 
 // Update parcial: só o que mudou no formulário além do estado. Tipo e escopo
 // não mudam depois da criação, então nunca entram.
@@ -172,9 +183,23 @@ function changedNodeFields(
   if (body.label !== baseline.label) changed.label = body.label;
   if (body.description !== baseline.description)
     changed.description = body.description;
-  if (!sameJson(body.aliases, baseline.aliases)) changed.aliases = body.aliases;
-  if (!sameJson([...body.contexts].sort(), [...baseline.contexts].sort()))
+  Object.assign(changed, changedPeriod(body, baseline));
+  if (!sameSet(body.aliases, baseline.aliases)) changed.aliases = body.aliases;
+  if (!sameSet(body.identifiers, baseline.identifiers))
+    changed.identifiers = body.identifiers;
+  if (!sameSet(body.contexts, baseline.contexts))
     changed.contexts = body.contexts.map(toRef);
+  return changed;
+}
+function changedPeriod(
+  body: ReturnType<typeof nodeBody>,
+  baseline: Node,
+): Partial<NodeUpdate> {
+  const keys = ['startYear', 'endYear', 'precision', 'periodLabel'] as const;
+  const changed: Partial<NodeUpdate> = {};
+  for (const key of keys)
+    if (body[key] !== baseline[key])
+      Object.assign(changed, { [key]: body[key] });
   return changed;
 }
 

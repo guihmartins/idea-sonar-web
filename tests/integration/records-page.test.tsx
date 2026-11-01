@@ -322,7 +322,7 @@ describe('ImportPage', () => {
     expect(screen.getByText('jung (nodes)')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'homonimo (nodes) — Nome já existente; selecionar ID explicitamente',
+        `homonimo (nodes) — Nome já existente (candidatos: ${ids.jung}); selecione o ID explicitamente`,
       ),
     ).toBeInTheDocument();
   });
@@ -552,7 +552,9 @@ describe('PendingPage', () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText('Nome já existente; selecionar ID explicitamente'),
+      screen.getByText(
+        `Nome já existente (candidatos: ${ids.jung}); selecione o ID explicitamente`,
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByRole('link', { name: 'Ver importação de origem' }),

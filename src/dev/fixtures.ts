@@ -2,6 +2,14 @@
 // Formatos seguem o contrato da API (contracts/openapi.json).
 import { createApi } from '../api/adapter';
 import { applyBatch, apiFailure, restProblem } from './fixture-batch';
+import {
+  duplicateFailure,
+  nodeIssues,
+  nodeMatches,
+  normalizedIdentifiers,
+  owners,
+  validationFailure,
+} from './fixture-nodes';
 import { ApiError } from '../api/client';
 import type { RequestOptions } from '../api/client';
 import { defaultFilters, toStoredFilters } from '../api/domain';
@@ -51,7 +59,12 @@ function node(
     description:
       'Registro sintético para testar a interface; não é uma afirmação histórica.',
     conceptScope: null,
+    startYear: null,
+    endYear: null,
+    precision: 'unknown',
+    periodLabel: null,
     aliases: [],
+    identifiers: [],
     contexts: [],
     degreeTotal: 0,
     archivedAt: null,
@@ -134,10 +147,11 @@ const relations: Relation[] = [
     contestationNote: null,
   },
 ];
-const kinds = ['person', 'tradition', 'concept', 'work'] as const;
+const kinds = ['person', 'tradition', 'concept', 'work', 'figure'] as const;
 const predicateNames = [
   'influenced',
   'formulated',
+  'authored',
   'developed',
   'studied',
   'used',
@@ -156,6 +170,7 @@ const predicateNames = [
 const labels = [
   'influenciou',
   'formulou',
+  'é autor de',
   'desenvolveu',
   'estudou',
   'utilizou',
@@ -182,6 +197,7 @@ const catalog: Catalog = {
       kinds.map((target) => ({ source, target })),
     ),
   })),
+  identifierSchemes: ['wikidata', 'viaf', 'isni', 'isbn', 'doi', 'openlibrary'],
   evidenceStatuses: ['documented', 'attributed_interpretation', 'inference'],
   editorialStatuses: ['active', 'pending', 'archived'],
   intensities: [
@@ -233,6 +249,7 @@ const baseImports: ImportDetail[] = [
       updated: 1,
       reused: 1,
       pending: 1,
+      discarded: 0,
       items: [
         {
           clientRef: 'jung',
@@ -240,6 +257,7 @@ const baseImports: ImportDetail[] = [
           entityId: ids.jung,
           outcome: 'created',
           reason: null,
+          candidates: [],
         },
         {
           clientRef: 'gnose',
@@ -247,6 +265,7 @@ const baseImports: ImportDetail[] = [
           entityId: ids.gnosis,
           outcome: 'updated',
           reason: null,
+          candidates: [],
         },
         {
           clientRef: 'fonte',
@@ -254,13 +273,15 @@ const baseImports: ImportDetail[] = [
           entityId: ids.source,
           outcome: 'reused',
           reason: null,
+          candidates: [],
         },
         {
           clientRef: 'homonimo',
           entityType: 'nodes',
           entityId: null,
           outcome: 'pending',
-          reason: 'Nome já existente; selecionar ID explicitamente',
+          reason: `Nome já existente (candidatos: ${ids.jung}); selecione o ID explicitamente`,
+          candidates: [ids.jung],
         },
       ],
     },
@@ -273,7 +294,7 @@ const basePending: PendingItem[] = [
     batchVersion: 1,
     clientRef: 'homonimo',
     entityType: 'nodes',
-    reason: 'Nome já existente; selecionar ID explicitamente',
+    reason: `Nome já existente (candidatos: ${ids.jung}); selecione o ID explicitamente`,
     dependencies: [],
     payload: {
       nodes: [
@@ -290,12 +311,27 @@ const basePending: PendingItem[] = [
 ];
 // Campos que a API preenche ao criar cada tipo de registro.
 const createDefaults: Record<string, Record<string, unknown>> = {
-  nodes: { degreeTotal: 0, archivedAt: null, aliases: [], contexts: [] },
+  nodes: {
+    degreeTotal: 0,
+    archivedAt: null,
+    startYear: null,
+    endYear: null,
+    precision: 'unknown',
+    periodLabel: null,
+    aliases: [],
+    identifiers: [],
+    contexts: [],
+  },
   relations: { archivedAt: null, evidence: [] },
   sources: {},
   contexts: {},
   views: {},
 };
+interface ResolveBody {
+  expectedVersion: number;
+  reason: string;
+  selection: { entityId?: string; discard?: true };
+}
 interface FixtureDataset {
   nodes: Node[];
   relations: Relation[];
@@ -350,9 +386,14 @@ function buildFixtureServices(
     return matchesPeriod(node, params);
   }
   function matchesPeriod(node: Node, params: URLSearchParams): boolean {
-    const periods = (db.contexts as Context[]).filter((context) =>
-      node.contexts.includes(context.id),
-    );
+    // O período do próprio ponto vale, se houver; senão o dos contextos dele.
+    const own = node.startYear !== null || node.endYear !== null ? [node] : [];
+    const periods = [
+      ...own,
+      ...(db.contexts as Context[]).filter((context) =>
+        node.contexts.includes(context.id),
+      ),
+    ];
     const from = params.get('startYear');
     const to = params.get('endYear');
     if (
@@ -381,38 +422,79 @@ function buildFixtureServices(
       },
     ]);
   }
-  function resolvePending(id: string, options: RequestOptions) {
-    const body = options.body as {
-      expectedVersion: number;
-      reason: string;
-      selection: { entityId: string };
+  const recountOf = (batch: ImportDetail) => {
+    const count = (o: string) =>
+      batch.result.items.filter((i) => i.outcome === o).length;
+    return {
+      created: count('created'),
+      updated: count('updated'),
+      reused: count('reused'),
+      pending: count('pending'),
+      discarded: count('discarded'),
     };
+  };
+  // Recalcula contadores e estado do lote depois de mudar o desfecho de itens.
+  function recount(batch: ImportDetail) {
+    Object.assign(batch.result, recountOf(batch));
+    batch.status = batch.result.pending
+      ? 'committed_with_pending'
+      : 'committed';
+  }
+  // Fecha a pendência no resultado do lote: reutiliza um registro ou descarta.
+  function closeItem(
+    batch: ImportDetail,
+    item: PendingItem,
+    body: ResolveBody,
+  ) {
+    const entityId = body.selection.discard
+      ? null
+      : (body.selection.entityId ?? null);
+    const entry = batch.result.items.find(
+      (i) => i.clientRef === item.clientRef,
+    );
+    if (entry) {
+      entry.outcome = entityId ? 'reused' : 'discarded';
+      entry.entityId = entityId;
+      entry.reason = body.reason;
+      recount(batch);
+    }
+    return entityId;
+  }
+  // Resolve com um registro existente ou descarta (`selection.discard`): nos dois
+  // a pendência sai da fila; descartar não toca em registro e deixa entityId nulo.
+  function resolvePending(id: string, options: RequestOptions) {
+    const body = options.body as ResolveBody;
     const index = pending.findIndex((p) => p.id === id);
-    const batch = imports.find((i) => i.id === pending[index]?.batchId);
-    if (!batch) throw new ApiError(404, 'Pendência indisponível.');
+    const item = pending[index];
+    const batch = imports.find((i) => i.id === item?.batchId);
+    if (!item || !batch) throw new ApiError(404, 'Pendência indisponível.');
     if (batch.version !== body.expectedVersion)
       throw new ApiError(409, 'Pendência alterada.');
     pending.splice(index, 1);
+    const entityId = closeItem(batch, item, body);
     batch.version += 1;
-    batch.status = pending.some((p) => p.batchId === batch.id)
-      ? 'committed_with_pending'
-      : 'committed';
-    return {
-      id,
-      entityId: body.selection.entityId,
-      version: batch.version,
-      reason: body.reason,
-    };
+    return { id, entityId, version: batch.version, reason: body.reason };
   }
   function pendingResult(id: string, url: URL, options: RequestOptions) {
     if (options.method !== 'POST')
       return page(pending, url.searchParams.get('cursor'));
     return resolvePending(id, options);
   }
+  // Desfazer fecha as perguntas abertas: o que seguia pendente vira descartado
+  // ("Lote desfeito") e some da fila, como na API.
   function undoImport(item: ImportDetail, options: RequestOptions) {
     const body = options.body as { expectedVersion: number; reason: string };
     if (item.status === 'undone' || item.version !== body.expectedVersion)
       throw new ApiError(409, 'Lote alterado ou já desfeito.');
+    for (const entry of item.result.items)
+      if (entry.outcome === 'pending') {
+        entry.outcome = 'discarded';
+        entry.reason = 'Lote desfeito';
+      }
+    for (let i = pending.length - 1; i >= 0; i -= 1)
+      if (pending[i]?.batchId === item.id) pending.splice(i, 1);
+    const counts = recountOf(item);
+    Object.assign(item.result, counts);
     item.status = 'undone';
     item.version += 1;
     return { batchId: item.id, status: 'undone', reason: body.reason };
@@ -432,7 +514,7 @@ function buildFixtureServices(
     if (batch.dryRun) return result;
     db.nodes = work.nodes;
     db.relations = work.relations;
-    const content = { ...batch, dryRun: undefined };
+    const ops = batch as unknown as Record<string, { clientRef: string }[]>;
     imports.unshift({
       id: result.batchId,
       origin: batch.origin,
@@ -446,6 +528,7 @@ function buildFixtureServices(
         updated: result.updated,
         reused: result.reused,
         pending: result.pending,
+        discarded: result.discarded,
         items: result.items,
       },
     });
@@ -458,7 +541,12 @@ function buildFixtureServices(
         entityType: item.entityType as PendingItem['entityType'],
         reason: item.reason,
         dependencies: [],
-        payload: content,
+        // Só a operação proposta, no formato {tipo: [op]}, como a API.
+        payload: {
+          [item.entityType]: (ops[item.entityType] ?? []).filter(
+            (op) => op.clientRef === item.clientRef,
+          ),
+        },
       });
     return result;
   }
@@ -532,8 +620,13 @@ function buildFixtureServices(
         visibleStatus(entity, url.searchParams) &&
         (type !== 'relations' ||
           matchesRelation(entity as Relation, url.searchParams)) &&
-        searchText(entity).toLocaleLowerCase('pt-BR').includes(q) &&
-        (type !== 'nodes' || matches(entity as Node, url.searchParams)),
+        (type === 'nodes'
+          ? nodeMatches(
+              entity as Node,
+              url.searchParams.get('q') ?? '',
+              url.searchParams.get('match'),
+            ) && matches(entity as Node, url.searchParams)
+          : searchText(entity).toLocaleLowerCase('pt-BR').includes(q)),
     );
     return page(items, url.searchParams.get('cursor'));
   }
@@ -576,9 +669,19 @@ function buildFixtureServices(
     record(type, undefined, created);
     return created;
   }
+  // Período coerente, identificadores válidos e únicos (guardados normalizados):
+  // 400 com o caminho do campo, ou 409 DUPLICATE se outro ponto já os tem.
+  function assertNodeRules(node: Node) {
+    const issues = nodeIssues(node);
+    if (issues.length) throw validationFailure(issues);
+    if (owners(db.nodes as Node[], node.identifiers, node.id).length)
+      throw duplicateFailure();
+    node.identifiers = normalizedIdentifiers(node.identifiers);
+  }
   // Como a API: o REST recusa conceito contextual ativo e relação ativa com
   // ponto inativo; só o lote grava os dois juntos.
   function assertWritable(type: string, entity: Entity) {
+    if (type === 'nodes') assertNodeRules(entity as Node);
     if (type !== 'nodes' && type !== 'relations') return;
     const failure = restProblem(
       { nodes: db.nodes as Node[], relations: db.relations as Relation[] },
@@ -1210,6 +1313,7 @@ const atlasCatalog: Catalog = {
       kinds.map((target) => ({ source, target })),
     ),
   })),
+  identifierSchemes: ['wikidata', 'viaf', 'isni', 'isbn', 'doi', 'openlibrary'],
   evidenceStatuses: ['documented', 'attributed_interpretation', 'inference'],
   editorialStatuses: ['active', 'pending', 'archived'],
   intensities: [

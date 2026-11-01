@@ -321,7 +321,7 @@ describe('Conceito contextual — criação', () => {
       'O lote foi gravado, mas 2 itens ficaram pendentes.',
     );
     expect(alert).toHaveTextContent(
-      'Ponto conceito: Nome já existente; selecionar ID explicitamente',
+      `Ponto conceito: Nome já existente (candidatos: ${ids.concept}); selecione o ID explicitamente`,
     );
     expect(alert).toHaveTextContent(
       'Relação contextualizacao: Dependência pendente',
@@ -354,6 +354,7 @@ describe('Conceito contextual — criação', () => {
       updated: 0,
       reused: 0,
       pending: 1,
+      discarded: 0,
       clientRefToId: {},
       items: [
         {
@@ -362,6 +363,7 @@ describe('Conceito contextual — criação', () => {
           entityId: null,
           outcome: 'pending',
           reason: null,
+          candidates: [],
         },
         {
           clientRef: 'conceito',
@@ -369,6 +371,7 @@ describe('Conceito contextual — criação', () => {
           entityId: 'x',
           outcome: 'created',
           reason: null,
+          candidates: [],
         },
       ],
       viewUrl: null,

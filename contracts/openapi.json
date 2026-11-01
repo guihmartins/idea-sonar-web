@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Idea Sonar API",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "description": "API privada de conhecimento, relações contextualizadas e ingestão auditada."
   },
   "components": {
@@ -25,7 +25,8 @@
                 "person",
                 "tradition",
                 "concept",
-                "work"
+                "work",
+                "figure"
               ]
             }
           },
@@ -57,7 +58,8 @@
                           "person",
                           "tradition",
                           "concept",
-                          "work"
+                          "work",
+                          "figure"
                         ]
                       },
                       "target": {
@@ -66,7 +68,8 @@
                           "person",
                           "tradition",
                           "concept",
-                          "work"
+                          "work",
+                          "figure"
                         ]
                       }
                     },
@@ -83,6 +86,20 @@
                 "inverseLabel",
                 "symmetric",
                 "allowedEndpoints"
+              ]
+            }
+          },
+          "identifierSchemes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "wikidata",
+                "viaf",
+                "isni",
+                "isbn",
+                "doi",
+                "openlibrary"
               ]
             }
           },
@@ -135,6 +152,7 @@
         "required": [
           "nodeKinds",
           "relationTypes",
+          "identifierSchemes",
           "evidenceStatuses",
           "editorialStatuses",
           "intensities"
@@ -231,7 +249,8 @@
               "person",
               "tradition",
               "concept",
-              "work"
+              "work",
+              "figure"
             ]
           },
           "label": {
@@ -254,6 +273,40 @@
               "contextual",
               null
             ]
+          },
+          "startYear": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": -100000,
+            "maximum": 3000
+          },
+          "endYear": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": -100000,
+            "maximum": 3000
+          },
+          "precision": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "approximate",
+              "range",
+              "exact"
+            ],
+            "default": "unknown"
+          },
+          "periodLabel": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 20000
           },
           "aliases": {
             "type": "array",
@@ -278,6 +331,37 @@
               "additionalProperties": false
             },
             "maxItems": 100,
+            "default": []
+          },
+          "identifiers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "scheme": {
+                  "type": "string",
+                  "enum": [
+                    "wikidata",
+                    "viaf",
+                    "isni",
+                    "isbn",
+                    "doi",
+                    "openlibrary"
+                  ]
+                },
+                "value": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 20000
+                }
+              },
+              "required": [
+                "scheme",
+                "value"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 20,
             "default": []
           },
           "contexts": {
@@ -343,7 +427,8 @@
               "person",
               "tradition",
               "concept",
-              "work"
+              "work",
+              "figure"
             ]
           },
           "label": {
@@ -366,6 +451,40 @@
               "contextual",
               null
             ]
+          },
+          "startYear": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": -100000,
+            "maximum": 3000
+          },
+          "endYear": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": -100000,
+            "maximum": 3000
+          },
+          "precision": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "approximate",
+              "range",
+              "exact"
+            ],
+            "default": "unknown"
+          },
+          "periodLabel": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 20000
           },
           "aliases": {
             "type": "array",
@@ -390,6 +509,37 @@
               "additionalProperties": false
             },
             "maxItems": 100,
+            "default": []
+          },
+          "identifiers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "scheme": {
+                  "type": "string",
+                  "enum": [
+                    "wikidata",
+                    "viaf",
+                    "isni",
+                    "isbn",
+                    "doi",
+                    "openlibrary"
+                  ]
+                },
+                "value": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 20000
+                }
+              },
+              "required": [
+                "scheme",
+                "value"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 20,
             "default": []
           },
           "contexts": {
@@ -776,6 +926,7 @@
             "enum": [
               "influenced",
               "formulated",
+              "authored",
               "developed",
               "studied",
               "used",
@@ -996,6 +1147,7 @@
             "enum": [
               "influenced",
               "formulated",
+              "authored",
               "developed",
               "studied",
               "used",
@@ -1244,7 +1396,8 @@
                   "person",
                   "tradition",
                   "concept",
-                  "work"
+                  "work",
+                  "figure"
                 ]
               },
               "type": {
@@ -1372,6 +1525,9 @@
           "pending": {
             "type": "number"
           },
+          "discarded": {
+            "type": "number"
+          },
           "clientRefToId": {
             "type": "object",
             "additionalProperties": {
@@ -1403,7 +1559,8 @@
                     "created",
                     "updated",
                     "reused",
-                    "pending"
+                    "pending",
+                    "discarded"
                   ]
                 },
                 "reason": {
@@ -1411,6 +1568,13 @@
                     "string",
                     "null"
                   ]
+                },
+                "candidates": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
                 }
               },
               "required": [
@@ -1439,6 +1603,7 @@
           "updated",
           "reused",
           "pending",
+          "discarded",
           "clientRefToId",
           "items",
           "viewUrl",
@@ -1496,7 +1661,8 @@
                         "person",
                         "tradition",
                         "concept",
-                        "work"
+                        "work",
+                        "figure"
                       ]
                     },
                     "label": {
@@ -1519,6 +1685,40 @@
                         "contextual",
                         null
                       ]
+                    },
+                    "startYear": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": -100000,
+                      "maximum": 3000
+                    },
+                    "endYear": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": -100000,
+                      "maximum": 3000
+                    },
+                    "precision": {
+                      "type": "string",
+                      "enum": [
+                        "unknown",
+                        "approximate",
+                        "range",
+                        "exact"
+                      ],
+                      "default": "unknown"
+                    },
+                    "periodLabel": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "minLength": 1,
+                      "maxLength": 20000
                     },
                     "aliases": {
                       "type": "array",
@@ -1543,6 +1743,37 @@
                         "additionalProperties": false
                       },
                       "maxItems": 100,
+                      "default": []
+                    },
+                    "identifiers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "scheme": {
+                            "type": "string",
+                            "enum": [
+                              "wikidata",
+                              "viaf",
+                              "isni",
+                              "isbn",
+                              "doi",
+                              "openlibrary"
+                            ]
+                          },
+                          "value": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 20000
+                          }
+                        },
+                        "required": [
+                          "scheme",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 20,
                       "default": []
                     },
                     "contexts": {
@@ -1619,7 +1850,8 @@
                         "person",
                         "tradition",
                         "concept",
-                        "work"
+                        "work",
+                        "figure"
                       ]
                     },
                     "label": {
@@ -1642,6 +1874,39 @@
                         "contextual",
                         null
                       ]
+                    },
+                    "startYear": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": -100000,
+                      "maximum": 3000
+                    },
+                    "endYear": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": -100000,
+                      "maximum": 3000
+                    },
+                    "precision": {
+                      "type": "string",
+                      "enum": [
+                        "unknown",
+                        "approximate",
+                        "range",
+                        "exact"
+                      ]
+                    },
+                    "periodLabel": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "minLength": 1,
+                      "maxLength": 20000
                     },
                     "aliases": {
                       "type": "array",
@@ -1666,6 +1931,36 @@
                         "additionalProperties": false
                       },
                       "maxItems": 100
+                    },
+                    "identifiers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "scheme": {
+                            "type": "string",
+                            "enum": [
+                              "wikidata",
+                              "viaf",
+                              "isni",
+                              "isbn",
+                              "doi",
+                              "openlibrary"
+                            ]
+                          },
+                          "value": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 20000
+                          }
+                        },
+                        "required": [
+                          "scheme",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 20
                     },
                     "contexts": {
                       "type": "array",
@@ -2332,6 +2627,7 @@
                       "enum": [
                         "influenced",
                         "formulated",
+                        "authored",
                         "developed",
                         "studied",
                         "used",
@@ -2675,6 +2971,7 @@
                       "enum": [
                         "influenced",
                         "formulated",
+                        "authored",
                         "developed",
                         "studied",
                         "used",
@@ -3186,10 +3483,24 @@
             "schema": {
               "type": "string",
               "enum": [
+                "contains",
+                "exact"
+              ],
+              "default": "contains"
+            },
+            "required": false,
+            "name": "match",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
                 "person",
                 "tradition",
                 "concept",
-                "work"
+                "work",
+                "figure"
               ]
             },
             "required": false,
@@ -3708,7 +4019,8 @@
                       "person",
                       "tradition",
                       "concept",
-                      "work"
+                      "work",
+                      "figure"
                     ]
                   },
                   "label": {
@@ -3731,6 +4043,39 @@
                       "contextual",
                       null
                     ]
+                  },
+                  "startYear": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": -100000,
+                    "maximum": 3000
+                  },
+                  "endYear": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": -100000,
+                    "maximum": 3000
+                  },
+                  "precision": {
+                    "type": "string",
+                    "enum": [
+                      "unknown",
+                      "approximate",
+                      "range",
+                      "exact"
+                    ]
+                  },
+                  "periodLabel": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 20000
                   },
                   "aliases": {
                     "type": "array",
@@ -3755,6 +4100,36 @@
                       "additionalProperties": false
                     },
                     "maxItems": 100
+                  },
+                  "identifiers": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "scheme": {
+                          "type": "string",
+                          "enum": [
+                            "wikidata",
+                            "viaf",
+                            "isni",
+                            "isbn",
+                            "doi",
+                            "openlibrary"
+                          ]
+                        },
+                        "value": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 20000
+                        }
+                      },
+                      "required": [
+                        "scheme",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 20
                   },
                   "contexts": {
                     "type": "array",
@@ -3903,10 +4278,24 @@
             "schema": {
               "type": "string",
               "enum": [
+                "contains",
+                "exact"
+              ],
+              "default": "contains"
+            },
+            "required": false,
+            "name": "match",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
                 "person",
                 "tradition",
                 "concept",
-                "work"
+                "work",
+                "figure"
               ]
             },
             "required": false,
@@ -4619,10 +5008,24 @@
             "schema": {
               "type": "string",
               "enum": [
+                "contains",
+                "exact"
+              ],
+              "default": "contains"
+            },
+            "required": false,
+            "name": "match",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
                 "person",
                 "tradition",
                 "concept",
-                "work"
+                "work",
+                "figure"
               ]
             },
             "required": false,
@@ -5329,10 +5732,24 @@
             "schema": {
               "type": "string",
               "enum": [
+                "contains",
+                "exact"
+              ],
+              "default": "contains"
+            },
+            "required": false,
+            "name": "match",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
                 "person",
                 "tradition",
                 "concept",
-                "work"
+                "work",
+                "figure"
               ]
             },
             "required": false,
@@ -5858,6 +6275,7 @@
                     "enum": [
                       "influenced",
                       "formulated",
+                      "authored",
                       "developed",
                       "studied",
                       "used",
@@ -6154,10 +6572,24 @@
             "schema": {
               "type": "string",
               "enum": [
+                "contains",
+                "exact"
+              ],
+              "default": "contains"
+            },
+            "required": false,
+            "name": "match",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
                 "person",
                 "tradition",
                 "concept",
-                "work"
+                "work",
+                "figure"
               ]
             },
             "required": false,
@@ -6699,7 +7131,8 @@
                           "person",
                           "tradition",
                           "concept",
-                          "work"
+                          "work",
+                          "figure"
                         ]
                       },
                       "type": {
@@ -6925,10 +7358,24 @@
             "schema": {
               "type": "string",
               "enum": [
+                "contains",
+                "exact"
+              ],
+              "default": "contains"
+            },
+            "required": false,
+            "name": "match",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
                 "person",
                 "tradition",
                 "concept",
-                "work"
+                "work",
+                "figure"
               ]
             },
             "required": false,
@@ -7197,10 +7644,24 @@
             "schema": {
               "type": "string",
               "enum": [
+                "contains",
+                "exact"
+              ],
+              "default": "contains"
+            },
+            "required": false,
+            "name": "match",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
                 "person",
                 "tradition",
                 "concept",
-                "work"
+                "work",
+                "figure"
               ]
             },
             "required": false,
@@ -7459,10 +7920,24 @@
             "schema": {
               "type": "string",
               "enum": [
+                "contains",
+                "exact"
+              ],
+              "default": "contains"
+            },
+            "required": false,
+            "name": "match",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
                 "person",
                 "tradition",
                 "concept",
-                "work"
+                "work",
+                "figure"
               ]
             },
             "required": false,
@@ -7843,10 +8318,24 @@
             "schema": {
               "type": "string",
               "enum": [
+                "contains",
+                "exact"
+              ],
+              "default": "contains"
+            },
+            "required": false,
+            "name": "match",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
                 "person",
                 "tradition",
                 "concept",
-                "work"
+                "work",
+                "figure"
               ]
             },
             "required": false,
@@ -8386,10 +8875,24 @@
             "schema": {
               "type": "string",
               "enum": [
+                "contains",
+                "exact"
+              ],
+              "default": "contains"
+            },
+            "required": false,
+            "name": "match",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
                 "person",
                 "tradition",
                 "concept",
-                "work"
+                "work",
+                "figure"
               ]
             },
             "required": false,
@@ -8669,6 +9172,21 @@
                       {
                         "type": "object",
                         "properties": {
+                          "discard": {
+                            "type": "boolean",
+                            "enum": [
+                              true
+                            ]
+                          }
+                        },
+                        "required": [
+                          "discard"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
                           "entity": {
                             "type": "string",
                             "enum": [
@@ -8787,7 +9305,10 @@
                       "format": "uuid"
                     },
                     "entityId": {
-                      "type": "string",
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "format": "uuid"
                     },
                     "version": {
