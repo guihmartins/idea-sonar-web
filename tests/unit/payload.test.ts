@@ -641,3 +641,99 @@ describe('buildEditorBody — relations', () => {
     expect(body).toMatchObject({ contested: false, contestationNote: null });
   });
 });
+
+describe('payload — bordas que as regras sobrepostas escondiam', () => {
+  it('nome com idioma sem espaço antes do parêntese, e parêntese no meio não é idioma', () => {
+    expect(parseAliases('Jung(de)')).toEqual([
+      { alias: 'Jung', language: 'de' },
+    ]);
+    expect(parseAliases('Jung (de) filho')).toEqual([
+      { alias: 'Jung (de) filho', language: 'und' },
+    ]);
+    expect(parseAliases('(de)')).toEqual([{ alias: '(de)', language: 'und' }]);
+    expect(parseAliases('Carl  (pt-BR)')).toEqual([
+      { alias: 'Carl', language: 'pt-BR' },
+    ]);
+  });
+
+  it('período com início e fim no mesmo ano é aceito; o fim anterior não', async () => {
+    const base = {
+      kind: 'person',
+      label: 'X',
+      description: 'd',
+      precision: 'exact',
+      startEra: 'ce',
+      endEra: 'ce',
+    };
+    const body = (await buildEditorBody(
+      'nodes',
+      draft({ fields: { ...base, start: '50', end: '50' } }),
+      catalog,
+      {} as Api,
+    )) as { startYear: number; endYear: number };
+    expect([body.startYear, body.endYear]).toEqual([50, 50]);
+    await expect(
+      buildEditorBody(
+        'nodes',
+        draft({ fields: { ...base, start: '50', end: '49' } }),
+        catalog,
+        {} as Api,
+      ),
+    ).rejects.toThrow('O fim do período deve ser posterior ao início.');
+  });
+
+  it('sem era informada, o ano vale como d.C.; campos de ano ausentes são período aberto', async () => {
+    const body = (await buildEditorBody(
+      'nodes',
+      draft({
+        fields: {
+          kind: 'person',
+          label: 'X',
+          description: 'd',
+          precision: 'approximate',
+          start: '10',
+        },
+      }),
+      catalog,
+      {} as Api,
+    )) as { startYear: number | null; endYear: number | null };
+    expect(body.startYear).toBe(10);
+    expect(body.endYear).toBeNull();
+    const bce = (await buildEditorBody(
+      'nodes',
+      draft({
+        fields: {
+          kind: 'person',
+          label: 'X',
+          description: 'd',
+          precision: 'approximate',
+          start: '10',
+          startEra: 'bce',
+        },
+      }),
+      catalog,
+      {} as Api,
+    )) as { startYear: number };
+    expect(bce.startYear).toBe(-9);
+  });
+
+  it('erros de identificador com índice de dois dígitos e sem prefixo de campo', () => {
+    const rows = Array.from({ length: 12 }, (_, i) => ({
+      scheme: 'wikidata' as const,
+      value: `Q${i}`,
+    }));
+    const error = new ApiError(400, 'inválido', {
+      details: [
+        { path: 'identifiers.10.value', message: 'décima primeira linha' },
+        { path: 'identifiers.1.value', message: 'segunda linha' },
+        { path: 'xidentifiers.3.value', message: 'não é do campo' },
+        { path: 'identifiers.3.valuex', message: 'sufixo estranho' },
+      ],
+    } as never);
+    const issues = identifierIssues(error, rows);
+    expect(issues.rows[10]).toBe('décima primeira linha');
+    expect(issues.rows[1]).toBe('segunda linha');
+    expect(Object.keys(issues.rows)).toEqual(['1', '10']);
+    expect(issues.general).toEqual([]);
+  });
+});
