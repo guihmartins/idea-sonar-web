@@ -149,3 +149,11 @@
   asserir para matar mutante, e foi o que guiou a escrita.
 - CI automático segue desativado e a mutação segue manual: o gate de cobertura
   roda em `test:coverage`, o de mutação só quando alguém executa Stryker.
+
+## 2026-11-01 — Contrato 1.1.0, conceito contextual pelo lote e seletores por busca
+
+- Snapshot da API atualizado para o commit `e27da26` (1.1.0): update parcial no lote, erros com `details[].path`, `viewUrl` para `/imports/{id}`, `BATCH_UNDONE` e limites de ano. Os 409 que não são de versão (`BATCH_UNDONE`, `DEPENDENCIES`…) mostram a mensagem da API e não abrem a comparação de versão do editor.
+- **Conceito contextual (bug F4).** Pelo REST um conceito contextual ativo exige uma relação `contextualizes` ativa para um conceito amplo ativo, e uma relação ativa exige pontos ativos: nenhum dos dois pode ser ativado primeiro. Só `POST /imports` grava os dois na mesma transação (o escopo contextual é conferido no fim do lote). O editor usa o lote para criar e para ativar conceito contextual; pendente criado como rascunho segue o REST. A chave de idempotência do lote é a `actionKey` do formulário (nova a cada edição, repetida em retry), não uma chave a cada clique, para que uma nova tentativa após timeout reaproveite o lote já gravado.
+- Com `pending > 0` o editor não anuncia sucesso: lista cada item e o motivo, mantém o rascunho e liga para a importação.
+- **Fontes e contextos (bug F16).** O editor e o mapa não percorrem mais todas as páginas. O editor escolhe contexto de ponto, contexto de relação e fonte de evidência por busca (`api.candidates`, com pendentes) e mostra pelo nome, a partir do ID, o que já está escolhido. No mapa, o filtro de contexto é o mesmo seletor por busca (e não uma lista limitada, que esconderia os contextos além da primeira página) e legenda, títulos de contexto e painel resolvem só os contextos dos pontos visíveis, por ID.
+- **E2E real.** `test:e2e:real` roda contra uma API descartável (`AUTH_MODE=local`) apontada por `E2E_API_URL`, com build próprio em `dist-e2e-real`. Os corpos de lote do editor e o fluxo de desfazer foram conferidos contra a API 1.1.0 real, não só contra as fixtures.
