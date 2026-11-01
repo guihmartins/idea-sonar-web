@@ -28,7 +28,7 @@ src/
   graph/                ledger de expansões, adaptação para Cytoscape, layout, restore
   pages/                MapPage, RecordsPage (listas/imports/pendências/histórico), EntityEditor
   pages/editor/         payload, seletores por busca, campos comuns e contextualização (lote)
-  components/           Feedback, labels (rótulos PT-BR), period (anos astronômicos)
+  components/           Feedback, labels (rótulos PT-BR), period (anos astronômicos), identifiers (links)
   dev/fixtures.ts       API fictícia em memória, só em dev com VITE_ENABLE_FIXTURES=true
   dev/fixture-batch.ts  lote de importação e recusas do REST da API fictícia
 contracts/              openapi.json (snapshot da API) + source.json (commit/SHA-256)

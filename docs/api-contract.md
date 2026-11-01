@@ -2,9 +2,18 @@
 
 ## Situação
 
-Em 31/10/2026 o snapshot de `contracts/openapi.json` da API foi atualizado para o commit `e27da26a162755707edfc4bf9e53306ba25e8ca8` (`info.version` 1.1.0); a primeira importação, de 29/10/2026, era do commit `d0119459e99e806fb0c55d1a1df33643099e0f3c` (1.0.0). `contracts/source.json` registra origem, commit e SHA-256; `src/api/generated/` contém tipos e cliente gerados.
+Em 01/11/2026 o snapshot de `contracts/openapi.json` da API foi atualizado para o commit `5215021175aa1f0d409bb7f49077894d93575b9f` (`info.version` 1.2.0, modelo de dados v2). Antes disso: 1.1.0 (`e27da26a162755707edfc4bf9e53306ba25e8ca8`, 31/10/2026) e a primeira importação, de 29/10/2026, 1.0.0 (`d0119459e99e806fb0c55d1a1df33643099e0f3c`). `contracts/source.json` registra origem, commit e SHA-256; `src/api/generated/` contém tipos e cliente gerados.
 
 `src/api/domain.ts` valida por Zod os formatos de resposta do contrato; o tipo `ContractCheck` falha a compilação se o modelo divergir dos tipos gerados. `src/api/adapter.ts` usa as rotas, filtros (`contextId`, `includePending`, `startYear`, `endYear`, `includeUnknownPeriod`), `If-Match` com a versão inteira e os corpos de undo/resolve do contrato. Respostas fora do contrato mostram erro explícito; produção nunca troca para mocks.
+
+## Contrato 1.2.0 (modelo de dados v2)
+
+- **Ponto:** `startYear`, `endYear`, `precision`, `periodLabel` (mesmos limites de ano dos contextos, -100000..3000) e `identifiers: [{scheme, value}]` (até 20; `wikidata`, `viaf`, `isni`, `isbn`, `doi`, `openlibrary`). A API normaliza o identificador (o endereço do registro vira o código) e o devolve ordenado por esquema e valor; o par é único em todos os pontos, arquivados inclusive. Repetir identificador no REST é 409 `DUPLICATE` (`message` "Registro duplicado", campo em `details[0]` `identifiers`: "Identificador já cadastrado em outro ponto"). Novo tipo `figure` (sem `conceptScope`), predicado `authored` e `identifierSchemes` no catálogo.
+- **Busca:** `match=exact` (nome ou alias inteiro, ou identificador); um `q` que seja identificador válido encontra o dono dele.
+- **Lote:** `ImportResult` ganha `discarded`; o item pode trazer `candidates: string[]` (IDs dos registros que ele repetiria) e o desfecho `discarded`. `create` que repete identificador (checado primeiro) ou nome/alias de ponto não arquivado do mesmo tipo fica pendente com os candidatos no item e nos ids do motivo. Erros de validação ao gravar um item levam a posição dele (`nodes.2.identifiers.0.value`).
+- **Pendências:** cada item de `GET /pending` traz só a operação proposta (`{ "nodes": [op] }`). `selection: {discard: true}` descarta (desfecho `discarded`, `entityId` nulo na resposta; não toca em registro). Desfazer o lote marca o que ainda estava pendente como `discarded` ("Lote desfeito") e o tira da fila.
+
+No web, `ContractCheck` compara `Node`, `Catalog` e `ImportResult` com os tipos gerados; `importItemSchema.candidates` tem padrão `[]` e `importDetailSchema.result.discarded` tem padrão 0 (lotes gravados antes do modelo v2 não têm o campo). O editor de ponto tem período (mesma conversão a.C./astronômico do contexto, limites conferidos antes de enviar) e linhas de identificador (erro da API na linha do valor; `DUPLICATE` não abre a comparação de versão). `Descartar pendência` envia `{discard: true}` e o detalhe do lote lista "Descartados" e os candidatos de cada pendência com link para o editor.
 
 ## Contrato 1.1.0
 
