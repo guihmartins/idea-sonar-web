@@ -1,9 +1,10 @@
 // EXCLUSIVAMENTE DEV/TEST. Busca por significado da API fictícia (contrato
 // 1.3.0): busca, pontos parecidos, sugestões de paralelo, dispensa de par e o
 // campo `similar` do lote. Não há modelo aqui: a semelhança é o índice de
-// Jaccard entre as palavras (sem acento nem caixa, com 3 letras ou mais) de
-// "nome, tipo, outros nomes e descrição". Ordena de forma previsível, mas os
-// números não imitam os do modelo real (0 a 1, comprimidos).
+// Jaccard entre as palavras (sem acento nem caixa, com 3 letras ou mais) do texto
+// do ponto, escrito como a API o escreve (`nome · tipo em português · outros
+// nomes · descrição`). Ordena de forma previsível, mas os números não imitam os
+// do modelo real (0 a 1, comprimidos).
 import { ApiError } from '../api/client';
 import { kindSchema } from '../api/domain';
 import type {
@@ -27,13 +28,24 @@ const words = (text: string) =>
       .split(/[^\p{L}\p{N}]+/u)
       .filter((word) => word.length >= 3),
   );
+const kindWords: Record<Node['kind'], string> = {
+  person: 'pessoa',
+  tradition: 'tradição',
+  concept: 'conceito',
+  work: 'obra',
+  figure: 'figura',
+};
+// O texto de um ponto, no formato da API; o `q` do modo `duplicates` vem igual.
 const textOf = (node: Node) =>
   [
     node.label,
-    node.kind,
-    ...node.aliases.map((alias) => alias.alias),
+    kindWords[node.kind],
+    node.aliases.map((alias) => alias.alias).join(', '),
     node.description,
-  ].join(' ');
+  ]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(' · ');
 
 export function jaccard(a: Set<string>, b: Set<string>): number {
   const shared = [...a].filter((word) => b.has(word)).length;
@@ -78,6 +90,9 @@ export function semanticSearch(
     ]);
   if (kind !== null && !kindSchema.safeParse(kind).success)
     throw validationFailure([{ path: 'kind', message: 'Tipo inválido' }]);
+  const mode = params.get('mode') ?? 'meaning';
+  if (mode !== 'meaning' && mode !== 'duplicates')
+    throw validationFailure([{ path: 'mode', message: 'Modo inválido' }]);
   const pending = params.get('includePending') === 'true';
   const wanted = words(q);
   const scored = nodes
@@ -87,9 +102,12 @@ export function semanticSearch(
         (kind === null || node.kind === kind),
     )
     .map((node) => ({ node, score: scoreOf(wanted, node) }));
+  // `duplicates`: `q` é o texto de um ponto prestes a ser escrito e só voltam os
+  // que passam do mesmo limiar do aviso do lote, comparados do mesmo jeito.
+  const min = mode === 'duplicates' ? FIXTURE_MIN : 0;
   return {
     model: FIXTURE_MODEL,
-    items: top(scored, limitOf(params), (item) => item.node.label),
+    items: top(scored, limitOf(params), (item) => item.node.label, min),
   };
 }
 

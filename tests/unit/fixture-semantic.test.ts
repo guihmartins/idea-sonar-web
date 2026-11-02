@@ -160,6 +160,115 @@ describe('GET /search/semantic', () => {
   });
 });
 
+// `mode=duplicates`: `q` é o texto de um ponto prestes a ser escrito, no formato
+// da API, e só voltam os pontos acima do limiar do aviso do lote.
+describe('GET /search/semantic?mode=duplicates', () => {
+  // Resolvido na hora do teste: a descrição é declarada mais abaixo no arquivo.
+  const individuationText = () =>
+    `Individuação (exemplo fictício) · conceito · ${unionDescription}`;
+  const search = (q: string, filters = {}) =>
+    services.api.semanticSearch(q, { mode: 'duplicates', ...filters }, signal);
+
+  it('devolve só o que passa do limiar, melhor primeiro, e o resto fica de fora', async () => {
+    const { items } = await search(individuationText());
+    expect(labels(items)).toEqual([individuation, coniunctio]);
+    expect(items[0]!.score).toBe(1);
+    for (const item of items)
+      expect(item.score).toBeGreaterThanOrEqual(FIXTURE_MIN);
+    // No modo de sempre, o mesmo texto traz também o que está abaixo do limiar.
+    const meaning = await services.api.semanticSearch(
+      individuationText(),
+      {},
+      signal,
+    );
+    expect(meaning.items.length).toBeGreaterThan(items.length);
+    expect(meaning.items.some((item) => item.score < FIXTURE_MIN)).toBe(true);
+    expect(
+      (
+        await services.api.semanticSearch(
+          individuationText(),
+          { mode: 'meaning' },
+          signal,
+        )
+      ).items,
+    ).toEqual(meaning.items);
+  });
+
+  it('texto sem parecido nenhum volta vazio, mesmo com palavras em comum', async () => {
+    expect((await search('União · pessoa · Texto sintético.')).items).toEqual(
+      [],
+    );
+    expect((await search('zzz yyy')).items).toEqual([]);
+  });
+
+  it('compara como o aviso do lote: o mesmo texto dá os mesmos parecidos', async () => {
+    const result = await services.api.importBatch(
+      batch('k-dup', false),
+      'k-dup',
+    );
+    const nova = result.items.find((item) => item.clientRef === 'nova')!;
+    const created = (
+      await services.api.list('nodes', null, signal, {
+        q: 'Terceira união',
+      })
+    ).items[0] as Node;
+    const text = `${created.label} · conceito · ${created.description}`;
+    const found = (await search(text, { limit: 10 })).items.filter(
+      (item) => item.node.id !== created.id,
+    );
+    expect(found.map((item) => item.node.id)).toEqual(
+      nova.similar!.map((point) => point.id),
+    );
+    expect(found.map((item) => item.score)).toEqual(
+      nova.similar!.map((point) => point.score),
+    );
+  });
+
+  it('respeita tipo, pendentes e limite como no modo de sempre', async () => {
+    expect(
+      labels((await search(individuationText(), { kind: 'work' })).items),
+    ).toEqual([]);
+    expect(
+      labels((await search(individuationText(), { kind: 'concept' })).items),
+    ).toEqual([individuation, coniunctio]);
+    expect(
+      (await search(individuationText(), { limit: 1 })).items,
+    ).toHaveLength(1);
+    await services.api.save(
+      'nodes',
+      {
+        kind: 'concept',
+        label: 'Individuação (exemplo fictício)',
+        description: unionDescription,
+        conceptScope: 'broad',
+        status: 'pending',
+      },
+      'k-pend',
+    );
+    expect(
+      (await search(individuationText())).items.filter(
+        (item) => item.node.status === 'pending',
+      ),
+    ).toEqual([]);
+    expect(
+      (await search(individuationText(), { includePending: true })).items.some(
+        (item) => item.node.status === 'pending',
+      ),
+    ).toBe(true);
+  });
+
+  it('modo desconhecido é 400', async () => {
+    expect(() =>
+      semanticSearch([], new URLSearchParams('q=a&mode=exato')),
+    ).toThrowError(
+      expect.objectContaining({ status: 400, code: 'VALIDATION_ERROR' }),
+    );
+    expect(() =>
+      semanticSearch([], new URLSearchParams('q=a&mode=')),
+    ).toThrowError(expect.objectContaining({ status: 400 }));
+  });
+});
+
 describe('GET /nodes/{id}/similar', () => {
   it('lista os outros pontos ativos, sem o próprio, melhor primeiro', async () => {
     const { items } = await services.api.similarNodes(
