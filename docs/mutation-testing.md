@@ -120,7 +120,7 @@ Na primeira passada ficaram vivos oito mutantes dos arquivos novos, e seis virar
 
 ## Rodada: busca por significado (02/11/2026)
 
-Execução incremental depois da busca por significado (contrato 1.3.0): modo Nome | Significado em Pontos, pontos parecidos no painel do mapa, página Sugestões, pré-preenchimento do editor de relação e os avisos de parecidos. Nota global **91,85%** (3743 mutantes válidos, 305 abertos), contra 91,35% da rodada anterior; `npm run test:mutation` e `npm run test:mutation:gate` saíram com código 0. Primeira passada: 91,06% (3758 válidos); o resto veio de fechar sobreviventes com testes e de simplificar três guardas que não mudavam o resultado.
+Execução incremental depois da busca por significado (contrato 1.3.0): modo Nome | Significado em Pontos, pontos parecidos no painel do mapa, página Sugestões, pré-preenchimento do editor de relação e os avisos de parecidos. Nota global **91,83%** (3759 mutantes válidos, 307 abertos), contra 91,35% da rodada anterior; `npm run test:mutation` e `npm run test:mutation:gate` saíram com código 0. Primeira passada: 91,06% (3758 válidos); depois de fechar sobreviventes com testes e de simplificar três guardas que não mudavam o resultado chegou a 91,85%, e a segunda passada, depois de o aviso do cadastro passar à busca `mode=duplicates` (texto no formato da API, tipo e outros nomes vindos do editor), ficou em 91,83%.
 
 | Arquivo                            |   Nota | Abertos |
 | ---------------------------------- | -----: | ------: |
@@ -141,14 +141,14 @@ Execução incremental depois da busca por significado (contrato 1.3.0): modo No
 | `src/pages/EntityEditor.tsx`       | 83,29% |      67 |
 | `src/pages/MapPage.tsx`            | 83,12% |     105 |
 
-Nenhum arquivo do núcleo mudou de nota além do `client.ts`, que ganhou a exceção `withoutIdempotencyKey` e seguiu em 92,47%, com os mesmos 14 abertos. O `EntityEditor.tsx` passou de 84,0% para 83,29% (62 para 67 abertos) e o `MapPage.tsx` ficou em 83% (105 abertos): os abertos novos estão listados abaixo.
+Nenhum arquivo do núcleo mudou de nota além do `client.ts`, que ganhou a exceção `withoutIdempotencyKey` e seguiu em 92,47%, com os mesmos 14 abertos. O `EntityEditor.tsx` passou de 84,0% para 82,88% (62 para 69 abertos) e o `MapPage.tsx` ficou em 83% (105 abertos): os abertos novos estão listados abaixo.
 
 O que os testes novos afirmam (comportamento, não constante):
 
 - **Modo e URL:** a URL com e sem `mode=significado` para pontos, fontes e contextos; que só texto, tipo e pendentes atravessam a troca (e `match`/período não); o limite de 500 caracteres só em Significado; "Limpar" que mantém o modo; setas entre os dois rádios sem perder o foco; voltar e avançar.
 - **Resultados:** a requisição exata (`q`, `kind`, `includePending`, `limit`), pontuação "0,87" / "0,90" / "1,00" e a ausência de `%`, "Mostrar mais" com 20 e com 20 em 50, o limite que volta a 20 em busca nova e a consulta que não reaproveita a resposta de outro tipo ou de outros pendentes (chave da consulta).
 - **Fixtures:** a similaridade de Jaccard, o limiar, a ordem da busca, o par sugerido sem relação (nos dois sentidos, pendente conta, arquivada não), a dispensa idempotente por par e em qualquer ordem, os 400 (`a === b`, motivo vazio ou de 2001 caracteres, limites) e o `similar` do lote, do resultado, da simulação e do detalhe.
-- **Telas:** as linhas do painel do mapa e o gesto de ativá-las (o ponto vira a raiz), a consulta por ponto, o motivo obrigatório da dispensa (com `preventDefault`, foco no campo e erro limpo na nova tentativa), a invalidação só das sugestões, o pré-preenchimento (cada valor conferido sozinho, ids com letras, destino igual à origem, só relação nova, formulário que reabre com outra URL) e a dica do cadastro (600 ms, uma consulta por texto final, some sem nome ou descrição, 503 e outras falhas escondem o bloco).
+- **Telas:** as linhas do painel do mapa e o gesto de ativá-las (o ponto vira a raiz), a consulta por ponto, o motivo obrigatório da dispensa (com `preventDefault`, foco no campo e erro limpo na nova tentativa), a invalidação só das sugestões, o pré-preenchimento (cada valor conferido sozinho, ids com letras, destino igual à origem, só relação nova, formulário que reabre com outra URL) e o aviso do cadastro (600 ms, uma consulta por texto final em `mode=duplicates`, `q` no formato do texto do ponto com tipo em português, outros nomes sem o idioma e corte em 500, só aparece com resultado, links em outra aba, some sem nome ou descrição, 503 e outras falhas escondem o bloco).
 
 ### Mutantes abertos que não valem um teste
 
@@ -156,7 +156,7 @@ Nenhum `// Stryker disable` foi usado. Equivalentes ou só observáveis por coli
 
 - `MeaningResults.tsx`: o literal `'semantic'` da chave da consulta e os dois `??` de `kind` e `includePending` dentro dela (a tela é remontada a cada busca, então uma chave igual não mostra resposta velha).
 - `SimilarPoints.tsx` e `SimilarHint.tsx`: o literal inicial da chave (`'similar'`, `'similar-hint'`); o resto da chave tem teste.
-- `EntityEditor.tsx`: `wanted` (a guarda do pré-preenchimento) é redundante com o que vem depois (só relação nova usa os quatro campos, e o catálogo é o mesmo da consulta `['catalog']`, cujos literais também ficam abertos), e as variantes de `id ?? 'new'` na `key` do formulário.
+- `EntityEditor.tsx`: `wanted` (a guarda do pré-preenchimento) é redundante com o que vem depois (só relação nova usa os quatro campos, e o catálogo é o mesmo da consulta `['catalog']`, cujos literais também ficam abertos), as variantes de `id ?? 'new'` na `key` do formulário e os quatro `?? ''` dos campos que `NewNodeHint` repassa ao aviso (`fields` sempre traz as chaves, então o recuo nunca é usado).
 
 Como o Stryker não reavalia sobrevivente estático, os sobreviventes estáticos dos arquivos tocados (`hintTitle` no `SimilarHint.tsx` e as constantes de texto do `EntityEditor.tsx`) saíram do `reports/stryker-incremental.json` antes da segunda passada.
 
