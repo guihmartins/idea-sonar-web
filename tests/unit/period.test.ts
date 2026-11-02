@@ -3,6 +3,7 @@ import {
   astronomicalYear,
   displayYear,
   formatPeriod,
+  yearFields,
 } from '../../src/components/period';
 
 describe('períodos históricos', () => {
@@ -21,6 +22,22 @@ describe('períodos históricos', () => {
     expect(astronomicalYear('2026', 'ce')).toBe(2026);
     expect(astronomicalYear('  ', 'ce')).toBeNull();
   });
+  it.each([
+    [null, '', 'ce'],
+    [1, '1', 'ce'],
+    [2026, '2026', 'ce'],
+    [3000, '3000', 'ce'],
+    [0, '1', 'bce'],
+    [-1, '2', 'bce'],
+    [-499, '500', 'bce'],
+    [-100000, '100001', 'bce'],
+  ] as const)(
+    'yearFields(%s) devolve ano civil %s e era %s',
+    (year, value, era) => {
+      expect(yearFields(year)).toEqual({ value, era });
+      if (year !== null) expect(astronomicalYear(value, era)).toBe(year);
+    },
+  );
   it.each(['0', '-1', '1.5', 'abc', 'Infinity', '9007199254740992'])(
     'rejeita ano civil inválido: %s',
     (value) => {

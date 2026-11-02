@@ -7,6 +7,7 @@ import {
   stanceLabels,
   sourceKindLabels,
 } from '../../components/labels';
+import { YearField } from '../../components/YearField';
 import { emptyEvidence } from './payload';
 import type {
   EvidenceDraft,
@@ -124,6 +125,10 @@ function EvidenceFields({
   );
 }
 
+// Opções como pares [valor, rótulo] na ordem de exibição: um objeto colocaria
+// as chaves inteiras ('1', '2', '3') antes de '' e esconderia "Não avaliada".
+export type ChoiceOptions = readonly (readonly [string, string])[];
+
 export function Choice({
   model,
   field,
@@ -134,7 +139,7 @@ export function Choice({
   model: FieldsModel;
   field: string;
   label: string;
-  options: Record<string, string>;
+  options: ChoiceOptions;
   disabled?: boolean;
 }) {
   return (
@@ -145,7 +150,7 @@ export function Choice({
         disabled={disabled}
         onChange={(e) => model.update(field, e.target.value)}
       >
-        {Object.entries(options).map(([value, text]) => (
+        {options.map(([value, text]) => (
           <option key={value} value={value}>
             {text}
           </option>
@@ -155,6 +160,12 @@ export function Choice({
   );
 }
 
+const evidenceStatusOptions: ChoiceOptions = [
+  ['documented', 'Documentada'],
+  ['attributed_interpretation', 'Interpretação atribuída'],
+  ['inference', 'Inferência / hipótese'],
+];
+
 export function EvidenceStatusFields({ model }: { model: FieldsModel }) {
   const status = model.fields.evidenceStatus;
   return (
@@ -163,11 +174,7 @@ export function EvidenceStatusFields({ model }: { model: FieldsModel }) {
         model={model}
         field="evidenceStatus"
         label="Classificação da evidência"
-        options={{
-          documented: 'Documentada',
-          attributed_interpretation: 'Interpretação atribuída',
-          inference: 'Inferência / hipótese',
-        }}
+        options={evidenceStatusOptions}
       />
       {status === 'attributed_interpretation' &&
         model.text('attributionText', 'Atribuição (quem interpreta)', true)}
@@ -224,33 +231,21 @@ export function PeriodFields({ model }: { model: FieldsModel }) {
       </p>
       {(['start', 'end'] as const).map((key) => (
         <div className="form-grid" key={key}>
-          <label>
-            {key === 'start' ? 'Ano inicial' : 'Ano final'}
-            <input
-              type="number"
-              min="1"
-              step="1"
-              value={model.fields[key]}
-              onChange={(e) => model.update(key, e.target.value)}
-            />
-          </label>
-          <label>
-            Era do {key === 'start' ? 'início' : 'fim'}
-            <select
-              value={model.fields[`${key}Era`]}
-              onChange={(e) => model.update(`${key}Era`, e.target.value)}
-            >
-              <option value="ce">d.C.</option>
-              <option value="bce">a.C.</option>
-            </select>
-          </label>
+          <YearField
+            label={key === 'start' ? 'Ano inicial' : 'Ano final'}
+            eraLabel={`Era do ${key === 'start' ? 'início' : 'fim'}`}
+            year={model.fields[key]}
+            era={model.fields[`${key}Era`]}
+            onYear={(value) => model.update(key, value)}
+            onEra={(value) => model.update(`${key}Era`, value)}
+          />
         </div>
       ))}
       <Choice
         model={model}
         field="precision"
         label="Precisão do período"
-        options={precisionLabels}
+        options={Object.entries(precisionLabels)}
       />
     </>
   );

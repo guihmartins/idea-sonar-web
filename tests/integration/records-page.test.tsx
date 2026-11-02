@@ -71,7 +71,8 @@ describe('RecordsPage', () => {
         name: 'Jung (exemplo fictício)',
       }),
     ).not.toBeInTheDocument();
-    expect(list).toHaveBeenCalledWith('sources', null, expect.anything());
+    expect(list).toHaveBeenCalledWith('nodes', null, expect.anything(), {});
+    expect(list).toHaveBeenCalledWith('sources', null, expect.anything(), {});
   });
 
   it('lista pontos com paginação e link de edição', async () => {

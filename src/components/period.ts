@@ -13,9 +13,18 @@ export function astronomicalYear(value: string, era: string): number | null {
   const astronomical = era === 'bce' ? 1 - year : year;
   if (astronomical < minYear || astronomical > maxYear)
     throw new Error(
-      `Ano fora do intervalo aceito: de ${displayYear(minYear)} a ${displayYear(maxYear)}.`,
+      `Ano fora do intervalo aceito: de ${displayYear(minYear)} a ${displayYear(maxYear)}`,
     );
   return astronomical;
+}
+// Inverso de astronomicalYear: o ano positivo e a era que o formulário mostra.
+export function yearFields(year: number | null): {
+  value: string;
+  era: 'ce' | 'bce';
+} {
+  if (year === null) return { value: '', era: 'ce' };
+  if (year <= 0) return { value: String(1 - year), era: 'bce' };
+  return { value: String(year), era: 'ce' };
 }
 type Period = Pick<
   Context,

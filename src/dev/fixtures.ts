@@ -5,11 +5,16 @@ import { applyBatch, apiFailure, restProblem } from './fixture-batch';
 import {
   duplicateFailure,
   nodeIssues,
-  nodeMatches,
   normalizedIdentifiers,
   owners,
   validationFailure,
 } from './fixture-nodes';
+import {
+  cursorAt,
+  cursorStart,
+  listScope,
+  textMatches,
+} from './fixture-search';
 import { ApiError } from '../api/client';
 import type { RequestOptions } from '../api/client';
 import { defaultFilters, toStoredFilters } from '../api/domain';
@@ -364,11 +369,12 @@ function buildFixtureServices(
   const pending: PendingItem[] = structuredClone(seed.pending);
   const history = new Map<string, HistoryEntry[]>();
   const actions = new Map<string, unknown>();
-  function page<T>(items: T[], cursor: string | null) {
-    const start = Number(cursor ?? 0);
+  // `scope`: filtros da busca; o cursor de outra busca é recusado, como na API.
+  function page<T>(items: T[], cursor: string | null, scope = '') {
+    const start = cursorStart(cursor, scope);
     return {
       items: items.slice(start, start + 2),
-      nextCursor: start + 2 < items.length ? String(start + 2) : null,
+      nextCursor: start + 2 < items.length ? cursorAt(start + 2, scope) : null,
     };
   }
   function matches(node: Node, params: URLSearchParams): boolean {
@@ -585,10 +591,6 @@ function buildFixtureServices(
       truncated: false,
     };
   }
-  function searchText(entity: Entity) {
-    if ('title' in entity) return entity.title;
-    return 'label' in entity ? entity.label : '';
-  }
   // Como a API: arquivados nunca saem; pendentes só com includePending=true.
   function visibleStatus(entity: Entity, params: URLSearchParams) {
     return (
@@ -614,21 +616,15 @@ function buildFixtureServices(
     collection: Entity[],
   ) {
     if (id) return collection.find((e) => e.id === id);
-    const q = (url.searchParams.get('q') ?? '').toLocaleLowerCase('pt-BR');
+    const params = url.searchParams;
     const items = collection.filter(
       (entity) =>
-        visibleStatus(entity, url.searchParams) &&
-        (type !== 'relations' ||
-          matchesRelation(entity as Relation, url.searchParams)) &&
-        (type === 'nodes'
-          ? nodeMatches(
-              entity as Node,
-              url.searchParams.get('q') ?? '',
-              url.searchParams.get('match'),
-            ) && matches(entity as Node, url.searchParams)
-          : searchText(entity).toLocaleLowerCase('pt-BR').includes(q)),
+        visibleStatus(entity, params) &&
+        (type !== 'relations' || matchesRelation(entity as Relation, params)) &&
+        textMatches(type, entity, params) &&
+        (type !== 'nodes' || matches(entity as Node, params)),
     );
-    return page(items, url.searchParams.get('cursor'));
+    return page(items, params.get('cursor'), listScope(params));
   }
   function writeCollection(
     type: string,

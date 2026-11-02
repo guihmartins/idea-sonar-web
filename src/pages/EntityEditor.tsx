@@ -13,6 +13,7 @@ import type {
 } from '../api/domain';
 import { Failure } from '../components/Feedback';
 import { conceptScopeLabels, kindLabels } from '../components/labels';
+import { yearFields } from '../components/period';
 import {
   buildEditorBody,
   evidenceDraft,
@@ -34,6 +35,7 @@ import {
 } from './editor/contextual';
 import type { BatchOutcome, ContextualFlow } from './editor/contextual';
 import { CandidatePicker, NodePicker } from './editor/pickers';
+import type { ChoiceOptions } from './editor/fields';
 import {
   Choice,
   EvidenceEditor,
@@ -366,8 +368,9 @@ function periodFields(period: Pick<Context, 'startYear' | 'endYear'>) {
     ['start', period.startYear],
     ['end', period.endYear],
   ] as const) {
-    data[key] = year === null ? '' : String(year <= 0 ? 1 - year : year);
-    data[`${key}Era`] = year !== null && year <= 0 ? 'bce' : 'ce';
+    const parts = yearFields(year);
+    data[key] = parts.value;
+    data[`${key}Era`] = parts.era;
   }
   return data;
 }
@@ -383,8 +386,8 @@ function NodeFields({ model }: { model: EditorModel }) {
         model={model}
         field="kind"
         label="Tipo"
-        options={Object.fromEntries(
-          (model.catalog.data?.nodeKinds ?? []).map((k) => [k, kindLabels[k]]),
+        options={(model.catalog.data?.nodeKinds ?? []).map(
+          (k) => [k, kindLabels[k]] as const,
         )}
         disabled={fixed}
       />
@@ -393,7 +396,7 @@ function NodeFields({ model }: { model: EditorModel }) {
           model={model}
           field="conceptScope"
           label="Escopo do conceito"
-          options={{ '': 'Selecione', ...conceptScopeLabels }}
+          options={[['', 'Selecione'], ...Object.entries(conceptScopeLabels)]}
           disabled={fixed}
         />
       )}
@@ -459,6 +462,14 @@ function ContextFields({ model }: { model: EditorModel }) {
   );
 }
 
+// Em lista, não em objeto: '' (Não avaliada) tem de vir antes de '1', '2', '3'.
+const intensityOptions: ChoiceOptions = [
+  ['', 'Não avaliada'],
+  ['1', '1 — Pontual'],
+  ['2', '2 — Relevante'],
+  ['3', '3 — Central'],
+];
+
 function RelationClassification({ model }: { model: EditorModel }) {
   return (
     <>
@@ -467,12 +478,7 @@ function RelationClassification({ model }: { model: EditorModel }) {
         model={model}
         field="intensity"
         label="Intensidade"
-        options={{
-          '': 'Não avaliada',
-          '1': '1 — Pontual',
-          '2': '2 — Relevante',
-          '3': '3 — Central',
-        }}
+        options={intensityOptions}
       />
       {model.text('intensityReason', 'Justificativa da intensidade')}
       <label className="check">

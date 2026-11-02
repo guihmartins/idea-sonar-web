@@ -26,7 +26,7 @@ src/
   api/generated/        gerado de contracts/openapi.json — nunca editar
   auth/                 sessão PKCE (Auth0), usada só com VITE_AUTH_MODE=oidc
   graph/                ledger de expansões, adaptação para Cytoscape, layout, restore
-  pages/                MapPage, RecordsPage (listas/imports/pendências/histórico), EntityEditor
+  pages/                MapPage, RecordsPage (listas/imports/pendências/histórico), RecordSearch + searchFilters (busca das listas, estado na URL), EntityEditor
   pages/editor/         payload, seletores por busca, campos comuns e contextualização (lote)
   components/           Feedback, labels (rótulos PT-BR), period (anos astronômicos), identifiers (links)
   dev/fixtures.ts       API fictícia em memória, só em dev com VITE_ENABLE_FIXTURES=true
@@ -106,8 +106,10 @@ essa API descartável no futuro.
   o contrato lá: importe o snapshot (`contracts:import` com o commit), regenere e
   ajuste `domain.ts`/`adapter.ts` até `typecheck` (ContractCheck) e testes passarem.
 - Formatos-chave: `version` inteiro (PATCH envia `If-Match: <versão>`), POST de
-  criação com `Idempotency-Key`; filtros `kind, contextId, includePending,
-startYear, endYear, includeUnknownPeriod`; listas `{ items, nextCursor }`.
+  criação com `Idempotency-Key`; filtros `q, match, kind, contextId, includePending,
+startYear, endYear, includeUnknownPeriod`; listas `{ items, nextCursor }`. O cursor
+  só vale para os filtros que o emitiram: filtro mudou, a lista recomeça (os filtros
+  entram na chave da consulta).
 - Títulos por tipo: nodes/contexts `label`, sources `title`, relations `claim`,
   views `name` (`components/labels.ts`). Anos são astronômicos (0 = 1 a.C.).
 - Fixtures (`src/dev/fixtures.ts`) devem seguir os mesmos formatos da API.
