@@ -1,4 +1,10 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -164,6 +170,59 @@ describe('Sugestões — a lista', () => {
     expect(screen.queryByRole('button', { name: 'Mostrar mais' })).toBeNull();
   });
 
+  it('com 20 pares também em 50, o botão some depois de pedir', async () => {
+    const { user, parallels } = await setup((services) => {
+      vi.spyOn(services.api, 'parallels').mockImplementation(async () =>
+        manyPairs(20, await anyNode(services)),
+      );
+    });
+    await waitFor(() => expect(pairs()).toHaveLength(20));
+    await user.click(screen.getByRole('button', { name: 'Mostrar mais' }));
+    await waitFor(() =>
+      expect(parallels).toHaveBeenLastCalledWith(
+        { limit: 50 },
+        expect.anything(),
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Mostrar mais' })).toBeNull(),
+    );
+    expect(pairs()).toHaveLength(20);
+  });
+
+  it('tipo e período aparecem juntos, separados por ponto médio', async () => {
+    await setup((services) => {
+      vi.spyOn(services.api, 'parallels').mockImplementation(async () => {
+        const base = await anyNode(services);
+        const dated = {
+          ...base,
+          startYear: -499,
+          endYear: -399,
+          precision: 'approximate' as const,
+          periodLabel: 'séc. V a.C.',
+        };
+        return {
+          model: 'm',
+          items: [
+            {
+              a: { ...dated, id: 'a-1', label: 'Datado' },
+              b: { ...base, id: 'b-1', label: 'Sem data' },
+              score: 0.95,
+            },
+          ],
+        };
+      });
+    });
+    await screen.findByRole('article');
+    const meta = Array.from(document.querySelectorAll('.pair-meta')).map(
+      (el) => el.textContent,
+    );
+    expect(meta).toEqual([
+      'Pessoa · Aproximadamente 500 a.C. — 400 a.C. (séc. V a.C.)',
+      'Pessoa',
+    ]);
+  });
+
   it('menos de 20 pares: sem "Mostrar mais"', async () => {
     await setup((services) => {
       vi.spyOn(services.api, 'parallels').mockImplementation(async () =>
@@ -230,6 +289,8 @@ describe('Sugestões — Dispensar', () => {
     expect(reason).toHaveFocus();
     expect(reason).toHaveAttribute('maxlength', '2000');
     expect(within(form).getByText(/O par deixa de ser sugerido/)).toBeVisible();
+    // Nada de erro antes de tentar enviar.
+    expect(within(form).queryByRole('alert')).toBeNull();
     expect(dismiss).not.toHaveBeenCalled();
     await user.click(within(form).getByRole('button', { name: 'Cancelar' }));
     expect(screen.queryByRole('group')).toBeNull();
@@ -244,9 +305,8 @@ describe('Sugestões — Dispensar', () => {
     await user.click(dismissButton());
     const form = screen.getByRole('group');
     await user.type(within(form).getByRole('textbox'), '   ');
-    await user.click(
-      within(form).getByRole('button', { name: 'Dispensar par' }),
-    );
+    // O envio é cancelado (preventDefault): o navegador não recarrega a página.
+    expect(fireEvent.submit(form)).toBe(false);
     expect(await within(form).findByRole('alert')).toHaveTextContent(
       'Informe o motivo para dispensar o par.',
     );
@@ -322,6 +382,11 @@ describe('Sugestões — Dispensar', () => {
     await waitFor(() => expect(pairs()).toHaveLength(2));
     const first = within(pairs()[0]!);
     await user.click(first.getByRole('button', { name: 'Dispensar' }));
+    // Só o par escolhido abre o formulário.
+    expect(within(pairs()[1]!).queryByRole('group')).toBeNull();
+    expect(
+      within(pairs()[1]!).getByRole('button', { name: 'Dispensar' }),
+    ).toHaveAttribute('aria-expanded', 'false');
     await user.type(first.getByRole('textbox'), 'Não.');
     await user.click(first.getByRole('button', { name: 'Dispensar par' }));
     await waitFor(() => expect(pairs()).toHaveLength(1));
@@ -365,6 +430,33 @@ describe('Sugestões — Dispensar', () => {
     );
     await waitFor(() => expect(screen.queryByRole('group')).toBeNull());
     expect(dismiss).toHaveBeenCalledTimes(2);
+  });
+
+  it('uma nova tentativa limpa o erro anterior enquanto espera', async () => {
+    const { user } = await setup((services) => {
+      vi.spyOn(services.api, 'dismissParallel')
+        .mockRejectedValueOnce(
+          new ApiError(500, 'Falha interna.', { code: 'INTERNAL' }),
+        )
+        .mockImplementation(() => new Promise(() => {}));
+    });
+    await screen.findByRole('article');
+    await user.click(dismissButton());
+    const form = screen.getByRole('group');
+    await user.type(within(form).getByRole('textbox'), 'Meu motivo');
+    await user.click(
+      within(form).getByRole('button', { name: 'Dispensar par' }),
+    );
+    expect(await within(form).findByRole('alert')).toBeVisible();
+    await user.click(
+      within(form).getByRole('button', { name: 'Dispensar par' }),
+    );
+    await waitFor(() =>
+      expect(
+        within(form).getByRole('button', { name: 'Dispensar par' }),
+      ).toBeDisabled(),
+    );
+    expect(within(form).queryByRole('alert')).toBeNull();
   });
 
   it('enquanto envia, os botões do formulário ficam desligados', async () => {

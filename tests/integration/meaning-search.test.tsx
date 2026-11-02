@@ -470,6 +470,30 @@ describe('Pontos — Mostrar mais (top-k, sem cursor)', () => {
     expect(titles().slice(0, 3)).toEqual(['Ponto 0', 'Ponto 1', 'Ponto 2']);
   });
 
+  it('com 20 resultados também em 50, o botão some depois de pedir', async () => {
+    const { user, semantic } = await setup(
+      '/nodes?mode=significado&q=a',
+      (services) => {
+        vi.spyOn(services.api, 'semanticSearch').mockImplementation(async () =>
+          manyNodes(20, await fixtureNode(services)),
+        );
+      },
+    );
+    await waitFor(() => expect(titles()).toHaveLength(20));
+    await user.click(screen.getByRole('button', { name: 'Mostrar mais' }));
+    await waitFor(() =>
+      expect(semantic).toHaveBeenLastCalledWith(
+        'a',
+        { kind: undefined, includePending: undefined, limit: 50 },
+        expect.anything(),
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Mostrar mais' })).toBeNull(),
+    );
+    expect(titles()).toHaveLength(20);
+  });
+
   it('menos de 20 resultados: sem botão', async () => {
     await setup('/nodes?mode=significado&q=a', (services) =>
       semanticFrom(
