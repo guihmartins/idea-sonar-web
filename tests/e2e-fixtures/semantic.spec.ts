@@ -241,33 +241,63 @@ test('importação: o item criado traz "Parecido com" e o aviso', async ({
   await noHorizontalScroll(page);
 });
 
-test('cadastro de ponto novo: "Confira antes de criar" depois de nome e descrição', async ({
+test('cadastro de ponto novo: "Parecido com pontos já cadastrados" só quando o texto quase repete um ponto', async ({
   page,
+  context,
 }) => {
+  const heading = page.getByRole('heading', {
+    name: 'Parecido com pontos já cadastrados',
+  });
   await page.getByRole('link', { name: 'Novo ponto', exact: true }).click();
   await page.getByLabel('Nome', { exact: true }).fill('União dos contrários');
-  await expect(
-    page.getByRole('heading', {
-      name: 'Confira antes de criar: pontos com sentido parecido',
-    }),
-  ).toHaveCount(0);
+  await page
+    .getByLabel('Descrição', { exact: true })
+    .fill('Um texto qualquer sobre outro assunto.');
+  // Texto sem parecido: depois do atraso da busca (600 ms) nada aparece.
+  await page.waitForTimeout(1200);
+  await expect(heading).toHaveCount(0);
+
+  // Quase uma cópia do ponto de demonstração: o aviso aparece.
+  await page.getByLabel('Nome', { exact: true }).fill(individuation);
   await page
     .getByLabel('Descrição', { exact: true })
     .fill(
-      'Texto sintético sobre a união de opostos como caminho de autoconhecimento.',
+      'Texto sintético sobre a união de opostos como caminho de autoconhecimento e de integração das partes da psique; não é uma afirmação histórica.',
     );
-  const hint = page.getByRole('heading', {
-    name: 'Confira antes de criar: pontos com sentido parecido',
-  });
-  await expect(hint).toBeVisible();
+  await page
+    .getByRole('combobox', { name: 'Tipo', exact: true })
+    .selectOption('concept');
+  await expect(heading).toBeVisible();
   const region = page.locator('.similar-hint');
-  await expect(region.getByRole('listitem')).toHaveCount(3);
+  await expect(region.getByRole('listitem').first()).toContainText(
+    individuation,
+  );
+  await expect(region.locator('.score').first()).toHaveText('semelhança 1,00');
   await expect(
-    region.getByRole('link', { name: individuation }),
-  ).toHaveAttribute('href', /\/edit\/nodes\/.+/);
+    page.getByText(
+      'Aviso, não bloqueio: confira se não é o mesmo ponto antes de salvar.',
+    ),
+  ).toBeVisible();
+  const link = region.getByRole('link', {
+    name: `${individuation} (abre em nova aba)`,
+  });
+  await expect(link).toHaveAttribute('target', '_blank');
+  await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  await expect(link).toHaveAttribute('href', /\/edit\/nodes\/.+/);
   await noViolations(page);
   await noHorizontalScroll(page);
-  // É dica: salvar continua liberado.
+
+  // O link abre em outra aba e o rascunho da primeira fica como estava.
+  const [opened] = await Promise.all([
+    context.waitForEvent('page'),
+    link.click(),
+  ]);
+  await expect(opened).toHaveURL(/\/edit\/nodes\/.+/);
+  await opened.close();
+  await expect(page.getByLabel('Nome', { exact: true })).toHaveValue(
+    individuation,
+  );
+  // É aviso: salvar continua liberado.
   await expect(
     page.getByRole('button', { name: 'Salvar registro' }),
   ).toBeEnabled();

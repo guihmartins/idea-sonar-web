@@ -240,20 +240,53 @@ test('significado: o lote é indexado, a paráfrase acha o ponto, o mapa lista p
     reason: 'Par sintético do E2E.',
   });
 
-  // Cadastro de ponto novo: a dica aparece com nome e descrição, sem bloquear o salvar.
+  // Cadastro de ponto novo: o aviso de duplicata (mode=duplicates, limiar do servidor)
+  // só aparece quando o texto quase repete um ponto que já existe.
+  const hint = page.getByRole('heading', {
+    name: 'Parecido com pontos já cadastrados',
+  });
+  const duplicates = (response: { url(): string }) =>
+    response.url().includes('/search/semantic') &&
+    response.url().includes('mode=duplicates');
   await page.goto('/edit/nodes');
+  await page.getByLabel('Nome', { exact: true }).fill(`Receita de bolo ${run}`);
+  const [unrelated] = await Promise.all([
+    page.waitForResponse(duplicates, { timeout: 120_000 }),
+    page
+      .getByLabel('Descrição', { exact: true })
+      .fill(
+        'Mistura de fubá, ovos e leite, assada em forma untada até dourar.',
+      ),
+  ]);
+  // Texto sem relação passa de 0,80 mas não do limiar de duplicata (0,94).
+  expect(unrelated.ok(), await unrelated.text()).toBe(true);
+  expect(await unrelated.json()).toMatchObject({ items: [] });
+  await expect(hint).toHaveCount(0);
+  // Uma cópia do ponto (mesmo nome, tipo e descrição) passa do limiar.
+  await page.getByLabel('Nome', { exact: true }).fill(waters);
   await page
-    .getByLabel('Nome', { exact: true })
-    .fill(`Lembrança do mar ${run}`);
-  await page.getByLabel('Descrição', { exact: true }).fill(watersText);
-  await expect(
-    page.getByRole('heading', {
-      name: 'Confira antes de criar: pontos com sentido parecido',
-    }),
-  ).toBeVisible({ timeout: 60_000 });
-  await expect(
-    page.locator('.similar-hint').getByRole('link', { name: waters }),
-  ).toBeVisible();
+    .getByRole('combobox', { name: 'Tipo', exact: true })
+    .selectOption('concept');
+  const [copy] = await Promise.all([
+    // O q é o texto do ponto no formato da API: nome · tipo · descrição.
+    page.waitForResponse(
+      (response) =>
+        duplicates(response) &&
+        new URL(response.url()).searchParams.get('q') ===
+          `${waters} · conceito · ${watersText}`,
+      { timeout: 120_000 },
+    ),
+    page.getByLabel('Descrição', { exact: true }).fill(watersText),
+  ]);
+  expect(copy.ok(), await copy.text()).toBe(true);
+  await expect(hint).toBeVisible();
+  const link = page
+    .locator('.similar-hint')
+    .getByRole('link', { name: `${waters} (abre em nova aba)` });
+  await expect(link).toHaveAttribute('target', '_blank');
+  await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  await expect(link).toHaveAttribute('href', `/edit/nodes/${idWaters}`);
+  await expect(page.getByRole('alert')).toHaveCount(0);
   await expect(
     page.getByRole('button', { name: 'Salvar registro' }),
   ).toBeEnabled();
