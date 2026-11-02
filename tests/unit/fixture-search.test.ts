@@ -257,7 +257,15 @@ describe('cursor preso aos filtros', () => {
       {},
     );
     expect(second.items).toHaveLength(2);
-    expect(second.nextCursor).toBeNull();
+    expect(second.nextCursor).toBe('4');
+    const third = await services.api.list(
+      'nodes',
+      second.nextCursor,
+      signal,
+      {},
+    );
+    expect(third.items).toHaveLength(2);
+    expect(third.nextCursor).toBeNull();
 
     await services.api.save(
       'nodes',
