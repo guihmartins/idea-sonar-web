@@ -108,7 +108,10 @@ test('pontos: tipo, período em a.C./d.C., erro de ano e "Carregar mais" dentro 
   await expect(results(page)).toHaveCount(2);
   await page.getByRole('button', { name: 'Carregar mais' }).click();
   await expect(results(page)).toHaveCount(4);
-  await expect(status(page)).toHaveText('4 registros carregados');
+  await expect(status(page)).toHaveText('4 registros carregados · há mais');
+  await page.getByRole('button', { name: 'Carregar mais' }).click();
+  await expect(results(page)).toHaveCount(6);
+  await expect(status(page)).toHaveText('6 registros carregados');
 
   // Sem período desconhecido, só os dois pontos que o contexto fictício cobre.
   await page
