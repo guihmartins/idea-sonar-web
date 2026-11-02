@@ -412,12 +412,14 @@ function periodFields(period: Pick<Context, 'startYear' | 'endYear'>) {
   return data;
 }
 
-// Só no cadastro de ponto novo: ponto já salvo não precisa de aviso de parecido.
+// Só no cadastro de ponto novo: ponto já salvo não precisa de aviso de duplicata.
 function NewNodeHint({ model }: { model: EditorModel }) {
   if (model.baseline) return null;
   return (
     <SimilarHint
       label={model.fields.label ?? ''}
+      kind={model.fields.kind ?? ''}
+      aliases={model.fields.aliases ?? ''}
       description={model.fields.description ?? ''}
     />
   );

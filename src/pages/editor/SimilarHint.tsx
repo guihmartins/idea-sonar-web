@@ -1,42 +1,76 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useServices } from '../../app/services';
+import type { Kind } from '../../api/domain';
 import { kindLabels } from '../../components/labels';
 import { Score } from '../../components/SemanticNote';
+import { parseAliases } from './payload';
 import { useDebounced } from './pickers';
 
 export const hintDelay = 600;
 export const hintLimit = 3;
-export const hintTitle = 'Confira antes de criar: pontos com sentido parecido';
+export const hintTitle = 'Parecido com pontos já cadastrados';
 export const hintLeadText =
-  'Pistas pelo sentido do texto; semelhança não é identidade. Salvar continua como está.';
+  'Aviso, não bloqueio: confira se não é o mesmo ponto antes de salvar.';
 // O `q` da API vai até 500 caracteres.
 const maxQuery = 500;
+// O tipo no texto do ponto, como a API o escreve (minúsculas, em português).
+const kindWords: Record<Kind, string> = {
+  person: 'pessoa',
+  tradition: 'tradição',
+  concept: 'conceito',
+  work: 'obra',
+  figure: 'figura',
+};
 
-// O texto que a API compara: nome e descrição, só quando os dois existem.
-export function hintQuery(label: string, description: string): string {
-  const name = label.trim();
-  const text = description.trim();
-  return name && text ? `${name} · ${text}`.slice(0, maxQuery) : '';
+// O texto que o ponto novo teria, no formato do texto de um ponto na API
+// (`nome · tipo · outros nomes · descrição`, partes vazias fora), para a busca
+// `mode=duplicates`. Só vale com nome e descrição; sem os dois não há consulta.
+export function hintQuery(point: {
+  label: string;
+  kind: string;
+  aliases: string;
+  description: string;
+}): string {
+  const label = point.label.trim();
+  const description = point.description.trim();
+  if (!label || !description) return '';
+  const aliases = parseAliases(point.aliases)
+    .map((entry) => entry.alias)
+    .join(', ');
+  const kind = kindWords[point.kind as Kind] ?? '';
+  return [label, kind, aliases, description]
+    .filter(Boolean)
+    .join(' · ')
+    .slice(0, maxQuery);
 }
 
-// Dica no cadastro de um ponto novo: pontos que já existem e leem parecido com o
-// que está sendo escrito. Não bloqueia nem muda o salvar; se a busca estiver
-// indisponível (503) ou falhar, o bloco simplesmente não aparece.
+// Aviso no cadastro de um ponto novo: pontos que já existem e passam do limiar de
+// duplicata da API (o mesmo do aviso do lote). Não bloqueia nem muda o salvar; se
+// nada passa do limiar, a busca está indisponível (503) ou falha, não aparece.
+// Os links abrem em outra aba para o rascunho não se perder.
 export function SimilarHint({
   label,
+  kind,
+  aliases,
   description,
 }: {
   label: string;
+  kind: string;
+  aliases: string;
   description: string;
 }) {
   const { api } = useServices();
-  const text = hintQuery(label, description);
+  const text = hintQuery({ label, kind, aliases, description });
   const q = useDebounced(text, hintDelay);
   const query = useQuery({
     queryKey: ['similar-hint', q],
     queryFn: ({ signal }) =>
-      api.semanticSearch(q, { includePending: true, limit: hintLimit }, signal),
+      api.semanticSearch(
+        q,
+        { mode: 'duplicates', includePending: true, limit: hintLimit },
+        signal,
+      ),
     enabled: q !== '',
   });
   const items = query.data?.items ?? [];
@@ -51,7 +85,14 @@ export function SimilarHint({
           <ul>
             {items.map(({ node, score }) => (
               <li key={node.id}>
-                <Link to={`/edit/nodes/${node.id}`}>{node.label}</Link>{' '}
+                <Link
+                  to={`/edit/nodes/${node.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`${node.label} (abre em nova aba)`}
+                >
+                  {node.label} <span aria-hidden="true">↗</span>
+                </Link>{' '}
                 <span className="similar-kind">{kindLabels[node.kind]}</span>{' '}
                 <Score value={score} />
               </li>
