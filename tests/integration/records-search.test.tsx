@@ -71,6 +71,8 @@ const jung = 'Jung (exemplo fictício)';
 const gnosis = 'Gnosticismo (exemplo fictício)';
 const concept = 'Conceito compartilhado fictício';
 const work = 'Obra de demonstração';
+const individuation = 'Individuação (exemplo fictício)';
+const coniunctio = 'Coniunctio (exemplo fictício)';
 const nodeFilters = {
   q: 'jung',
   match: 'exact',
@@ -751,8 +753,23 @@ describe('busca nas listas — paginação', () => {
     await waitFor(() =>
       expect(titles()).toEqual([jung, gnosis, concept, work]),
     );
-    expect(status()).toHaveTextContent(/^4 registros carregados$/);
+    expect(status()).toHaveTextContent(/^4 registros carregados · há mais$/);
     expect(list).toHaveBeenLastCalledWith('nodes', '2:q=e', expect.anything(), {
+      q: 'e',
+    });
+    await user.click(screen.getByRole('button', { name: 'Carregar mais' }));
+    await waitFor(() =>
+      expect(titles()).toEqual([
+        jung,
+        gnosis,
+        concept,
+        work,
+        individuation,
+        coniunctio,
+      ]),
+    );
+    expect(status()).toHaveTextContent(/^6 registros carregados$/);
+    expect(list).toHaveBeenLastCalledWith('nodes', '4:q=e', expect.anything(), {
       q: 'e',
     });
     expect(screen.queryByRole('button', { name: 'Carregar mais' })).toBeNull();
@@ -875,7 +892,11 @@ describe('busca nas listas — linha de estado', () => {
     expect(status()).toHaveAttribute('aria-live', 'polite');
     await user.click(screen.getByRole('button', { name: 'Carregar mais' }));
     await waitFor(() =>
-      expect(status()).toHaveTextContent(/^4 registros carregados$/),
+      expect(status()).toHaveTextContent(/^4 registros carregados · há mais$/),
+    );
+    await user.click(screen.getByRole('button', { name: 'Carregar mais' }));
+    await waitFor(() =>
+      expect(status()).toHaveTextContent(/^6 registros carregados$/),
     );
   });
 

@@ -2,9 +2,23 @@
 
 ## Situação
 
-Em 01/11/2026 o snapshot de `contracts/openapi.json` da API foi atualizado para o commit `5215021175aa1f0d409bb7f49077894d93575b9f` (`info.version` 1.2.0, modelo de dados v2). Antes disso: 1.1.0 (`e27da26a162755707edfc4bf9e53306ba25e8ca8`, 31/10/2026) e a primeira importação, de 29/10/2026, 1.0.0 (`d0119459e99e806fb0c55d1a1df33643099e0f3c`). `contracts/source.json` registra origem, commit e SHA-256; `src/api/generated/` contém tipos e cliente gerados.
+Em 02/11/2026 o snapshot de `contracts/openapi.json` da API foi atualizado para o commit `e521740f2ffe69038a6aadb4c2b95b436127a9c8` (`info.version` 1.3.0, busca por significado; PR #8 da API, só acréscimos; antes dele, `fb84a5280e9a5e24ddab813671bce43783058ec2`, sem o `mode`). Antes disso, em 01/11/2026, `5215021175aa1f0d409bb7f49077894d93575b9f` (1.2.0, modelo de dados v2). Antes disso: 1.1.0 (`e27da26a162755707edfc4bf9e53306ba25e8ca8`, 31/10/2026) e a primeira importação, de 29/10/2026, 1.0.0 (`d0119459e99e806fb0c55d1a1df33643099e0f3c`). `contracts/source.json` registra origem, commit e SHA-256; `src/api/generated/` contém tipos e cliente gerados.
 
 `src/api/domain.ts` valida por Zod os formatos de resposta do contrato; o tipo `ContractCheck` falha a compilação se o modelo divergir dos tipos gerados. `src/api/adapter.ts` usa as rotas, filtros (`contextId`, `includePending`, `startYear`, `endYear`, `includeUnknownPeriod`), `If-Match` com a versão inteira e os corpos de undo/resolve do contrato. Respostas fora do contrato mostram erro explícito; produção nunca troca para mocks.
+
+## Contrato 1.3.0 (busca por significado)
+
+A API calcula os embeddings localmente (`Xenova/multilingual-e5-small`) e guarda os vetores com pgvector. **Semelhança é pista, nunca evidência: não é identidade nem prova influência.** Nada é gravado por causa dela; a única escrita nova é dispensar um par sugerido, por decisão do usuário.
+
+- `GET /search/semantic?q=&kind=&includePending=&limit=&mode=`: `q` de 1 a 500 caracteres, `includePending` `"true"|"false"` (padrão falso), `limit` de 1 a 50 (padrão 10). Devolve `SemanticResults` `{ model, items: [{ node, score }] }`, melhor primeiro; é um top-k, sem cursor. `mode` é `meaning` (padrão, a busca de sempre) ou `duplicates`: `q` passa a ser o texto que um ponto novo teria, no formato do texto de um ponto na API (`nome · tipo em português · outros nomes separados por vírgula · descrição`, partes vazias fora; os tipos são pessoa, tradição, conceito, obra e figura), é embutido como os pontos guardados e só voltam os resultados com semelhança a partir do limiar de duplicata do servidor (0,94, o mesmo do `similar` do lote), então a lista costuma vir vazia.
+- `GET /nodes/{id}/similar?limit=`: o mesmo formato, sem o próprio ponto e só com pontos ativos.
+- `GET /suggestions/parallels?limit=&minScore=`: `ParallelSuggestions` `{ model, items: [{ a, b, score }] }`, pares de pontos ativos sem relação entre si (nos dois sentidos, qualquer estado menos arquivada) e não dispensados; sem `minScore` vale o limiar do servidor (0,91).
+- `POST /suggestions/parallels/dismiss` com `{ a, b, reason }` (motivo de 1 a 2000 caracteres): `ParallelDismissal` `{ id, a, b, kind, reason, createdAt }`. O par é guardado ordenado (ids em minúsculas, o menor primeiro) e repetir devolve o primeiro registro. Não leva `Idempotency-Key`; no web, `withoutIdempotencyKey` em `RequestOptions` é a única exceção à regra "POST exige chave".
+- Busca desligada ou modelo que não carrega: os quatro respondem **503 `SEMANTIC_UNAVAILABLE`**; o resto da API segue. O transporte só repete 429, então o 503 volta na hora.
+- Itens `create` de ponto no lote trazem `similar: [{ id, label, score }]` (até 3 pontos existentes), na resposta de `POST /imports` e em `GET /imports/{id}` (recalculado a cada leitura contra os pontos de agora; lote desfeito não tem). Campo ausente = busca desligada ou falhou; lista vazia = nada parecido. No `importItemSchema`, `similar` é `exactOptional` (não vira `[]`), para o `ContractCheck` com `exactOptionalPropertyTypes`.
+- **A pontuação é comprimida**: textos sem relação costumam dar 0,80 a 0,89. No web ela é só a ordem e um número pequeno, "semelhança 0,87" (duas casas, vírgula), nunca percentual, probabilidade nem "confiança".
+
+No web: `api.semanticSearch(q, { kind, includePending, limit, mode }, signal)` (`mode` só vai na query quando é dado), `api.similarNodes(id, limit, signal)`, `api.parallels({ limit, minScore }, signal)` e `api.dismissParallel(a, b, reason)`; `ContractCheck` compara `SemanticResults`, `ParallelSuggestions` e `ParallelDismissal` com os tipos gerados. As fixtures implementam as quatro rotas e o `similar` do lote (`src/dev/fixture-semantic.ts`).
 
 ## Contrato 1.2.0 (modelo de dados v2)
 

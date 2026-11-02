@@ -86,6 +86,11 @@ function withApi(
 }
 const canvas = () => screen.getByRole('img', { name: 'canvas' });
 const panel = () => document.getElementById('panel-content') as HTMLElement;
+// As linhas da lista de relações, sem as dos pontos parecidos (seção própria).
+const relationRows = () =>
+  within(
+    within(panel()).getByRole('list', { name: 'Relações do ponto' }),
+  ).getAllByRole('listitem');
 
 async function pickRoot(
   user: ReturnType<typeof userEvent.setup>,
@@ -107,18 +112,14 @@ async function loadJung(services: Services = createFixtureServices()) {
   renderMap(services);
   await pickRoot(user);
   await user.click(screen.getByRole('button', { name: 'Expandir conexões' }));
-  await waitFor(() =>
-    expect(within(panel()).getAllByRole('listitem')).toHaveLength(2),
-  );
+  await waitFor(() => expect(relationRows()).toHaveLength(2));
   await user.click(screen.getByRole('button', { name: 'Mais conexões' }));
-  await waitFor(() =>
-    expect(within(panel()).getAllByRole('listitem')).toHaveLength(3),
-  );
+  await waitFor(() => expect(relationRows()).toHaveLength(3));
   return user;
 }
 
 describe('MapPage — trilho de seções', () => {
-  it('lista as nove seções com o destino de cada uma', async () => {
+  it('lista as dez seções com o destino de cada uma', async () => {
     renderMap();
     const rail = await screen.findByRole('navigation', { name: 'Seções' });
     const links = within(rail).getAllByRole('link');
@@ -135,6 +136,7 @@ describe('MapPage — trilho de seções', () => {
       ['Contextos', '/contexts'],
       ['Importações', '/imports'],
       ['Pendências', '/pending'],
+      ['Sugestões', '/sugestoes'],
       ['Views salvas', '/views'],
       ['Exportar dados', '/export'],
     ]);
@@ -285,7 +287,7 @@ describe('MapPage — painel do ponto', () => {
 
   it('lista cada relação com o rótulo, o outro ponto, a evidência e a contestação', async () => {
     await loadJung();
-    const rows = within(panel()).getAllByRole('listitem');
+    const rows = relationRows();
     expect(rows.map((row) => row.textContent)).toEqual([
       'estudou → Gnosticismo (exemplo fictício)ATR Contestada',
       'estudou → Conceito compartilhado fictícioATR Contestada',
@@ -345,15 +347,11 @@ describe('MapPage — painel do ponto', () => {
     });
     await user.click(screen.getByRole('button', { name: 'Expandir conexões' }));
     await waitFor(() =>
-      expect(
-        within(panel())
-          .getAllByRole('listitem')
-          .map((row) => row.textContent),
-      ).toContain('paralelo a → Conceito compartilhado fictícioINF Contestada'),
+      expect(relationRows().map((row) => row.textContent)).toContain(
+        'paralelo a → Conceito compartilhado fictícioINF Contestada',
+      ),
     );
-    const texts = within(panel())
-      .getAllByRole('listitem')
-      .map((row) => row.textContent);
+    const texts = relationRows().map((row) => row.textContent);
     expect(texts).toContain(
       'leitura inversa: estudou → Jung (exemplo fictício)ATR Contestada',
     );
@@ -373,11 +371,7 @@ describe('MapPage — painel do ponto', () => {
       level: 2,
     });
     await waitFor(() =>
-      expect(
-        within(panel())
-          .getAllByRole('listitem')
-          .map((row) => row.textContent),
-      ).toEqual([
+      expect(relationRows().map((row) => row.textContent)).toEqual([
         'leitura inversa: estudou → Jung (exemplo fictício)ATR Contestada',
         'paralelo a → Gnosticismo (exemplo fictício)INF Contestada',
       ]),
@@ -386,7 +380,7 @@ describe('MapPage — painel do ponto', () => {
 
   it('trocar a relação ativa troca o título da seção de fontes', async () => {
     const user = await loadJung();
-    const rows = within(panel()).getAllByRole('listitem');
+    const rows = relationRows();
     await user.click(within(rows[1]!).getByRole('button'));
     expect(
       await within(panel()).findByRole('heading', {

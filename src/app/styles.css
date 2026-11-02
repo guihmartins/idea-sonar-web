@@ -1933,3 +1933,189 @@ button.flow-toggle[aria-pressed='true'] {
     transform: none;
   }
 }
+
+/* ===== Busca por significado ===== */
+/* Semelhança é pista: texto de apoio calmo, sem caixa nem cor de alerta. */
+.semantic-note,
+.semantic-hint {
+  margin: 0.75rem 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.score {
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--muted);
+}
+/* Modo da busca de pontos: dois rádios desenhados como segmentos (mesma
+   inversão chapada da barra do mapa); o rádio nativo fica por cima, invisível,
+   para o teclado e o leitor de tela. */
+.mode-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin: 0 0 1rem;
+}
+.mode-switch-label {
+  font-family: var(--mono);
+  font-size: var(--text-label);
+  font-weight: 500;
+  letter-spacing: 0.145em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.mode-switch-options {
+  display: inline-flex;
+}
+.mode-switch label {
+  position: relative;
+  flex-direction: row;
+  margin: 0;
+}
+.mode-switch input[type='radio'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.mode-switch label span {
+  display: block;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--line-strong);
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.mode-switch label + label span {
+  margin-left: -1px;
+}
+.mode-switch label:hover input:not(:checked) + span {
+  background: var(--hover);
+  border-color: var(--ink-2);
+}
+.mode-switch input:checked + span {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.mode-switch input:focus-visible + span {
+  position: relative;
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+.record-search-options .record-search-kind {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0;
+  font-weight: 400;
+  color: var(--ink);
+}
+.record-search-kind select {
+  width: auto;
+  min-width: 9rem;
+}
+/* Pontos parecidos no painel do mapa: mesma lista de linhas das relações. */
+.similar-kind {
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* Nome numa linha; tipo à esquerda e semelhança à direita embaixo. */
+.similar-list button {
+  text-align: left;
+}
+.similar-list strong {
+  flex: 1 0 100%;
+}
+.similar-list .score {
+  margin-left: auto;
+}
+.details-panel .similar-kind,
+.details-panel .score {
+  color: var(--atlas-tinta-2);
+}
+.details-panel .semantic-note,
+.details-panel .semantic-hint {
+  font-size: var(--text-xs);
+}
+/* Sugestões: cada par é uma linha com fio, dois pontos lado a lado. */
+.record-list.suggestion-list > article {
+  display: block;
+}
+.pair-points {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 2rem;
+}
+.pair-point h2 {
+  margin: 0 0 0.1rem;
+}
+.record-list .pair-meta {
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  margin: 0.1rem 0 0.3rem;
+}
+.record-list .pair-description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
+.suggestion-list .actions {
+  margin: 0.75rem 0 0;
+}
+.suggestion-list .confirmation {
+  margin: 1rem 0 0;
+}
+@media (max-width: 680px) {
+  .pair-points {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* Aviso de parecidos no detalhe do lote e no cadastro de ponto novo. */
+.similar-warning p {
+  margin: 0.25rem 0 0;
+  font-size: var(--text-sm);
+}
+.similar-warning .semantic-hint {
+  margin: 0 0 0.5rem;
+}
+.similar-hint:not(:empty) {
+  margin: 0 0 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+.similar-hint h2 {
+  margin: 0 0 0.4rem;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.similar-hint ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.similar-hint li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem 0.75rem;
+  padding: 0.25rem 0;
+  font-size: var(--text-sm);
+}

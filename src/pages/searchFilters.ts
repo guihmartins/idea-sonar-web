@@ -17,12 +17,22 @@ export type SearchableType = 'nodes' | 'sources' | 'contexts';
 export const isSearchable = (type: EntityType): type is SearchableType =>
   type === 'nodes' || type === 'sources' || type === 'contexts';
 
-// Limite do `q` na API.
+// Limite do `q` na API (500 na busca por significado).
 export const maxQueryLength = 200;
+export const maxMeaningLength = 500;
 export const exactLabel = 'Nome ou identificador exato';
+
+// Modo da busca de pontos: sem `mode` é a busca por nome de sempre; com
+// `mode=significado`, a busca por sentido (só `q`, `kind` e `includePending`
+// valem). Fica na URL como os demais filtros; o adapter `list` não o envia.
+export const meaningMode = 'significado';
+export type SearchFilters = ListFilters & {
+  mode?: typeof meaningMode | undefined;
+};
 
 // Ordem fixa dos parâmetros: a mesma URL para a mesma busca.
 const order = [
+  'mode',
   'q',
   'match',
   'kind',
@@ -32,7 +42,7 @@ const order = [
   'includeUnknownPeriod',
 ] as const;
 
-function compact(filters: ListFilters): ListFilters {
+function compact(filters: SearchFilters): SearchFilters {
   return Object.fromEntries(
     order.flatMap((key) => {
       const value = filters[key];
@@ -41,15 +51,15 @@ function compact(filters: ListFilters): ListFilters {
   );
 }
 
-export function paramsFromFilters(filters: ListFilters): URLSearchParams {
+export function paramsFromFilters(filters: SearchFilters): URLSearchParams {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(compact(filters)))
     params.set(key, String(value));
   return params;
 }
 
-const text = (raw: string | null) =>
-  (raw ?? '').trim().slice(0, maxQueryLength) || undefined;
+const text = (raw: string | null, max = maxQueryLength) =>
+  (raw ?? '').trim().slice(0, max) || undefined;
 const isKind = (value: string | null): value is Kind =>
   value !== null && Object.keys(kindLabels).includes(value);
 // Ano astronômico inteiro dentro dos limites da API; o resto é ignorado.
@@ -78,12 +88,26 @@ function nodeFromParams(params: URLSearchParams): ListFilters {
   };
 }
 
+// Por significado só valem o texto, o tipo e os pendentes: `match` e o período
+// não se aplicam e saem da URL.
+function meaningFromParams(params: URLSearchParams): SearchFilters {
+  const kind = params.get('kind');
+  return {
+    mode: meaningMode,
+    q: text(params.get('q'), maxMeaningLength),
+    kind: isKind(kind) ? kind : undefined,
+    includePending: commonFromParams(params).includePending,
+  };
+}
+
 // URL → filtros aplicados. Parâmetro inválido ou alheio ao tipo (tipo e período
 // só valem para pontos) é ignorado, em vez de virar um 400 da API.
 export function filtersFromParams(
   type: SearchableType,
   params: URLSearchParams,
-): ListFilters {
+): SearchFilters {
+  if (type === 'nodes' && params.get('mode') === meaningMode)
+    return compact(meaningFromParams(params));
   return compact({
     ...commonFromParams(params),
     ...(type === 'nodes' ? nodeFromParams(params) : {}),
@@ -92,6 +116,7 @@ export function filtersFromParams(
 
 // O que o formulário edita: textos e marcas, com o ano em ano civil + era.
 export interface SearchDraft {
+  meaning: boolean;
   q: string;
   exact: boolean;
   pending: boolean;
@@ -103,10 +128,11 @@ export interface SearchDraft {
   unknownPeriod: boolean;
 }
 
-export function draftFromFilters(filters: ListFilters): SearchDraft {
+export function draftFromFilters(filters: SearchFilters): SearchDraft {
   const start = yearFields(filters.startYear ?? null);
   const end = yearFields(filters.endYear ?? null);
   return {
+    meaning: filters.mode === meaningMode,
     q: filters.q ?? '',
     exact: filters.match === 'exact',
     pending: filters.includePending === true,
@@ -132,11 +158,23 @@ function nodeFromDraft(draft: SearchDraft): ListFilters {
   };
 }
 
+function meaningFromDraft(draft: SearchDraft): SearchFilters {
+  return {
+    mode: meaningMode,
+    q: text(draft.q, maxMeaningLength),
+    kind: draft.kind || undefined,
+    includePending: draft.pending ? true : undefined,
+  };
+}
+
 // Formulário → filtros. Ano inválido lança Error com a mensagem para o usuário.
+// Por significado o período e o "exato" não existem e não são lidos.
 export function filtersFromDraft(
   type: SearchableType,
   draft: SearchDraft,
-): ListFilters {
+): SearchFilters {
+  if (type === 'nodes' && draft.meaning)
+    return compact(meaningFromDraft(draft));
   return compact({
     q: text(draft.q),
     match: draft.exact ? 'exact' : undefined,
@@ -155,6 +193,7 @@ export const searchHints: Record<SearchableType, string> = {
   sources: 'Título, DOI ou endereço',
   contexts: 'Nome do contexto',
 };
+export const meaningHint = 'Uma ideia, com suas palavras';
 
 // Linha de estado lida em voz alta: quantos registros as páginas já trazem.
 export function countText(count: number, hasMore: boolean): string {

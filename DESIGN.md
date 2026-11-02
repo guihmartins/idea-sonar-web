@@ -298,6 +298,46 @@ mesmo traço neutro `#767c6b` (≥3:1 sobre o marfim) e o mesmo preenchimento a
   ponto encontrado para “x”") e, no modo exato, sugere desmarcar "exato". Ano
   inválido ou inicial depois do final aparece em `.field-error` (`role="alert"`,
   ligado aos campos por `aria-describedby`), sem sair da tela.
+- **Modo da busca de pontos** ("Buscar por": Nome | Significado, só em Pontos):
+  `radiogroup` de dois rádios desenhados como segmentos, na linha acima do campo.
+  Mono maiúsculo 12px, bordas compartilhadas e a mesma inversão chapada do
+  segmentado do mapa para o marcado (tinta sobre papel); o rádio nativo fica por
+  cima, invisível, para o teclado (setas) e o leitor de tela, e o foco desenha o
+  anel `accent-strong` no segmento. Trocar de modo aplica na hora (`mode=significado`
+  na URL) e mantém o texto, o tipo e os pendentes. Em Significado somem "exato" e o
+  grupo de período; ficam o campo (até 500 caracteres), "Incluir pendentes" e Tipo.
+- **Resultados por significado**: as mesmas linhas de registro das listas; a última
+  linha (mono, metadado) ganha a pontuação depois do estado: "Estado: Ativo ·
+  semelhança 0,87". A pontuação é só a ordem e um número pequeno (`.score`, mono,
+  `muted`, duas casas com vírgula); nunca percentual, barra, selo ou cor. Embaixo, em
+  `.semantic-hint`, a frase de cautela: "Ordem por sentido do texto. Semelhança não
+  é identidade: confira antes de reutilizar." É um top-k: 20 e "Mostrar mais" (50).
+- **Nota quieta** (`.semantic-note`): quando a API responde 503 `SEMANTIC_UNAVAILABLE`,
+  uma linha `muted` 14px no lugar do resultado, sem caixa, sem alerta e sem "tentar
+  novamente". Em toda tela de significado a cautela é uma frase assim (`.semantic-hint`),
+  nunca banner nem cor de alarme: semelhança é pista, não evidência.
+- **Sugestões** (`/sugestoes`): lista de pares em linhas com fio, como os registros.
+  Cada par põe os dois pontos lado a lado (empilham abaixo de 680px): título em link
+  para o ponto, tipo e período em mono, descrição curta (4 linhas). Abaixo, a
+  semelhança em mono e as duas ações, ambas secundárias ("Registrar paralelo" é um
+  link com cara de botão; "Dispensar" abre embaixo o motivo, no mesmo desenho da
+  confirmação de desfazer, com o foco no campo). Nenhuma ação é primária e a página
+  não tem botão principal.
+- **Pontos parecidos** (painel do ponto no mapa, depois das relações): etiqueta mono
+  com fio, como as outras seções; linhas no desenho da lista de relações (`.relation-list`,
+  fio entre linhas): nome em uma linha, tipo (mono maiúsculo) à esquerda e semelhança
+  à direita embaixo. Ativar uma linha traz o ponto como raiz, igual ao resultado da
+  busca do mapa. Fecha com "Pistas pelo sentido do texto; não indicam relação.".
+- **Aviso de parecidos**: no detalhe do lote, "Parecido com:" e links (`.candidate-links`)
+  com a semelhança, e a linha "Aviso, não desfecho: confira se não é o mesmo ponto."; no
+  cadastro de ponto novo, o bloco "Parecido com pontos já cadastrados", com o mesmo
+  desenho: um título de 14px com fio em cima, linhas de link, tipo e semelhança e a
+  frase "Aviso, não bloqueio: confira se não é o mesmo ponto antes de salvar.". O bloco
+  vem da busca de duplicata (só o que passa do limiar do servidor, então quase sempre
+  não aparece); seus links abrem em outra aba (`target="_blank"`, `rel="noopener
+  noreferrer"`, nome acessível "… (abre em nova aba)" e o marcador `↗`), para o rascunho
+  não se perder. É aviso: o salvar não muda, e o bloco some se a busca estiver
+  indisponível ou falhar.
 - **Seletor por busca** (pontos, contextos e fontes no editor; contexto no filtro
   do mapa): `fieldset` com etiqueta mono, campo "Buscar candidato", o que já está
   escolhido escrito pelo nome (rádio para um, lista com "Remover" para vários) e
@@ -353,3 +393,5 @@ mesmo traço neutro `#767c6b` (≥3:1 sobre o marfim) e o mesmo preenchimento a
   cartão dentro de cartão), borda lateral colorida, kicker acima de título,
   glifo unicode no lugar de ícone desenhado, mono como fantasia de "técnico".
 - Não faça: carregar fontes de CDN; mais de um botão primário por tela.
+- Não faça: mostrar a semelhança como percentual, barra, selo de confiança ou cor de
+  alerta; ela é pista e ordem, nunca evidência.

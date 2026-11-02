@@ -26,11 +26,13 @@ src/
   api/generated/        gerado de contracts/openapi.json — nunca editar
   auth/                 sessão PKCE (Auth0), usada só com VITE_AUTH_MODE=oidc
   graph/                ledger de expansões, adaptação para Cytoscape, layout, restore
-  pages/                MapPage, RecordsPage (listas/imports/pendências/histórico), RecordSearch + searchFilters (busca das listas, estado na URL), EntityEditor
-  pages/editor/         payload, seletores por busca, campos comuns e contextualização (lote)
-  components/           Feedback, labels (rótulos PT-BR), period (anos astronômicos), identifiers (links)
+  pages/                MapPage, RecordsPage (listas/imports/pendências/histórico), RecordSearch + searchFilters (busca das listas, estado na URL, modo Nome|Significado), EntityEditor
+  pages/                busca por significado: MeaningResults (Pontos), RecordItem (linha de lista), SimilarPoints (painel do mapa), SuggestionsPage (/sugestoes), ImportSimilar (aviso no lote)
+  pages/editor/         payload, seletores por busca, campos comuns, contextualização (lote), prefill (URL da relação nova) e SimilarHint (dica do ponto novo)
+  components/           Feedback, labels (rótulos PT-BR), period (anos astronômicos), identifiers (links), semantic + SemanticNote (nota do 503, pontuação "semelhança 0,87")
   dev/fixtures.ts       API fictícia em memória, só em dev com VITE_ENABLE_FIXTURES=true
   dev/fixture-batch.ts  lote de importação e recusas do REST da API fictícia
+  dev/fixture-semantic.ts  busca por significado fictícia: Jaccard no lugar do modelo, sugestões, dispensa e `similar` do lote
 contracts/              openapi.json (snapshot da API) + source.json (commit/SHA-256)
 tests/                  unit/, integration/, e2e/ (dist, rede simulada), e2e-fixtures/ (fictício), e2e-real/ (API real descartável)
 infra/docker/           Dockerfile (build Node → nginx não root :8080) e default.conf
@@ -66,8 +68,10 @@ origem dela (ex.: `E2E_API_URL=http://127.0.0.1:3000 npm run test:e2e:real`). O
 config faz `vite build` com `VITE_API_BASE_URL=$E2E_API_URL` em `dist-e2e-real/`
 (não mexe no `dist`) e serve com `vite preview` em 127.0.0.1:4173. Sem
 `E2E_API_URL` o teste é pulado com uma mensagem. Nunca aponte para dados reais:
-o teste cria e desfaz um lote sintético. Um `make e2e` do workspace deve subir
-essa API descartável no futuro.
+o teste cria e desfaz um lote sintético. Na raiz do
+workspace, `make e2e` sobe essa API descartável (Postgres com pgvector em
+memória, a API da branch local com o modelo real em `../idea-sonar-api/.models`) e
+roda este E2E; o spec `semantic.spec.ts` espera a indexação por polling.
 
 ## Portões de qualidade
 
@@ -105,6 +109,21 @@ essa API descartável no futuro.
 - A API é a fonte da verdade (`idea-sonar-api/contracts/openapi.json`). Ao mudar
   o contrato lá: importe o snapshot (`contracts:import` com o commit), regenere e
   ajuste `domain.ts`/`adapter.ts` até `typecheck` (ContractCheck) e testes passarem.
+- Contrato 1.3.0 (busca por significado; só acréscimos): `GET /search/semantic`
+  (`q` 1–500, `kind`, `includePending`, `limit` 1–50, `mode` `meaning`|`duplicates`),
+  `GET /nodes/{id}/similar`,
+  `GET /suggestions/parallels` (`limit`, `minScore`) e o `POST` de dispensar um
+  par, `/suggestions/parallels/dismiss` (`{a, b, reason}`; idempotente por par, sem
+  `Idempotency-Key`: `withoutIdempotencyKey` no transporte). Os quatro respondem 503
+  `SEMANTIC_UNAVAILABLE` quando a busca está desligada: a tela mostra uma nota quieta
+  (`SemanticFailure`), nunca "tentar novamente". Os itens `create` do lote trazem
+  `similar: [{id, label, score}]` (ausente = busca desligada; lista vazia = nada
+  parecido). `mode=duplicates` (commit e521740 da API) trata `q` como o texto que um ponto
+  novo teria (`nome · tipo em português · outros nomes · descrição`) e só devolve o que passa
+  do limiar de duplicata do servidor (0,94, o mesmo do `similar` do lote): é o que o
+  cadastro de ponto novo usa. Regra do produto: semelhança é pista, não identidade nem prova de
+  influência; a pontuação é cosseno comprimido (textos sem relação dão 0,80–0,89), então
+  aparece só como "semelhança 0,87" (duas casas, vírgula), nunca como percentual.
 - Formatos-chave: `version` inteiro (PATCH envia `If-Match: <versão>`), POST de
   criação com `Idempotency-Key`; filtros `q, match, kind, contextId, includePending,
 startYear, endYear, includeUnknownPeriod`; listas `{ items, nextCursor }`. O cursor

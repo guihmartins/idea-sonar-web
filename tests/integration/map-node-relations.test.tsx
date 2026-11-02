@@ -26,6 +26,10 @@ function panel(): HTMLElement {
   if (!el) throw new Error('Painel de detalhes não encontrado.');
   return el;
 }
+const relationRows = () =>
+  within(
+    within(panel()).getByRole('list', { name: 'Relações do ponto' }),
+  ).getAllByRole('listitem');
 describe('painel do nó: lista de relações e troca de fontes', () => {
   it('abre o mapa, expande Jung, lista as relações reais e troca a seção Fontes ao selecionar outra relação', async () => {
     const user = userEvent.setup();
@@ -59,13 +63,9 @@ describe('painel do nó: lista de relações e troca de fontes', () => {
     // (a API fictícia pagina 2 relações por página).
     await user.click(screen.getByRole('button', { name: 'Expandir conexões' }));
     await screen.findByText('Conexões carregadas.');
-    await waitFor(() =>
-      expect(within(panel()).getAllByRole('listitem')).toHaveLength(2),
-    );
+    await waitFor(() => expect(relationRows()).toHaveLength(2));
     await user.click(screen.getByRole('button', { name: 'Mais conexões' }));
-    await waitFor(() =>
-      expect(within(panel()).getAllByRole('listitem')).toHaveLength(3),
-    );
+    await waitFor(() => expect(relationRows()).toHaveLength(3));
 
     const relationButtons = within(panel())
       .getAllByRole('button')
@@ -99,7 +99,7 @@ describe('painel do nó: lista de relações e troca de fontes', () => {
     await user.click(expand);
     await screen.findByText('Conexões carregadas.');
     const list = within(panel());
-    await waitFor(() => expect(list.getAllByRole('listitem')).toHaveLength(2));
+    await waitFor(() => expect(relationRows()).toHaveLength(2));
     const relationButtons = list
       .getAllByRole('button')
       .filter((button) => button.hasAttribute('aria-pressed'));

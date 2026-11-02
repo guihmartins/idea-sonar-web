@@ -177,6 +177,12 @@ export const importSummarySchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
 });
+// Ponto que o item do lote repetiria pelo sentido (até 3); pista, não identidade.
+export const similarPointSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  score: z.number(),
+});
 export const importItemSchema = z.object({
   clientRef: z.string(),
   entityType: z.string(),
@@ -185,6 +191,9 @@ export const importItemSchema = z.object({
   reason: z.string().nullable(),
   // IDs de registros existentes que o item repetiria (nome, alias, identificador).
   candidates: z.array(z.string()).default([]),
+  // Só em `create` de ponto. Ausente: busca por significado desligada ou falhou;
+  // lista vazia: nada parecido. Não é o mesmo que "sem candidatos".
+  similar: z.exactOptional(z.array(similarPointSchema)),
 });
 export const importDetailSchema = importSummarySchema.extend({
   result: z.object({
@@ -234,6 +243,24 @@ export const resolveResultSchema = z.object({
   version: z.number().int(),
   reason: z.string(),
 });
+// Busca por significado (contrato 1.3.0). `score` é cosseno de 0 a 1, comprimido:
+// serve para ordenar, não como percentual nem confiança.
+export const semanticResultsSchema = z.object({
+  model: z.string(),
+  items: z.array(z.object({ node: nodeSchema, score: z.number() })),
+});
+export const parallelSuggestionsSchema = z.object({
+  model: z.string(),
+  items: z.array(z.object({ a: nodeSchema, b: nodeSchema, score: z.number() })),
+});
+export const parallelDismissalSchema = z.object({
+  id: z.string(),
+  a: z.string(),
+  b: z.string(),
+  kind: z.string(),
+  reason: z.string(),
+  createdAt: z.string(),
+});
 export const schemas = {
   nodes: nodeSchema,
   relations: relationSchema,
@@ -259,6 +286,10 @@ export type ImportSummary = z.infer<typeof importSummarySchema>;
 export type ImportDetail = z.infer<typeof importDetailSchema>;
 export type ImportItem = z.infer<typeof importItemSchema>;
 export type ImportResult = z.infer<typeof importResultSchema>;
+export type SimilarPoint = z.infer<typeof similarPointSchema>;
+export type SemanticResults = z.infer<typeof semanticResultsSchema>;
+export type ParallelSuggestions = z.infer<typeof parallelSuggestionsSchema>;
+export type ParallelDismissal = z.infer<typeof parallelDismissalSchema>;
 export type PendingItem = z.infer<typeof pendingSchema>;
 export type Entity = Node | Relation | Source | Context | SavedView;
 export const neighborSchema = z.object({
@@ -332,6 +363,9 @@ export type ContractCheck = [
   Assignable<Catalog, Schemas['Catalog']>,
   Assignable<z.infer<typeof identitySchema>, Schemas['Identity']>,
   Assignable<ImportResult, Schemas['ImportResult']>,
+  Assignable<SemanticResults, Schemas['SemanticResults']>,
+  Assignable<ParallelSuggestions, Schemas['ParallelSuggestions']>,
+  Assignable<ParallelDismissal, Schemas['ParallelDismissal']>,
   Assignable<
     BatchRef,
     Extract<BatchNode, { op: 'create' }>['contexts'][number]

@@ -118,7 +118,9 @@ test('lote sintético: importa pela API, aparece na tela e no mapa e é desfeito
     page
       .getByRole('heading', { name: title, level: 3 })
       .locator('xpath=following-sibling::*[1]');
-  await expect(items('Criados').getByRole('listitem')).toHaveCount(3);
+  // Só os itens do lote: o aviso "Parecido com" (busca por significado) pode
+  // trazer linhas aninhadas, e os outros specs já criaram pontos parecidos.
+  await expect(items('Criados').locator(':scope > li')).toHaveCount(3);
   await expect(items('Pendentes')).toHaveText('Nenhum item.');
   await expect(items('Atualizados')).toHaveText('Nenhum item.');
   const axe = await new AxeBuilder({ page })

@@ -15,6 +15,13 @@ import {
   listScope,
   textMatches,
 } from './fixture-search';
+import {
+  dismissParallel,
+  parallelSuggestions,
+  semanticSearch,
+  similarNodes,
+  withSimilar,
+} from './fixture-semantic';
 import { ApiError } from '../api/client';
 import type { RequestOptions } from '../api/client';
 import { defaultFilters, toStoredFilters } from '../api/domain';
@@ -26,6 +33,7 @@ import type {
   ImportBatch,
   ImportDetail,
   Node,
+  ParallelDismissal,
   PendingItem,
   Relation,
   SavedView,
@@ -42,6 +50,10 @@ export const ids = {
   relation: '00000000-0000-4000-8000-000000000007',
   import: '00000000-0000-4000-8000-000000000020',
   pending: '00000000-0000-4000-8000-000000000021',
+  // Par com textos quase iguais e sem relação: a sugestão de paralelo e o aviso
+  // de ponto parecido da busca por significado aparecem a partir dele.
+  individuation: '00000000-0000-4000-8000-000000000030',
+  coniunctio: '00000000-0000-4000-8000-000000000031',
 };
 const at = '2026-10-24T12:00:00.000Z';
 const base = {
@@ -76,6 +88,9 @@ function node(
     ...extra,
   };
 }
+// Descrições sintéticas que só diferem numa palavra: leem-se parecido.
+const unionText = (pair: string) =>
+  `Texto sintético sobre a união de ${pair} como caminho de autoconhecimento e de integração das partes da psique; não é uma afirmação histórica.`;
 const nodes: Node[] = [
   node(ids.jung, 'Jung (exemplo fictício)', 'person', {
     aliases: [{ alias: 'Jung', language: 'de' }],
@@ -91,6 +106,14 @@ const nodes: Node[] = [
     degreeTotal: 2,
   }),
   node(ids.work, 'Obra de demonstração', 'work', { degreeTotal: 1 }),
+  node(ids.individuation, 'Individuação (exemplo fictício)', 'concept', {
+    conceptScope: 'broad',
+    description: unionText('opostos'),
+  }),
+  node(ids.coniunctio, 'Coniunctio (exemplo fictício)', 'concept', {
+    conceptScope: 'broad',
+    description: unionText('contrários'),
+  }),
 ];
 function relation(
   id: string,
@@ -250,7 +273,7 @@ const baseImports: ImportDetail[] = [
     createdAt: at,
     updatedAt: at,
     result: {
-      created: 1,
+      created: 2,
       updated: 1,
       reused: 1,
       pending: 1,
@@ -260,6 +283,14 @@ const baseImports: ImportDetail[] = [
           clientRef: 'jung',
           entityType: 'nodes',
           entityId: ids.jung,
+          outcome: 'created',
+          reason: null,
+          candidates: [],
+        },
+        {
+          clientRef: 'individuacao',
+          entityType: 'nodes',
+          entityId: ids.individuation,
           outcome: 'created',
           reason: null,
           candidates: [],
@@ -369,6 +400,7 @@ function buildFixtureServices(
   const pending: PendingItem[] = structuredClone(seed.pending);
   const history = new Map<string, HistoryEntry[]>();
   const actions = new Map<string, unknown>();
+  const dismissed = new Map<string, ParallelDismissal>();
   // `scope`: filtros da busca; o cursor de outra busca é recusado, como na API.
   function page<T>(items: T[], cursor: string | null, scope = '') {
     const start = cursorStart(cursor, scope);
@@ -517,7 +549,12 @@ function buildFixtureServices(
     };
     const now = new Date().toISOString();
     const result = applyBatch(work, batch, now);
-    if (batch.dryRun) return result;
+    // `similar` é calculado sobre os pontos do lote, mesmo na simulação.
+    const reported = {
+      ...result,
+      items: withSimilar(result.items, work.nodes),
+    };
+    if (batch.dryRun) return reported;
     db.nodes = work.nodes;
     db.relations = work.relations;
     const ops = batch as unknown as Record<string, { clientRef: string }[]>;
@@ -554,7 +591,19 @@ function buildFixtureServices(
           ),
         },
       });
-    return result;
+    return reported;
+  }
+  // Detalhe do lote: `similar` é recalculado a cada leitura contra os pontos de
+  // agora; lote desfeito não tem aviso.
+  function importDetail(item: ImportDetail | undefined) {
+    if (!item || item.status === 'undone') return item;
+    return {
+      ...item,
+      result: {
+        ...item.result,
+        items: withSimilar(item.result.items, db.nodes as Node[]),
+      },
+    };
   }
   function importResult(
     id: string,
@@ -566,7 +615,30 @@ function buildFixtureServices(
     const item = imports.find((i) => i.id === id);
     if (operation === 'undo' && item) return undoImport(item, options);
     // A listagem real omite `result`; o schema de resumo descarta o campo.
-    return id ? item : page(imports, url.searchParams.get('cursor'));
+    return id
+      ? importDetail(item)
+      : page(imports, url.searchParams.get('cursor'));
+  }
+  // /suggestions/parallels (lista) e /suggestions/parallels/dismiss (dispensar).
+  function suggestionResult(
+    operation: string,
+    url: URL,
+    options: RequestOptions,
+  ) {
+    const nodes = db.nodes as Node[];
+    if (operation === 'dismiss')
+      return dismissParallel(
+        nodes,
+        dismissed,
+        options.body as { a: string; b: string; reason: string },
+        new Date().toISOString(),
+      );
+    return parallelSuggestions(
+      nodes,
+      db.relations as Relation[],
+      dismissed,
+      url.searchParams,
+    );
   }
   function historyResult(type: string, id: string) {
     return page(history.get(`${type}/${id}`) ?? [], null);
@@ -709,10 +781,14 @@ function buildFixtureServices(
       }),
       pending: () => pendingResult(id, url, options),
       imports: () => importResult(id, url, operation, options),
+      search: () => semanticSearch(db.nodes as Node[], url.searchParams),
+      suggestions: () => suggestionResult(operation, url, options),
     };
     if (routes[type]) return routes[type]();
     if (operation === 'history') return historyResult(type, id);
     if (operation === 'neighbors') return neighborResult(id, url);
+    if (operation === 'similar')
+      return similarNodes(db.nodes as Node[], id, url.searchParams);
     const collection = db[type];
     if (!collection) return undefined;
     return method === 'GET'
@@ -730,12 +806,15 @@ function buildFixtureServices(
       path,
       options,
     );
-    if (method === 'POST' && actions.has(actionKey))
+    // Só ações com Idempotency-Key repetem a resposta; dispensar um par não leva
+    // chave e é idempotente por si (o par decide, não o caminho).
+    const keyed = method === 'POST' && !!options.idempotencyKey;
+    if (keyed && actions.has(actionKey))
       return structuredClone(actions.get(actionKey));
     const result = routeResult(type, id, operation, url, options);
     if (result === undefined)
       throw new ApiError(404, 'Registro fictício não encontrado.');
-    if (method === 'POST') actions.set(actionKey, structuredClone(result));
+    if (keyed) actions.set(actionKey, structuredClone(result));
     return structuredClone(result);
   }
   return {

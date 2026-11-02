@@ -409,7 +409,8 @@ test('cria uma figura com período e identificador e vê tudo no painel do mapa'
   ).toBe(false);
 
   await page.getByRole('link', { name: 'Pontos', exact: true }).click();
-  // A API fictícia pagina de 2 em 2: o ponto novo é o último dos cinco.
+  // A API fictícia pagina de 2 em 2: o ponto novo é o último dos sete.
+  await page.getByRole('button', { name: 'Carregar mais' }).click();
   await page.getByRole('button', { name: 'Carregar mais' }).click();
   await page.getByRole('button', { name: 'Carregar mais' }).click();
   await expect(

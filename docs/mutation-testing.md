@@ -118,6 +118,48 @@ Execução incremental depois da busca nas listas de pontos, fontes e contextos 
 
 Na primeira passada ficaram vivos oito mutantes dos arquivos novos, e seis viraram asserção: o cancelamento do envio do formulário (`preventDefault`), a era do fim, a dica de cada campo (`placeholder`) e os filtros na chave `['list', type, filters]`. Dois eram equivalentes e o código foi simplificado em vez de suprimido: `value ?? ''` em `isKind` e o `target === applied ? null : target` do pedido pendente, que o próximo `setPending(null)` já anulava. Como os literais de `searchHints` são mutantes estáticos, os sobreviventes estáticos desses arquivos saíram do estado incremental antes da segunda passada.
 
+## Rodada: busca por significado (02/11/2026)
+
+Execução incremental depois da busca por significado (contrato 1.3.0): modo Nome | Significado em Pontos, pontos parecidos no painel do mapa, página Sugestões, pré-preenchimento do editor de relação e os avisos de parecidos. Nota global **91,83%** (3759 mutantes válidos, 307 abertos), contra 91,35% da rodada anterior; `npm run test:mutation` e `npm run test:mutation:gate` saíram com código 0. Primeira passada: 91,06% (3758 válidos); depois de fechar sobreviventes com testes e de simplificar três guardas que não mudavam o resultado chegou a 91,85%, e a segunda passada, depois de o aviso do cadastro passar à busca `mode=duplicates` (texto no formato da API, tipo e outros nomes vindos do editor), ficou em 91,83%.
+
+| Arquivo                            |   Nota | Abertos |
+| ---------------------------------- | -----: | ------: |
+| `src/pages/searchFilters.ts`       |   100% |       0 |
+| `src/pages/RecordSearch.tsx`       |   100% |       0 |
+| `src/pages/RecordItem.tsx`         |   100% |       0 |
+| `src/pages/SuggestionsPage.tsx`    |   100% |       0 |
+| `src/pages/ImportSimilar.tsx`      |   100% |       0 |
+| `src/pages/editor/prefill.ts`      |   100% |       0 |
+| `src/components/semantic.ts`       |   100% |       0 |
+| `src/app/App.tsx`                  |   100% |       0 |
+| `src/pages/editor/SimilarHint.tsx` | 97,30% |       1 |
+| `src/pages/SimilarPoints.tsx`      | 96,67% |       1 |
+| `src/pages/MeaningResults.tsx`     | 92,31% |       4 |
+| `src/api/adapter.ts` (núcleo)      |   100% |       0 |
+| `src/api/domain.ts` (núcleo)       |   100% |       0 |
+| `src/api/client.ts` (núcleo)       | 92,47% |      14 |
+| `src/pages/EntityEditor.tsx`       | 83,29% |      67 |
+| `src/pages/MapPage.tsx`            | 83,12% |     105 |
+
+Nenhum arquivo do núcleo mudou de nota além do `client.ts`, que ganhou a exceção `withoutIdempotencyKey` e seguiu em 92,47%, com os mesmos 14 abertos. O `EntityEditor.tsx` passou de 84,0% para 82,88% (62 para 69 abertos) e o `MapPage.tsx` ficou em 83% (105 abertos): os abertos novos estão listados abaixo.
+
+O que os testes novos afirmam (comportamento, não constante):
+
+- **Modo e URL:** a URL com e sem `mode=significado` para pontos, fontes e contextos; que só texto, tipo e pendentes atravessam a troca (e `match`/período não); o limite de 500 caracteres só em Significado; "Limpar" que mantém o modo; setas entre os dois rádios sem perder o foco; voltar e avançar.
+- **Resultados:** a requisição exata (`q`, `kind`, `includePending`, `limit`), pontuação "0,87" / "0,90" / "1,00" e a ausência de `%`, "Mostrar mais" com 20 e com 20 em 50, o limite que volta a 20 em busca nova e a consulta que não reaproveita a resposta de outro tipo ou de outros pendentes (chave da consulta).
+- **Fixtures:** a similaridade de Jaccard, o limiar, a ordem da busca, o par sugerido sem relação (nos dois sentidos, pendente conta, arquivada não), a dispensa idempotente por par e em qualquer ordem, os 400 (`a === b`, motivo vazio ou de 2001 caracteres, limites) e o `similar` do lote, do resultado, da simulação e do detalhe.
+- **Telas:** as linhas do painel do mapa e o gesto de ativá-las (o ponto vira a raiz), a consulta por ponto, o motivo obrigatório da dispensa (com `preventDefault`, foco no campo e erro limpo na nova tentativa), a invalidação só das sugestões, o pré-preenchimento (cada valor conferido sozinho, ids com letras, destino igual à origem, só relação nova, formulário que reabre com outra URL) e o aviso do cadastro (600 ms, uma consulta por texto final em `mode=duplicates`, `q` no formato do texto do ponto com tipo em português, outros nomes sem o idioma e corte em 500, só aparece com resultado, links em outra aba, some sem nome ou descrição, 503 e outras falhas escondem o bloco).
+
+### Mutantes abertos que não valem um teste
+
+Nenhum `// Stryker disable` foi usado. Equivalentes ou só observáveis por colisão de chave:
+
+- `MeaningResults.tsx`: o literal `'semantic'` da chave da consulta e os dois `??` de `kind` e `includePending` dentro dela (a tela é remontada a cada busca, então uma chave igual não mostra resposta velha).
+- `SimilarPoints.tsx` e `SimilarHint.tsx`: o literal inicial da chave (`'similar'`, `'similar-hint'`); o resto da chave tem teste.
+- `EntityEditor.tsx`: `wanted` (a guarda do pré-preenchimento) é redundante com o que vem depois (só relação nova usa os quatro campos, e o catálogo é o mesmo da consulta `['catalog']`, cujos literais também ficam abertos), as variantes de `id ?? 'new'` na `key` do formulário e os quatro `?? ''` dos campos que `NewNodeHint` repassa ao aviso (`fields` sempre traz as chaves, então o recuo nunca é usado).
+
+Como o Stryker não reavalia sobrevivente estático, os sobreviventes estáticos dos arquivos tocados (`hintTitle` no `SimilarHint.tsx` e as constantes de texto do `EntityEditor.tsx`) saíram do `reports/stryker-incremental.json` antes da segunda passada.
+
 ## Histórico: rodada do marco 1 (seis módulos)
 
 > **Histórico, não vale para o código atual.** Os números abaixo são da primeira configuração, que mutava apenas seis módulos (`src/config/schema.ts`, `src/api/client.ts`, `src/auth/auth0.ts`, `src/graph/visibility/ledger.ts`, `src/graph/adapter/elements.ts` e `src/components/period.ts`), antes da refatoração para ESLint com complexidade 10 e da ampliação para todo o `src`. Os arquivos foram reorganizados depois e a nota não foi recalculada. Aquela configuração não incluía telas, estilos, layout/canvas, adapter HTTP, schemas DTO, gerados, fixtures nem scripts de build, e usava timeout adicional de 2 s com fator 1,5 e dois processos concorrentes (um checker e um runner).

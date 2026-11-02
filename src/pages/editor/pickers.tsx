@@ -11,12 +11,12 @@ import { kindLabels } from '../../components/labels';
 
 export type PickedType = 'contexts' | 'sources';
 
-function useDebounced(text: string) {
+export function useDebounced(text: string, delay = 250) {
   const [q, setQ] = useState('');
   useEffect(() => {
-    const timer = setTimeout(() => setQ(text.trim()), 250);
+    const timer = setTimeout(() => setQ(text.trim()), delay);
     return () => clearTimeout(timer);
-  }, [text]);
+  }, [text, delay]);
   return q;
 }
 

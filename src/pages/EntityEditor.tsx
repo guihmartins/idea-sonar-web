@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useServices } from '../app/services';
 import { isVersionConflict } from '../api/client';
 import type {
@@ -35,6 +35,9 @@ import {
 } from './editor/contextual';
 import type { BatchOutcome, ContextualFlow } from './editor/contextual';
 import { CandidatePicker, NodePicker } from './editor/pickers';
+import { hasPrefill, relationPrefill } from './editor/prefill';
+import type { RelationPrefill } from './editor/prefill';
+import { SimilarHint } from './editor/SimilarHint';
 import type { ChoiceOptions } from './editor/fields';
 import {
   Choice,
@@ -47,6 +50,27 @@ import { typeLabels } from './RecordsPage';
 const editable = ['nodes', 'relations', 'sources', 'contexts'] as const;
 const isEditable = (type: string | undefined): type is Editable =>
   editable.some((value) => value === type);
+// Relação nova aberta por link (ex.: "Registrar paralelo"): `type`, `sourceId`,
+// `targetId` e `evidenceStatus` da URL, conferidos (o tipo, contra o catálogo).
+// Espera o catálogo só quando há o que conferir; sem catálogo, o tipo é ignorado.
+function usePrefill(type: string | undefined, id: string | undefined) {
+  const { api } = useServices();
+  const [params] = useSearchParams();
+  const wanted = type === 'relations' && !id && hasPrefill(params);
+  const catalog = useQuery({
+    queryKey: ['catalog'],
+    queryFn: ({ signal }) => api.catalog(signal),
+    enabled: wanted,
+  });
+  if (!wanted) return { waiting: false, prefill: {} };
+  return {
+    waiting: catalog.isPending,
+    prefill: relationPrefill(
+      params,
+      catalog.data?.relationTypes.map((t) => t.code),
+    ),
+  };
+}
 export function EntityEditor() {
   const { type, id } = useParams();
   const { api } = useServices();
@@ -55,15 +79,18 @@ export function EntityEditor() {
     queryFn: ({ signal }) => api.detail(type as EntityType, id ?? '', signal),
     enabled: !!id && isEditable(type),
   });
+  const { waiting, prefill } = usePrefill(type, id);
   if (!isEditable(type)) return <h1>Tipo de cadastro inválido</h1>;
-  if (id && query.isPending) return <p role="status">Carregando registro…</p>;
+  if ((id && query.isPending) || waiting)
+    return <p role="status">Carregando registro…</p>;
   if (id && query.error)
     return <Failure error={query.error} retry={() => void query.refetch()} />;
   return (
     <EditorForm
-      key={`${type}-${id ?? 'new'}`}
+      key={`${type}-${id ?? 'new'}-${new URLSearchParams(prefill)}`}
       type={type}
       initial={query.data}
+      prefill={prefill}
     />
   );
 }
@@ -109,11 +136,19 @@ function initialFields(entity?: Entity): Record<string, string> {
   if ('startYear' in entity) Object.assign(data, periodFields(entity));
   return data;
 }
-function useEditorForm(type: Editable, initial: Entity | undefined) {
+function useEditorForm(
+  type: Editable,
+  initial: Entity | undefined,
+  prefill: RelationPrefill,
+) {
   const { api } = useServices();
   const cache = useQueryClient();
   const [baseline, setBaseline] = useState(initial);
-  const [fields, setFields] = useState(() => initialFields(initial));
+  // O pré-preenchimento vale só para registro novo; nada é salvo por ele.
+  const [fields, setFields] = useState<Record<string, string>>(() => ({
+    ...initialFields(initial),
+    ...(initial ? {} : prefill),
+  }));
   const metadata = editorMetadata(initial);
   const [contexts, setContexts] = useState(metadata.contexts);
   const [evidence, setEvidence] = useState(metadata.evidence);
@@ -305,11 +340,13 @@ type EditorModel = ReturnType<typeof useEditorForm>;
 function EditorForm({
   type,
   initial,
+  prefill,
 }: {
   type: Editable;
   initial: Entity | undefined;
+  prefill: RelationPrefill;
 }) {
-  const model = useEditorForm(type, initial);
+  const model = useEditorForm(type, initial, prefill);
   return (
     <section>
       <Link to={`/${model.type}`}>
@@ -375,6 +412,19 @@ function periodFields(period: Pick<Context, 'startYear' | 'endYear'>) {
   return data;
 }
 
+// Só no cadastro de ponto novo: ponto já salvo não precisa de aviso de duplicata.
+function NewNodeHint({ model }: { model: EditorModel }) {
+  if (model.baseline) return null;
+  return (
+    <SimilarHint
+      label={model.fields.label ?? ''}
+      kind={model.fields.kind ?? ''}
+      aliases={model.fields.aliases ?? ''}
+      description={model.fields.description ?? ''}
+    />
+  );
+}
+
 function NodeFields({ model }: { model: EditorModel }) {
   // A API não permite mudar tipo nem escopo depois da criação.
   const fixed = !!model.baseline;
@@ -382,6 +432,7 @@ function NodeFields({ model }: { model: EditorModel }) {
     <>
       {model.text('label', 'Nome', true)}
       {model.text('description', 'Descrição', true, true)}
+      <NewNodeHint model={model} />
       <Choice
         model={model}
         field="kind"

@@ -1,18 +1,24 @@
 import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { ListFilters } from '../api/adapter';
 import { kindLabels } from '../components/labels';
 import { YearField } from '../components/YearField';
 import {
   draftFromFilters,
   exactLabel,
   filtersFromDraft,
+  maxMeaningLength,
   maxQueryLength,
+  meaningHint,
+  meaningMode,
   paramsFromFilters,
   searchHints,
   searchLabels,
 } from './searchFilters';
-import type { SearchableType, SearchDraft } from './searchFilters';
+import type {
+  SearchableType,
+  SearchDraft,
+  SearchFilters,
+} from './searchFilters';
 
 type Change = <K extends keyof SearchDraft>(
   key: K,
@@ -28,8 +34,8 @@ export function RecordSearch({
   onSearch,
 }: {
   type: SearchableType;
-  filters: ListFilters;
-  onSearch: (filters: ListFilters) => void;
+  filters: SearchFilters;
+  onSearch: (filters: SearchFilters) => void;
 }) {
   const applied = paramsFromFilters(filters).toString();
   const [seen, setSeen] = useState(applied);
@@ -50,20 +56,25 @@ export function RecordSearch({
   }
   const change: Change = (key, value) =>
     setDraft((current) => ({ ...current, [key]: value }));
-  function apply(next: ListFilters) {
+  function apply(next: SearchFilters) {
     setPending(paramsFromFilters(next).toString());
     setError('');
     setDraft(draftFromFilters(next));
     onSearch(next);
   }
-  function submit(event: FormEvent) {
-    event.preventDefault();
+  function applyDraft(next: SearchDraft) {
     try {
-      apply(filtersFromDraft(type, draft));
+      apply(filtersFromDraft(type, next));
     } catch (failure) {
       setError((failure as Error).message);
     }
   }
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    applyDraft(draft);
+  }
+  // Só pontos têm modo: nas outras listas o rascunho nunca nasce em Significado.
+  const meaning = draft.meaning;
   return (
     <form
       className="record-search"
@@ -72,14 +83,20 @@ export function RecordSearch({
       noValidate
       onSubmit={submit}
     >
+      {type === 'nodes' && (
+        <ModeSwitch
+          meaning={draft.meaning}
+          onChange={(next) => applyDraft({ ...draft, meaning: next })}
+        />
+      )}
       <div className="record-search-main">
         <label className="record-search-term">
           Buscar
           <input
             type="search"
             value={draft.q}
-            maxLength={maxQueryLength}
-            placeholder={searchHints[type]}
+            maxLength={meaning ? maxMeaningLength : maxQueryLength}
+            placeholder={meaning ? meaningHint : searchHints[type]}
             autoComplete="off"
             enterKeyHint="search"
             onChange={(e) => change('q', e.target.value)}
@@ -87,12 +104,74 @@ export function RecordSearch({
         </label>
         <div className="actions">
           <button type="submit">Buscar</button>
-          <button type="button" onClick={() => apply({})}>
+          <button
+            type="button"
+            onClick={() => apply(meaning ? { mode: meaningMode } : {})}
+          >
             Limpar
           </button>
         </div>
       </div>
-      <div className="record-search-options">
+      <SearchOptions draft={draft} change={change} meaning={meaning} />
+      {type === 'nodes' && !meaning && (
+        <NodeFilters draft={draft} change={change} error={error} />
+      )}
+    </form>
+  );
+}
+
+// "Nome" é a busca de sempre; "Significado" compara o sentido do texto. Troca
+// na hora e mantém o texto; as setas movem entre os dois, como em todo grupo
+// de rádios.
+function ModeSwitch({
+  meaning,
+  onChange,
+}: {
+  meaning: boolean;
+  onChange: (meaning: boolean) => void;
+}) {
+  const labelId = useId();
+  return (
+    <div className="mode-switch" role="radiogroup" aria-labelledby={labelId}>
+      <span id={labelId} className="mode-switch-label">
+        Buscar por
+      </span>
+      <div className="mode-switch-options">
+        {(
+          [
+            [false, 'Nome'],
+            [true, 'Significado'],
+          ] as const
+        ).map(([value, label]) => (
+          <label key={label}>
+            <input
+              type="radio"
+              name="search-mode"
+              checked={meaning === value}
+              onChange={() => onChange(value)}
+            />
+            <span>{label}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Marcas e, por significado, o tipo (que fica fora do grupo de período, que
+// não existe nesse modo). "Exato" só vale para a busca por nome.
+function SearchOptions({
+  draft,
+  change,
+  meaning,
+}: {
+  draft: SearchDraft;
+  change: Change;
+  meaning: boolean;
+}) {
+  return (
+    <div className="record-search-options">
+      {!meaning && (
         <label className="check">
           <input
             type="checkbox"
@@ -101,19 +180,44 @@ export function RecordSearch({
           />
           {exactLabel}
         </label>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={draft.pending}
-            onChange={(e) => change('pending', e.target.checked)}
-          />
-          Incluir pendentes
-        </label>
-      </div>
-      {type === 'nodes' && (
-        <NodeFilters draft={draft} change={change} error={error} />
       )}
-    </form>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={draft.pending}
+          onChange={(e) => change('pending', e.target.checked)}
+        />
+        Incluir pendentes
+      </label>
+      {meaning && (
+        <label className="record-search-kind">
+          Tipo
+          <KindSelect value={draft.kind} onChange={(v) => change('kind', v)} />
+        </label>
+      )}
+    </div>
+  );
+}
+
+function KindSelect({
+  value,
+  onChange,
+}: {
+  value: SearchDraft['kind'];
+  onChange: (value: SearchDraft['kind']) => void;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as SearchDraft['kind'])}
+    >
+      <option value="">Todos</option>
+      {Object.entries(kindLabels).map(([key, label]) => (
+        <option key={key} value={key}>
+          {label}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -135,19 +239,7 @@ function NodeFilters({
       <div className="record-search-period">
         <label>
           Tipo
-          <select
-            value={draft.kind}
-            onChange={(e) =>
-              change('kind', e.target.value as SearchDraft['kind'])
-            }
-          >
-            <option value="">Todos</option>
-            {Object.entries(kindLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
+          <KindSelect value={draft.kind} onChange={(v) => change('kind', v)} />
         </label>
         <div className="form-grid">
           <YearField
