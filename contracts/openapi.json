@@ -9598,6 +9598,19 @@
             "required": false,
             "name": "limit",
             "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "meaning",
+                "duplicates"
+              ],
+              "default": "meaning"
+            },
+            "required": false,
+            "name": "mode",
+            "in": "query"
           }
         ],
         "responses": {

@@ -3787,6 +3787,7 @@ export interface paths {
                     kind?: "person" | "tradition" | "concept" | "work" | "figure";
                     includePending?: "true" | "false";
                     limit?: number;
+                    mode?: "meaning" | "duplicates";
                 };
                 header?: never;
                 path?: never;
