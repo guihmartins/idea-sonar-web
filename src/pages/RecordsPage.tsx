@@ -26,6 +26,7 @@ import {
   pendingProposal,
   pendingTitle,
 } from '../components/labels';
+import { ImportSimilar } from './ImportSimilar';
 import { MeaningResults } from './MeaningResults';
 import { RecordItem } from './RecordItem';
 import { RecordSearch } from './RecordSearch';
@@ -328,6 +329,7 @@ function ImportOutcome({
               {item.clientRef} ({item.entityType})
               {item.reason ? ` — ${item.reason}` : ''}
               <CandidateLinks item={item} />
+              <ImportSimilar item={item} />
             </li>
           ))}
         </ul>

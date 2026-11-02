@@ -2080,3 +2080,35 @@ button.flow-toggle[aria-pressed='true'] {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+/* Aviso de parecidos no detalhe do lote e no cadastro de ponto novo. */
+.similar-warning p {
+  margin: 0.25rem 0 0;
+  font-size: var(--text-sm);
+}
+.similar-warning .semantic-hint {
+  margin: 0 0 0.5rem;
+}
+.similar-hint:not(:empty) {
+  margin: 0 0 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+.similar-hint h2 {
+  margin: 0 0 0.4rem;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.similar-hint ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.similar-hint li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem 0.75rem;
+  padding: 0.25rem 0;
+  font-size: var(--text-sm);
+}

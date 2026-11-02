@@ -37,6 +37,7 @@ import type { BatchOutcome, ContextualFlow } from './editor/contextual';
 import { CandidatePicker, NodePicker } from './editor/pickers';
 import { hasPrefill, relationPrefill } from './editor/prefill';
 import type { RelationPrefill } from './editor/prefill';
+import { SimilarHint } from './editor/SimilarHint';
 import type { ChoiceOptions } from './editor/fields';
 import {
   Choice,
@@ -411,6 +412,17 @@ function periodFields(period: Pick<Context, 'startYear' | 'endYear'>) {
   return data;
 }
 
+// Só no cadastro de ponto novo: ponto já salvo não precisa de aviso de parecido.
+function NewNodeHint({ model }: { model: EditorModel }) {
+  if (model.baseline) return null;
+  return (
+    <SimilarHint
+      label={model.fields.label ?? ''}
+      description={model.fields.description ?? ''}
+    />
+  );
+}
+
 function NodeFields({ model }: { model: EditorModel }) {
   // A API não permite mudar tipo nem escopo depois da criação.
   const fixed = !!model.baseline;
@@ -418,6 +430,7 @@ function NodeFields({ model }: { model: EditorModel }) {
     <>
       {model.text('label', 'Nome', true)}
       {model.text('description', 'Descrição', true, true)}
+      <NewNodeHint model={model} />
       <Choice
         model={model}
         field="kind"
