@@ -10,6 +10,7 @@ import {
 import { SessionGate } from './services';
 import { MapPage } from '../pages/MapPage';
 import { EntityEditor } from '../pages/EntityEditor';
+import { SuggestionsPage } from '../pages/SuggestionsPage';
 import {
   RecordsPage,
   ImportsPage,
@@ -51,6 +52,7 @@ export function App() {
               <NavLink to="/contexts">Contextos</NavLink>
               <NavLink to="/imports">Importações</NavLink>
               <NavLink to="/pending">Pendências</NavLink>
+              <NavLink to="/sugestoes">Sugestões</NavLink>
               <NavLink to="/views">Views salvas</NavLink>
               <NavLink to="/export">Exportar dados</NavLink>
             </nav>
@@ -78,6 +80,7 @@ export function App() {
               <Route path="/imports" element={<ImportsPage />} />
               <Route path="/imports/:id" element={<ImportPage />} />
               <Route path="/pending" element={<PendingPage />} />
+              <Route path="/sugestoes" element={<SuggestionsPage />} />
               <Route path="/history/:type/:id" element={<HistoryPage />} />
               <Route path="/export" element={<ExportPage />} />
               <Route

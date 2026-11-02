@@ -119,7 +119,7 @@ async function loadJung(services: Services = createFixtureServices()) {
 }
 
 describe('MapPage — trilho de seções', () => {
-  it('lista as nove seções com o destino de cada uma', async () => {
+  it('lista as dez seções com o destino de cada uma', async () => {
     renderMap();
     const rail = await screen.findByRole('navigation', { name: 'Seções' });
     const links = within(rail).getAllByRole('link');
@@ -136,6 +136,7 @@ describe('MapPage — trilho de seções', () => {
       ['Contextos', '/contexts'],
       ['Importações', '/imports'],
       ['Pendências', '/pending'],
+      ['Sugestões', '/sugestoes'],
       ['Views salvas', '/views'],
       ['Exportar dados', '/export'],
     ]);

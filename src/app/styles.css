@@ -2044,3 +2044,39 @@ button.flow-toggle[aria-pressed='true'] {
 .details-panel .semantic-hint {
   font-size: var(--text-xs);
 }
+/* Sugestões: cada par é uma linha com fio, dois pontos lado a lado. */
+.record-list.suggestion-list > article {
+  display: block;
+}
+.pair-points {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 2rem;
+}
+.pair-point h2 {
+  margin: 0 0 0.1rem;
+}
+.record-list .pair-meta {
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  margin: 0.1rem 0 0.3rem;
+}
+.record-list .pair-description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
+.suggestion-list .actions {
+  margin: 0.75rem 0 0;
+}
+.suggestion-list .confirmation {
+  margin: 1rem 0 0;
+}
+@media (max-width: 680px) {
+  .pair-points {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

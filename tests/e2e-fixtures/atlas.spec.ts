@@ -348,7 +348,7 @@ test('no mobile, o rodapé do mapa compacto fica em uma linha e sem o crachá de
   if (!surface) throw new Error('Superfície do mapa sem dimensão.');
   expect(surface.y).toBeLessThanOrEqual(270);
   const railLinks = page.locator('.map-rail a');
-  await expect(railLinks).toHaveCount(9);
+  await expect(railLinks).toHaveCount(10);
   const ys = await railLinks.evaluateAll((els) =>
     els.map((el) => Math.round(el.getBoundingClientRect().y)),
   );

@@ -121,6 +121,7 @@ describe('moldura do App', () => {
       ['Contextos', '/contexts'],
       ['Importações', '/imports'],
       ['Pendências', '/pending'],
+      ['Sugestões', '/sugestoes'],
       ['Views salvas', '/views'],
       ['Exportar dados', '/export'],
     ]);

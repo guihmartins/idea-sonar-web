@@ -442,6 +442,17 @@ const railSections: {
     icon: <path d="M6 3v18M6 4h11l-3 4 3 4H6" />,
   },
   {
+    to: '/sugestoes',
+    label: 'Sugestões',
+    icon: (
+      <>
+        <circle cx="5" cy="12" r="2" />
+        <circle cx="19" cy="12" r="2" />
+        <path d="M8.5 12h2M13.5 12h2" />
+      </>
+    ),
+  },
+  {
     to: '/views',
     label: 'Views salvas',
     icon: <path d="M6 3h12v18l-6-4-6 4z" />,
