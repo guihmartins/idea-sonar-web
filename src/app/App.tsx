@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 import {
   Link,
   NavLink,
@@ -10,7 +10,6 @@ import {
 import { SessionGate } from './services';
 import { MapPage } from '../pages/MapPage';
 import { EntityEditor } from '../pages/EntityEditor';
-import { SuggestionsPage } from '../pages/SuggestionsPage';
 import {
   RecordsPage,
   ImportsPage,
@@ -19,6 +18,12 @@ import {
   HistoryPage,
   ExportPage,
 } from '../pages/RecordsPage';
+// Carregada sob demanda: mantém o pacote principal abaixo do aviso de 500 kB do Vite.
+const SuggestionsPage = lazy(() =>
+  import('../pages/SuggestionsPage').then((module) => ({
+    default: module.SuggestionsPage,
+  })),
+);
 export function App() {
   const location = useLocation();
   const main = useRef<HTMLElement>(null);
@@ -80,7 +85,14 @@ export function App() {
               <Route path="/imports" element={<ImportsPage />} />
               <Route path="/imports/:id" element={<ImportPage />} />
               <Route path="/pending" element={<PendingPage />} />
-              <Route path="/sugestoes" element={<SuggestionsPage />} />
+              <Route
+                path="/sugestoes"
+                element={
+                  <Suspense fallback={<p role="status">Carregando…</p>}>
+                    <SuggestionsPage />
+                  </Suspense>
+                }
+              />
               <Route path="/history/:type/:id" element={<HistoryPage />} />
               <Route path="/export" element={<ExportPage />} />
               <Route
