@@ -2033,6 +2033,13 @@ button.flow-toggle[aria-pressed='true'] {
   text-transform: uppercase;
   color: var(--muted);
 }
+/* Nome numa linha; tipo à esquerda e semelhança à direita embaixo. */
+.similar-list button {
+  text-align: left;
+}
+.similar-list strong {
+  flex: 1 0 100%;
+}
 .similar-list .score {
   margin-left: auto;
 }
