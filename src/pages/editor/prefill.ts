@@ -20,28 +20,25 @@ export const hasPrefill = (params: URLSearchParams) =>
 
 // `typeCodes`: predicados do catálogo; sem catálogo o tipo não pode ser conferido
 // e fica de fora.
+const isId = (value: string | null): value is string =>
+  value !== null && uuid.test(value);
+
 export function relationPrefill(
   params: URLSearchParams,
   typeCodes: string[] | undefined,
 ): RelationPrefill {
-  const type = params.get('type') ?? '';
-  const source = params.get('sourceId') ?? '';
-  const target = params.get('targetId') ?? '';
+  const type = params.get('type');
+  const source = params.get('sourceId');
+  const target = params.get('targetId');
   const status = evidenceStatusSchema.safeParse(params.get('evidenceStatus'));
-  const candidates: [keyof RelationPrefill, string, boolean][] = [
-    ['type', type, !!typeCodes?.includes(type)],
-    ['sourceId', source, uuid.test(source)],
-    // A API recusa relação de um ponto com ele mesmo.
-    [
-      'targetId',
-      target,
-      uuid.test(target) && target.toLowerCase() !== source.toLowerCase(),
-    ],
-    ['evidenceStatus', status.data ?? '', status.success],
-  ];
-  return Object.fromEntries(
-    candidates.flatMap(([key, value, valid]) => (valid ? [[key, value]] : [])),
-  );
+  const prefill: RelationPrefill = {};
+  if (type !== null && typeCodes?.includes(type)) prefill.type = type;
+  if (isId(source)) prefill.sourceId = source;
+  // A API recusa relação de um ponto com ele mesmo.
+  if (isId(target) && target.toLowerCase() !== source?.toLowerCase())
+    prefill.targetId = target;
+  if (status.success) prefill.evidenceStatus = status.data;
+  return prefill;
 }
 
 // O que "Registrar paralelo" abre: paralelo de a para b, como inferência.

@@ -47,16 +47,24 @@ function useMeaning(filters: SearchFilters, limit: number): Query {
 }
 
 // Dica, espera, falha (503 vira nota) ou "nada parecido".
-function MeaningState({ q, query }: { q: string; query: Query }) {
+function MeaningState({
+  q,
+  query,
+  empty,
+}: {
+  q: string;
+  query: Query;
+  empty: boolean;
+}) {
   if (q === '') return <p className="semantic-hint">{meaningHintText}</p>;
   if (query.error)
     return (
       <SemanticFailure error={query.error} retry={() => void query.refetch()} />
     );
   if (query.isPending) return <p role="status">Buscando…</p>;
-  if (query.data?.items.length === 0)
-    return <p className="empty">Nenhum ponto de sentido parecido com “{q}”.</p>;
-  return null;
+  return empty ? (
+    <p className="empty">Nenhum ponto de sentido parecido com “{q}”.</p>
+  ) : null;
 }
 
 // Resultados da busca por significado em Pontos. O componente é remontado a
@@ -70,7 +78,11 @@ export function MeaningResults({ filters }: { filters: SearchFilters }) {
       <p className="record-count" aria-live="polite">
         {query.isSuccess ? countMeaning(items.length) : ''}
       </p>
-      <MeaningState q={filters.q ?? ''} query={query} />
+      <MeaningState
+        q={filters.q ?? ''}
+        query={query}
+        empty={query.isSuccess && items.length === 0}
+      />
       <div className="record-list">
         {items.map(({ node, score }) => (
           <RecordItem key={node.id} type="nodes" item={node} score={score} />

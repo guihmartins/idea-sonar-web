@@ -273,6 +273,8 @@ describe('Pontos — resultados por significado', () => {
       '/edit/nodes/00000000-0000-4000-8000-000000000030',
     );
     expect(count()).toHaveTextContent('2 pontos, em ordem de semelhança');
+    expect(screen.queryByText(/Nenhum ponto de sentido parecido/)).toBeNull();
+    expect(screen.queryByText(/Escreva uma ideia ou um trecho/)).toBeNull();
     expect(
       screen.getByText(
         'Ordem por sentido do texto. Semelhança não é identidade: confira antes de reutilizar.',
@@ -394,6 +396,49 @@ function semanticFrom(services: Services, scores: number[]) {
     };
   });
 }
+
+describe('Pontos — a consulta depende do que foi pedido', () => {
+  it('outro tipo ou pendentes não reaproveitam a resposta de outra busca', async () => {
+    const { user } = await setup('/nodes?mode=significado&q=a', (services) => {
+      vi.spyOn(services.api, 'semanticSearch').mockImplementation(
+        async (_q, filters) => {
+          // Só a busca sem tipo e sem pendentes responde; as outras ficam esperando.
+          if (filters.kind || filters.includePending)
+            return new Promise<SemanticResults>(() => {});
+          return {
+            model: 'm',
+            items: [
+              {
+                node: await fixtureNode(services),
+                score: 0.9,
+              },
+            ],
+          };
+        },
+      );
+    });
+    await waitFor(() => expect(titles()).toHaveLength(1));
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Tipo' }),
+      'work',
+    );
+    await user.click(screen.getByRole('button', { name: 'Buscar' }));
+    expect(await screen.findByText('Buscando…')).toBeVisible();
+    expect(titles()).toHaveLength(0);
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Tipo' }),
+      '',
+    );
+    await user.click(screen.getByRole('button', { name: 'Buscar' }));
+    await waitFor(() => expect(titles()).toHaveLength(1));
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Incluir pendentes' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Buscar' }));
+    expect(await screen.findByText('Buscando…')).toBeVisible();
+    expect(titles()).toHaveLength(0);
+  });
+});
 
 describe('Pontos — Mostrar mais (top-k, sem cursor)', () => {
   it('com 20 resultados oferece "Mostrar mais"; ele pede 50 e some', async () => {

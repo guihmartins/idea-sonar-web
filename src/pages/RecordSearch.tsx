@@ -73,7 +73,8 @@ export function RecordSearch({
     event.preventDefault();
     applyDraft(draft);
   }
-  const meaning = type === 'nodes' && draft.meaning;
+  // Só pontos têm modo: nas outras listas o rascunho nunca nasce em Significado.
+  const meaning = draft.meaning;
   return (
     <form
       className="record-search"

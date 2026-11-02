@@ -19,8 +19,9 @@ async function setup(prepare: (services: Services) => void = () => {}) {
   const parallels = vi.spyOn(services.api, 'parallels');
   const dismiss = vi.spyOn(services.api, 'dismissParallel');
   prepare(services);
+  const client = createQueryClient();
   render(
-    <QueryClientProvider client={createQueryClient()}>
+    <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={['/sugestoes']}>
         <ServicesProvider services={services}>
           <SuggestionsPage />
@@ -28,7 +29,7 @@ async function setup(prepare: (services: Services) => void = () => {}) {
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  return { services, parallels, dismiss, user: userEvent.setup() };
+  return { services, parallels, dismiss, client, user: userEvent.setup() };
 }
 const individuation = 'Individuação (exemplo fictício)';
 const coniunctio = 'Coniunctio (exemplo fictício)';
@@ -71,6 +72,7 @@ describe('Sugestões — a lista', () => {
     expect(parallels).toHaveBeenCalledTimes(1);
     expect(parallels).toHaveBeenCalledWith({ limit: 20 }, expect.anything());
     expect(pairs()).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Mostrar mais' })).toBeNull();
     const pair = within(pairs()[0]!);
     // Rótulo, tipo e descrição curta dos dois, cada um com link para o ponto.
     expect(pair.getByRole('link', { name: individuation })).toHaveAttribute(
@@ -135,6 +137,8 @@ describe('Sugestões — a lista', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Carregando sugestões…',
     );
+    // A contagem só é anunciada com a lista na mão.
+    expect(document.querySelector('.record-count')).toHaveTextContent(/^$/);
     expect(screen.queryByText(emptyMessage)).toBeNull();
     release({ model: 'm', items: [] });
     await screen.findByText(emptyMessage);
@@ -251,7 +255,15 @@ describe('Sugestões — Dispensar', () => {
   });
 
   it('envia a, b e o motivo sem espaços nas pontas, tira o par da lista e anuncia o resultado', async () => {
-    const { user, dismiss, parallels } = await setup();
+    const { user, dismiss, parallels, client } = await setup();
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    // As sugestões ficam numa chave própria, com o limite dentro.
+    await screen.findByRole('article');
+    expect(
+      client
+        .getQueryCache()
+        .find({ queryKey: ['suggestions', 'parallels', 20] }),
+    ).toBeDefined();
     await screen.findByRole('article');
     await user.click(dismissButton());
     const form = screen.getByRole('group');
@@ -269,6 +281,8 @@ describe('Sugestões — Dispensar', () => {
       ids.coniunctio,
       'Só parecem iguais pelo vocabulário.',
     );
+    // Só as sugestões são relidas, não o resto do cache.
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['suggestions'] });
     // A lista foi relida depois da dispensa, e o estado vazio aparece.
     expect(parallels.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(await screen.findByText(emptyMessage)).toBeVisible();

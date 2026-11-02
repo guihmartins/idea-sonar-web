@@ -14,11 +14,14 @@ import { MapPage } from '../../src/pages/MapPage';
 // "Pontos parecidos" no painel do ponto: GET /nodes/{id}/similar?limit=5 ao abrir,
 // linhas com nome, tipo e pontuação, e o mesmo gesto da busca do mapa ao ativar.
 type Services = ReturnType<typeof createFixtureServices>;
-async function openMap(prepare: (services: Services) => void = () => {}) {
+async function openMap(
+  prepare: (services: Services, real: Services['api']) => void = () => {},
+) {
   const services = createFixtureServices();
   await services.session.login();
+  const real = { ...services.api };
   const similar = vi.spyOn(services.api, 'similarNodes');
-  prepare(services);
+  prepare(services, real);
   render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={['/map']}>
@@ -102,6 +105,31 @@ describe('painel do ponto — Pontos parecidos', () => {
         'Pistas pelo sentido do texto; não indicam relação.',
       ),
     ).toBeVisible();
+    expect(screen.queryByText('Nenhum ponto parecido.')).toBeNull();
+    expect(screen.queryByText('Procurando pontos parecidos…')).toBeNull();
+  });
+
+  it('cada ponto tem a sua consulta: o painel do novo ponto não mostra a lista do anterior', async () => {
+    const { user } = await openMap((services, real) => {
+      vi.spyOn(services.api, 'similarNodes').mockImplementation(
+        (id, ...rest) =>
+          id === '00000000-0000-4000-8000-000000000031'
+            ? new Promise<SemanticResults>(() => {})
+            : real.similarNodes(id, ...rest),
+      );
+    });
+    await pick(user, 'Individua', /Individuação/);
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    await user.click(within(rows()[0]!).getByRole('button'));
+    await screen.findByRole('heading', { level: 2, name: coniunctio });
+    expect(
+      await screen.findByText('Procurando pontos parecidos…'),
+    ).toBeVisible();
+    expect(
+      within(panel()).queryByRole('list', {
+        name: 'Pontos parecidos com este',
+      }),
+    ).toBeNull();
   });
 
   it('a seção vem depois das relações e antes dos links do ponto', async () => {

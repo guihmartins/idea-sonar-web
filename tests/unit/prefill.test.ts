@@ -8,6 +8,8 @@ import {
 
 const a = '00000000-0000-4000-8000-000000000030';
 const b = '00000000-0000-4000-8000-000000000031';
+// Com letras hexadecimais: maiúscula e minúscula só diferem aqui.
+const c = 'abcdefab-cdef-4abc-8abc-abcdefabcdef';
 const types = ['influenced', 'parallel_to', 'studied'];
 const params = (text: string) => new URLSearchParams(text);
 
@@ -84,6 +86,21 @@ describe('relationPrefill', () => {
         types,
       ),
     ).toEqual({ sourceId: a });
+    expect(
+      relationPrefill(params(`sourceId=${c}&targetId=${c}`), types),
+    ).toEqual({ sourceId: c });
+    expect(
+      relationPrefill(
+        params(`sourceId=${c}&targetId=${c.toUpperCase()}`),
+        types,
+      ),
+    ).toEqual({ sourceId: c });
+    expect(
+      relationPrefill(
+        params(`sourceId=${c.toUpperCase()}&targetId=${c}`),
+        types,
+      ),
+    ).toEqual({ sourceId: c.toUpperCase() });
     // Sem origem válida, o destino sozinho vale.
     expect(relationPrefill(params(`targetId=${a}`), types)).toEqual({
       targetId: a,

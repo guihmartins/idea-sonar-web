@@ -31,13 +31,14 @@ const settled = { timeout: 3000 };
 
 async function open(
   path: string,
-  prepare: (services: Services) => void = () => {},
+  prepare: (services: Services, real: Services['api']) => void = () => {},
 ) {
   const services = createFixtureServices();
   await services.session.login();
+  const real = { ...services.api };
   const semantic = vi.spyOn(services.api, 'semanticSearch');
   const save = vi.spyOn(services.api, 'save');
-  prepare(services);
+  prepare(services, real);
   render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={[path]}>
@@ -58,7 +59,10 @@ async function open(
 }
 const name = () => screen.getByRole('textbox', { name: 'Nome' });
 const description = () => screen.getByRole('textbox', { name: 'Descrição' });
-const title = () => screen.queryByRole('heading', { name: hintTitle });
+const title = () =>
+  screen.queryByRole('heading', {
+    name: 'Confira antes de criar: pontos com sentido parecido',
+  });
 const unavailable = () =>
   new ApiError(503, 'Modelo fora do ar.', { code: 'SEMANTIC_UNAVAILABLE' });
 const text = 'Texto sintético sobre a união de opostos.';
@@ -132,6 +136,10 @@ describe('ponto novo — Confira antes de criar', () => {
     expect(region).toHaveAttribute('aria-live', 'polite');
     const rows = within(region).getAllByRole('listitem');
     expect(rows).toHaveLength(3);
+    // Nome, tipo e semelhança separados por espaço (nome acessível e texto).
+    expect(rows[0]).toHaveTextContent(
+      /^Individuação \(exemplo fictício\) Conceito semelhança 0,\d\d$/,
+    );
     for (const row of rows) {
       expect(within(row).getByText(/^semelhança 0,\d\d$/)).toBeVisible();
       const link = within(row).getByRole('link');
@@ -273,6 +281,30 @@ describe('Confira antes de criar — quando não vale', () => {
     expect(title()).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByText('Falha interna.')).toBeNull();
+  });
+});
+
+describe('a dica depende do texto', () => {
+  it('outro texto não mostra a resposta do anterior enquanto a nova não chega', async () => {
+    const { user, semantic } = await open('/edit/nodes', (services, real) => {
+      vi.spyOn(services.api, 'semanticSearch').mockImplementation((...args) =>
+        args[0].endsWith('mais')
+          ? new Promise<never>(() => {})
+          : real.semanticSearch(...args),
+      );
+    });
+    await user.type(
+      await screen.findByRole('textbox', { name: 'Nome' }),
+      'União',
+    );
+    await user.type(description(), text);
+    expect(
+      await screen.findByRole('heading', { name: hintTitle }, settled),
+    ).toBeVisible();
+    await user.type(description(), ' mais');
+    await sleep(hintDelay + 300);
+    await waitFor(() => expect(semantic).toHaveBeenCalledTimes(2), settled);
+    expect(title()).toBeNull();
   });
 });
 

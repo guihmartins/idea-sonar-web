@@ -36,7 +36,7 @@ export function SuggestionsPage() {
   const { api } = useServices();
   const cache = useQueryClient();
   const [limit, setLimit] = useState(firstLimit);
-  const [dismissing, setDismissing] = useState('');
+  const [dismissing, setDismissing] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const query = useQuery({
     queryKey: ['suggestions', 'parallels', limit],
@@ -45,7 +45,7 @@ export function SuggestionsPage() {
   });
   const pairs = query.data?.items ?? [];
   async function dismissed(pair: Pair) {
-    setDismissing('');
+    setDismissing(null);
     setMessage(
       `Par dispensado: “${pair.a.label}” e “${pair.b.label}” não serão sugeridos de novo.`,
     );
@@ -69,7 +69,10 @@ export function SuggestionsPage() {
           {message}
         </p>
       )}
-      <SuggestionsState query={query} />
+      <SuggestionsState
+        query={query}
+        empty={query.isSuccess && pairs.length === 0}
+      />
       <div className="record-list suggestion-list">
         {pairs.map((pair) => (
           <PairRow
@@ -77,7 +80,7 @@ export function SuggestionsPage() {
             pair={pair}
             dismissing={dismissing === pairKey(pair)}
             onDismiss={() => setDismissing(pairKey(pair))}
-            onCancel={() => setDismissing('')}
+            onCancel={() => setDismissing(null)}
             onDone={() => void dismissed(pair)}
           />
         ))}
@@ -94,17 +97,17 @@ export function SuggestionsPage() {
 // Espera, falha (503 vira nota, sem "tentar novamente") ou lista vazia.
 function SuggestionsState({
   query,
+  empty,
 }: {
   query: UseQueryResult<ParallelSuggestions>;
+  empty: boolean;
 }) {
   if (query.error)
     return (
       <SemanticFailure error={query.error} retry={() => void query.refetch()} />
     );
   if (query.isPending) return <p role="status">Carregando sugestões…</p>;
-  if (query.data?.items.length === 0)
-    return <p className="empty">{emptyText}</p>;
-  return null;
+  return empty ? <p className="empty">{emptyText}</p> : null;
 }
 
 function PairPoint({ node }: { node: Node }) {
