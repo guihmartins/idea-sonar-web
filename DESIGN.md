@@ -330,9 +330,14 @@ mesmo traço neutro `#767c6b` (≥3:1 sobre o marfim) e o mesmo preenchimento a
   busca do mapa. Fecha com "Pistas pelo sentido do texto; não indicam relação.".
 - **Aviso de parecidos**: no detalhe do lote, "Parecido com:" e links (`.candidate-links`)
   com a semelhança, e a linha "Aviso, não desfecho: confira se não é o mesmo ponto."; no
-  cadastro de ponto novo, o bloco "Confira antes de criar: pontos com sentido parecido",
-  um título de 14px com fio em cima e linhas de link, tipo e semelhança. É dica: o salvar
-  não muda, e o bloco some se a busca estiver indisponível ou falhar.
+  cadastro de ponto novo, o bloco "Parecido com pontos já cadastrados", com o mesmo
+  desenho: um título de 14px com fio em cima, linhas de link, tipo e semelhança e a
+  frase "Aviso, não bloqueio: confira se não é o mesmo ponto antes de salvar.". O bloco
+  vem da busca de duplicata (só o que passa do limiar do servidor, então quase sempre
+  não aparece); seus links abrem em outra aba (`target="_blank"`, `rel="noopener
+  noreferrer"`, nome acessível "… (abre em nova aba)" e o marcador `↗`), para o rascunho
+  não se perder. É aviso: o salvar não muda, e o bloco some se a busca estiver
+  indisponível ou falhar.
 - **Seletor por busca** (pontos, contextos e fontes no editor; contexto no filtro
   do mapa): `fieldset` com etiqueta mono, campo "Buscar candidato", o que já está
   escolhido escrito pelo nome (rádio para um, lista com "Remover" para vários) e

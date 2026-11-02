@@ -110,14 +110,18 @@ roda este E2E; o spec `semantic.spec.ts` espera a indexação por polling.
   o contrato lá: importe o snapshot (`contracts:import` com o commit), regenere e
   ajuste `domain.ts`/`adapter.ts` até `typecheck` (ContractCheck) e testes passarem.
 - Contrato 1.3.0 (busca por significado; só acréscimos): `GET /search/semantic`
-  (`q` 1–500, `kind`, `includePending`, `limit` 1–50), `GET /nodes/{id}/similar`,
+  (`q` 1–500, `kind`, `includePending`, `limit` 1–50, `mode` `meaning`|`duplicates`),
+  `GET /nodes/{id}/similar`,
   `GET /suggestions/parallels` (`limit`, `minScore`) e o `POST` de dispensar um
   par, `/suggestions/parallels/dismiss` (`{a, b, reason}`; idempotente por par, sem
   `Idempotency-Key`: `withoutIdempotencyKey` no transporte). Os quatro respondem 503
   `SEMANTIC_UNAVAILABLE` quando a busca está desligada: a tela mostra uma nota quieta
   (`SemanticFailure`), nunca "tentar novamente". Os itens `create` do lote trazem
   `similar: [{id, label, score}]` (ausente = busca desligada; lista vazia = nada
-  parecido). Regra do produto: semelhança é pista, não identidade nem prova de
+  parecido). `mode=duplicates` (commit e521740 da API) trata `q` como o texto que um ponto
+  novo teria (`nome · tipo em português · outros nomes · descrição`) e só devolve o que passa
+  do limiar de duplicata do servidor (0,94, o mesmo do `similar` do lote): é o que o
+  cadastro de ponto novo usa. Regra do produto: semelhança é pista, não identidade nem prova de
   influência; a pontuação é cosseno comprimido (textos sem relação dão 0,80–0,89), então
   aparece só como "semelhança 0,87" (duas casas, vírgula), nunca como percentual.
 - Formatos-chave: `version` inteiro (PATCH envia `If-Match: <versão>`), POST de
