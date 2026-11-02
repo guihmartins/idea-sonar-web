@@ -53,11 +53,14 @@ export interface ListFilters {
   includeUnknownPeriod?: boolean | undefined;
 }
 // Busca por significado: `kind` e `includePending` como nos outros filtros; sem
-// cursor (é um top-k), só `limit`.
+// cursor (é um top-k), só `limit`. `mode` omitido é `meaning` (a busca de sempre);
+// `duplicates` trata `q` como o texto de um ponto prestes a ser escrito e só traz o
+// que passa do limiar de duplicata do servidor.
 export interface SemanticFilters {
   kind?: Kind | undefined;
   includePending?: boolean | undefined;
   limit?: number | undefined;
+  mode?: 'meaning' | 'duplicates' | undefined;
 }
 // Pares de pontos que se leem parecido; sem `minScore` vale o limiar da API.
 export interface ParallelFilters {
@@ -129,6 +132,7 @@ export function createApi(send: Transport) {
           kind: filters.kind,
           includePending: filters.includePending,
           limit: filters.limit,
+          mode: filters.mode,
         })}`,
         { signal },
       ),

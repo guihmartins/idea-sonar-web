@@ -541,6 +541,19 @@ describe('adapter — busca por significado', () => {
     expect(path(send, 2)).toBe(
       '/search/semantic?q=a%26b&includePending=false&limit=50',
     );
+    // `mode` só vai quando pedido, depois do limite.
+    await api.semanticSearch(
+      'União · conceito · texto',
+      { mode: 'duplicates', includePending: true, limit: 3 },
+      signal,
+    );
+    expect(path(send, 3)).toBe(
+      '/search/semantic?q=Uni%C3%A3o+%C2%B7+conceito+%C2%B7+texto&includePending=true&limit=3&mode=duplicates',
+    );
+    await api.semanticSearch('a', { mode: 'meaning' }, signal);
+    expect(path(send, 4)).toBe('/search/semantic?q=a&mode=meaning');
+    await api.semanticSearch('a', { mode: undefined }, signal);
+    expect(path(send, 5)).toBe('/search/semantic?q=a');
   });
 
   it('similarNodes: ID codificado e limite', async () => {
