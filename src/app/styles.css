@@ -2025,3 +2025,22 @@ button.flow-toggle[aria-pressed='true'] {
   width: auto;
   min-width: 9rem;
 }
+/* Pontos parecidos no painel do mapa: mesma lista de linhas das relações. */
+.similar-kind {
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.similar-list .score {
+  margin-left: auto;
+}
+.details-panel .similar-kind,
+.details-panel .score {
+  color: var(--atlas-tinta-2);
+}
+.details-panel .semantic-note,
+.details-panel .semantic-hint {
+  font-size: var(--text-xs);
+}

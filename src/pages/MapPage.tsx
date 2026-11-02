@@ -45,6 +45,7 @@ import { restoreView } from '../graph/restore';
 import { CandidatePicker } from './editor/pickers';
 import { formatPeriod, hasPeriod } from '../components/period';
 import { NodeIdentifiers } from '../components/NodeIdentifiers';
+import { SimilarPoints } from './SimilarPoints';
 import { contextColors, neutralColor } from '../graph/styles/palette';
 const initialViewport: Viewport = { zoom: 1, pan: { x: 0, y: 0 } };
 function prefersReducedMotion() {
@@ -204,6 +205,12 @@ function useMapController() {
     setError(null);
     setMessage('');
   }
+  // Traz um ponto achado (busca do mapa ou pontos parecidos) como nova raiz.
+  function pickNode(node: Node) {
+    chooseRoot(node);
+    setTerm('');
+    setSearch('');
+  }
   function changeFilters(next: Filters) {
     cancel();
     setSaveKey(crypto.randomUUID());
@@ -321,6 +328,7 @@ function useMapController() {
     filters,
     changeFilters,
     chooseRoot,
+    pickNode,
     error,
     message,
     list,
@@ -617,7 +625,7 @@ function NodeRelationsList({
   if (connected.length === 0)
     return <p>Nenhuma relação carregada para este ponto ainda.</p>;
   return (
-    <ul className="relation-list">
+    <ul className="relation-list" aria-label="Relações do ponto">
       {connected.map((r) => (
         <RelationRow
           key={r.id}
@@ -682,12 +690,14 @@ function NodePanel({
   relations,
   catalog,
   nodes,
+  onPickSimilar,
 }: {
   id: string;
   contexts: Context[];
   relations: Relation[];
   catalog: Catalog;
   nodes: Node[];
+  onPickSimilar: (node: Node) => void;
 }) {
   const { api } = useServices();
   const [activeRelationId, setActiveRelationId] = useState('');
@@ -753,6 +763,7 @@ function NodePanel({
           })()}
         />
       )}
+      <SimilarPoints id={n.id} onPick={onPickSimilar} />
       <div className="links">
         <Link to={`/edit/nodes/${n.id}`}>Editar ponto</Link>
         <Link to={`/history/nodes/${n.id}`}>Histórico</Link>
@@ -1007,11 +1018,7 @@ function SearchResults({ model }: { model: MapModel }) {
           <button
             className="result"
             key={n.id}
-            onClick={() => {
-              model.chooseRoot(n);
-              model.setTerm('');
-              model.setSearch('');
-            }}
+            onClick={() => model.pickNode(n)}
           >
             <strong>{n.label}</strong>
             <small>
@@ -1258,6 +1265,7 @@ function MapDetails({ model, catalog }: { model: MapModel; catalog: Catalog }) {
             relations={model.data.relations}
             catalog={catalog}
             nodes={model.data.nodes}
+            onPickSimilar={model.pickNode}
           />
         )}
         {model.selection.id && !model.selection.edge && (
