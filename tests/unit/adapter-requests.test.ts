@@ -492,3 +492,130 @@ describe('adapter + transporte — o que vai pela rede', () => {
     expect(sent.headers.get('Idempotency-Key')).toBe(body.idempotencyKey);
   });
 });
+
+// Busca por significado (contrato 1.3.0): rotas, query e corpo exatos.
+describe('adapter — busca por significado', () => {
+  const nodeJson = {
+    id: 'n1',
+    version: 1,
+    createdAt: '2026-10-24T12:00:00.000Z',
+    updatedAt: '2026-10-24T12:00:00.000Z',
+    status: 'active',
+    kind: 'concept',
+    label: 'Individuação',
+    description: 'Texto.',
+    conceptScope: 'broad',
+    startYear: null,
+    endYear: null,
+    precision: 'unknown',
+    periodLabel: null,
+    aliases: [],
+    identifiers: [],
+    contexts: [],
+    degreeTotal: 0,
+    archivedAt: null,
+  };
+  const semantic = {
+    model: 'Xenova/multilingual-e5-small',
+    items: [{ node: nodeJson, score: 0.87 }],
+  };
+
+  it('semanticSearch: q, kind, includePending e limit, nessa ordem, vazio omitido', async () => {
+    const { api, send } = setup(semantic);
+    await api.semanticSearch('união de opostos', {}, signal);
+    expect(path(send)).toBe('/search/semantic?q=uni%C3%A3o+de+opostos');
+    expect(send.mock.calls[0]?.[1]).toEqual({ signal });
+    await api.semanticSearch(
+      'união de opostos',
+      { kind: 'concept', includePending: true, limit: 20 },
+      signal,
+    );
+    expect(path(send, 1)).toBe(
+      '/search/semantic?q=uni%C3%A3o+de+opostos&kind=concept&includePending=true&limit=20',
+    );
+    await api.semanticSearch(
+      'a&b',
+      { includePending: false, limit: 50 },
+      signal,
+    );
+    expect(path(send, 2)).toBe(
+      '/search/semantic?q=a%26b&includePending=false&limit=50',
+    );
+  });
+
+  it('similarNodes: ID codificado e limite', async () => {
+    const { api, send } = setup(semantic);
+    await api.similarNodes('a b/c', 5, signal);
+    expect(path(send)).toBe('/nodes/a%20b%2Fc/similar?limit=5');
+    expect(send.mock.calls[0]?.[1]).toEqual({ signal });
+  });
+
+  it('parallels: limit e minScore só quando dados (0 vale)', async () => {
+    const { api, send } = setup({
+      model: 'm',
+      items: [{ a: nodeJson, b: { ...nodeJson, id: 'n2' }, score: 0.93 }],
+    });
+    await api.parallels({}, signal);
+    expect(path(send)).toBe('/suggestions/parallels');
+    await api.parallels({ limit: 20 }, signal);
+    expect(path(send, 1)).toBe('/suggestions/parallels?limit=20');
+    await api.parallels({ limit: 50, minScore: 0.95 }, signal);
+    expect(path(send, 2)).toBe('/suggestions/parallels?limit=50&minScore=0.95');
+    await api.parallels({ minScore: 0 }, signal);
+    expect(path(send, 3)).toBe('/suggestions/parallels?minScore=0');
+    expect(send.mock.calls[2]?.[1]).toEqual({ signal });
+  });
+
+  it('dismissParallel: POST com {a, b, reason} e sem Idempotency-Key', async () => {
+    const dismissal = {
+      id: 'd1',
+      a: 'n1',
+      b: 'n2',
+      kind: 'parallel',
+      reason: 'Não é paralelo.',
+      createdAt: '2026-11-01T12:00:00.000Z',
+    };
+    const fetcher = vi.fn<typeof fetch>(async () => Response.json(dismissal));
+    const api = createApi(
+      createTransport('https://api.test/api/v1', null, fetcher),
+    );
+    await expect(
+      api.dismissParallel('n1', 'n2', 'Não é paralelo.'),
+    ).resolves.toEqual(dismissal);
+    const [url, init] = fetcher.mock.calls[0]!;
+    const headers = new Headers(init?.headers);
+    expect(String(url)).toBe(
+      'https://api.test/api/v1/suggestions/parallels/dismiss',
+    );
+    expect(init?.method).toBe('POST');
+    expect(init?.body).toBe('{"a":"n1","b":"n2","reason":"Não é paralelo."}');
+    expect(headers.get('Content-Type')).toBe('application/json');
+    expect(headers.has('Idempotency-Key')).toBe(false);
+    expect(headers.has('If-Match')).toBe(false);
+  });
+
+  it('valida as respostas contra os schemas do contrato', async () => {
+    await expect(
+      setup({ items: [] }).api.semanticSearch('a', {}, signal),
+    ).rejects.toThrow('fora do contrato');
+    await expect(
+      setup({ model: 'm', items: [{ node: nodeJson }] }).api.similarNodes(
+        'n1',
+        5,
+        signal,
+      ),
+    ).rejects.toThrow('fora do contrato');
+    await expect(
+      setup({ model: 'm', items: [{ a: nodeJson, score: 1 }] }).api.parallels(
+        {},
+        signal,
+      ),
+    ).rejects.toThrow('fora do contrato');
+    await expect(
+      setup({ id: 'd' }).api.dismissParallel('a', 'b', 'r'),
+    ).rejects.toThrow('fora do contrato');
+    await expect(
+      setup(semantic).api.semanticSearch('a', {}, signal),
+    ).resolves.toEqual(semantic);
+  });
+});

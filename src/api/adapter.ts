@@ -18,6 +18,9 @@ import {
   historySchema,
   identitySchema,
   pageSchema,
+  semanticResultsSchema,
+  parallelSuggestionsSchema,
+  parallelDismissalSchema,
 } from './domain';
 import type {
   EntityType,
@@ -48,6 +51,18 @@ export interface ListFilters {
   startYear?: number | null | undefined;
   endYear?: number | null | undefined;
   includeUnknownPeriod?: boolean | undefined;
+}
+// Busca por significado: `kind` e `includePending` como nos outros filtros; sem
+// cursor (é um top-k), só `limit`.
+export interface SemanticFilters {
+  kind?: Kind | undefined;
+  includePending?: boolean | undefined;
+  limit?: number | undefined;
+}
+// Pares de pontos que se leem parecido; sem `minScore` vale o limiar da API.
+export interface ParallelFilters {
+  limit?: number | undefined;
+  minScore?: number | undefined;
 }
 function query(
   values: Record<string, string | number | boolean | null | undefined>,
@@ -100,6 +115,46 @@ export function createApi(send: Transport) {
         `/${type}${query({ q, match, includePending: true, limit: 20 })}`,
         withSignal(signal),
       ),
+    // Busca por sentido (top-k, melhor primeiro). 503 SEMANTIC_UNAVAILABLE quando
+    // o modelo da API está desligado.
+    semanticSearch: (
+      q: string,
+      filters: SemanticFilters,
+      signal: AbortSignal,
+    ) =>
+      read(
+        semanticResultsSchema,
+        `/search/semantic${query({
+          q,
+          kind: filters.kind,
+          includePending: filters.includePending,
+          limit: filters.limit,
+        })}`,
+        { signal },
+      ),
+    similarNodes: (id: string, limit: number, signal: AbortSignal) =>
+      read(
+        semanticResultsSchema,
+        `/nodes/${encodeURIComponent(id)}/similar${query({ limit })}`,
+        { signal },
+      ),
+    parallels: (filters: ParallelFilters, signal: AbortSignal) =>
+      read(
+        parallelSuggestionsSchema,
+        `/suggestions/parallels${query({
+          limit: filters.limit,
+          minScore: filters.minScore,
+        })}`,
+        { signal },
+      ),
+    // Dispensar o par é a única escrita da busca por sentido; a API a trata por
+    // par (repetir devolve o primeiro registro), então não leva Idempotency-Key.
+    dismissParallel: (a: string, b: string, reason: string) =>
+      read(parallelDismissalSchema, '/suggestions/parallels/dismiss', {
+        method: 'POST',
+        body: { a, b, reason },
+        withoutIdempotencyKey: true,
+      }),
     // Relações de um ponto, pendentes inclusive, de um predicado só.
     nodeRelations: (nodeId: string, type: string, signal?: AbortSignal) =>
       read(

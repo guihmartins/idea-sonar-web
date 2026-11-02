@@ -66,6 +66,9 @@ export interface RequestOptions {
   body?: unknown;
   signal?: AbortSignal;
   idempotencyKey?: string;
+  // POST que a API trata por si só como idempotente (ex.: dispensar um par): não
+  // precisa de Idempotency-Key. Sem isto, POST sem chave continua sendo erro.
+  withoutIdempotencyKey?: true;
   version?: string;
 }
 export type Transport = (
@@ -79,7 +82,11 @@ function validateRequest(path: string, options: RequestOptions) {
     path.includes('://')
   )
     throw new Error('Caminho de API inválido.');
-  if (options.method === 'POST' && !options.idempotencyKey)
+  if (
+    options.method === 'POST' &&
+    !options.idempotencyKey &&
+    !options.withoutIdempotencyKey
+  )
     throw new Error('Ação sem Idempotency-Key.');
   if (options.method === 'PATCH' && !options.version)
     throw new Error('Edição sem versão If-Match.');

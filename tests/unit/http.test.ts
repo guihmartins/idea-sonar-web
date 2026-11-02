@@ -109,6 +109,48 @@ describe('transporte autenticado', () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(session.login).not.toHaveBeenCalled();
   });
+  it('POST sem Idempotency-Key é recusado, salvo o que a API trata como idempotente', async () => {
+    const { send, fetcher } = setup([Response.json({ id: 'x' })]);
+    await expect(
+      send('/nodes', { method: 'POST', body: { label: 'teste' } }),
+    ).rejects.toThrow('Ação sem Idempotency-Key.');
+    expect(fetcher).not.toHaveBeenCalled();
+    await send('/suggestions/parallels/dismiss', {
+      method: 'POST',
+      body: { a: '1', b: '2', reason: 'r' },
+      withoutIdempotencyKey: true,
+    });
+    const [url, request] = fetcher.mock.calls[0]!;
+    expect(url).toBe(
+      'https://external.example.com/api/v1/suggestions/parallels/dismiss',
+    );
+    expect(request?.method).toBe('POST');
+    expect(request?.body).toBe('{"a":"1","b":"2","reason":"r"}');
+    expect(new Headers(request?.headers).has('Idempotency-Key')).toBe(false);
+  });
+  it('503 SEMANTIC_UNAVAILABLE volta na hora, com a mensagem e o código da API', async () => {
+    const { send, fetcher } = setup([
+      Response.json(
+        {
+          error: {
+            code: 'SEMANTIC_UNAVAILABLE',
+            message: 'Busca semântica indisponível.',
+          },
+        },
+        { status: 503, headers: { 'Retry-After': '1' } },
+      ),
+    ]);
+    const failure = await send('/search/semantic?q=a').catch(
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(ApiError);
+    expect(failure).toMatchObject({
+      status: 503,
+      code: 'SEMANTIC_UNAVAILABLE',
+      message: 'Busca semântica indisponível.',
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
   it('403 não tenta renovar nem repetir', async () => {
     const { send, fetcher } = setup([new Response('{}', { status: 403 })]);
     await expect(send('/me')).rejects.toMatchObject({ status: 403 });
