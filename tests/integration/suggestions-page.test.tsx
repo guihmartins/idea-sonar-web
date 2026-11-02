@@ -222,6 +222,8 @@ describe('Sugestões — Dispensar', () => {
       name: 'Motivo para dispensar',
     });
     expect(reason).toBeRequired();
+    // O foco vai direto para o motivo, para quem usa só o teclado.
+    expect(reason).toHaveFocus();
     expect(reason).toHaveAttribute('maxlength', '2000');
     expect(within(form).getByText(/O par deixa de ser sugerido/)).toBeVisible();
     expect(dismiss).not.toHaveBeenCalled();

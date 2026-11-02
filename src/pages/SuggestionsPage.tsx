@@ -205,6 +205,7 @@ function DismissForm({
         Motivo para dispensar
         <textarea
           required
+          autoFocus
           value={reason}
           maxLength={2000}
           onChange={(event) => setReason(event.target.value)}
