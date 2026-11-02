@@ -7,13 +7,16 @@ import {
   filtersFromDraft,
   filtersFromParams,
   isSearchable,
+  maxMeaningLength,
   maxQueryLength,
+  meaningMode,
   paramsFromFilters,
 } from '../../src/pages/searchFilters';
 import type { SearchDraft } from '../../src/pages/searchFilters';
 
 const params = (text: string) => new URLSearchParams(text);
 const draft = (extra: Partial<SearchDraft> = {}): SearchDraft => ({
+  meaning: false,
   q: '',
   exact: false,
   pending: false,
@@ -379,5 +382,115 @@ describe('textos da lista', () => {
     expect(
       emptyText('nodes', { q: 'a', kind: 'work', match: 'exact' }),
     ).toContain('escolhido. Desmarque');
+  });
+});
+
+// Busca por significado (`mode=significado`): só texto, tipo e pendentes.
+describe('busca por significado', () => {
+  const meaningUrl =
+    'mode=significado&q=uni%C3%A3o&kind=concept&includePending=true';
+
+  it('a URL com mode=significado vira filtros só com o que o modo usa', () => {
+    expect(meaningMode).toBe('significado');
+    expect(
+      filtersFromParams(
+        'nodes',
+        params(
+          'mode=significado&q=união&kind=concept&includePending=true&match=exact&startYear=-3&endYear=4&includeUnknownPeriod=false',
+        ),
+      ),
+    ).toEqual({
+      mode: 'significado',
+      q: 'união',
+      kind: 'concept',
+      includePending: true,
+    });
+    expect(filtersFromParams('nodes', params('mode=significado'))).toEqual({
+      mode: 'significado',
+    });
+    expect(
+      filtersFromParams('nodes', params('mode=significado&kind=planeta')),
+    ).toEqual({ mode: 'significado' });
+  });
+
+  it('mode inválido, ausente ou em outra lista é ignorado', () => {
+    expect(filtersFromParams('nodes', params('mode=nome&q=a'))).toEqual({
+      q: 'a',
+    });
+    expect(filtersFromParams('nodes', params('mode=Significado'))).toEqual({});
+    expect(
+      filtersFromParams('sources', params('mode=significado&q=a')),
+    ).toEqual({ q: 'a' });
+    expect(
+      filtersFromParams('contexts', params('mode=significado&q=a')),
+    ).toEqual({ q: 'a' });
+  });
+
+  it('o texto vai até 500 caracteres no significado e 200 no nome', () => {
+    const long = 'a'.repeat(600);
+    expect(maxMeaningLength).toBe(500);
+    expect(
+      filtersFromParams('nodes', params(`mode=significado&q=${long}`)).q,
+    ).toHaveLength(500);
+    expect(filtersFromParams('nodes', params(`q=${long}`)).q).toHaveLength(
+      maxQueryLength,
+    );
+    expect(
+      filtersFromDraft('nodes', draft({ meaning: true, q: long })).q,
+    ).toHaveLength(500);
+    expect(filtersFromDraft('nodes', draft({ q: long })).q).toHaveLength(200);
+  });
+
+  it('os parâmetros voltam à URL com mode primeiro', () => {
+    expect(
+      paramsFromFilters(
+        filtersFromParams('nodes', params(meaningUrl)),
+      ).toString(),
+    ).toBe(meaningUrl);
+    expect(paramsFromFilters({ mode: 'significado' }).toString()).toBe(
+      'mode=significado',
+    );
+    expect(paramsFromFilters({ q: 'a' }).toString()).toBe('q=a');
+  });
+
+  it('o formulário em modo significado só lê texto, tipo e pendentes', () => {
+    expect(
+      filtersFromDraft(
+        'nodes',
+        draft({
+          meaning: true,
+          q: ' união ',
+          exact: true,
+          pending: true,
+          kind: 'concept',
+          start: '5',
+          end: '1',
+          unknownPeriod: false,
+        }),
+      ),
+    ).toEqual({
+      mode: 'significado',
+      q: 'união',
+      kind: 'concept',
+      includePending: true,
+    });
+    // Ano inicial depois do final só é erro no modo nome.
+    expect(() =>
+      filtersFromDraft('nodes', draft({ start: '5', end: '1' })),
+    ).toThrow('O ano inicial não pode ser posterior ao final.');
+    expect(filtersFromDraft('nodes', draft({ meaning: true }))).toEqual({
+      mode: 'significado',
+    });
+    // Fontes e contextos não têm modo.
+    expect(
+      filtersFromDraft('sources', draft({ meaning: true, q: 'a' })),
+    ).toEqual({ q: 'a' });
+  });
+
+  it('o rascunho nasce com o modo dos filtros aplicados', () => {
+    expect(draftFromFilters({ mode: 'significado', q: 'a' })).toEqual(
+      draft({ meaning: true, q: 'a' }),
+    );
+    expect(draftFromFilters({ q: 'a' }).meaning).toBe(false);
   });
 });

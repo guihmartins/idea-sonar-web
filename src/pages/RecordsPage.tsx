@@ -7,18 +7,15 @@ import {
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useServices } from '../app/services';
 import { ApiError } from '../api/client';
-import { Failure, editorialLabels } from '../components/Feedback';
-import type { CandidateType, ListFilters } from '../api/adapter';
+import { Failure } from '../components/Feedback';
+import type { CandidateType } from '../api/adapter';
 import type {
-  Entity,
   EntityType,
   HistoryEntry,
   ImportDetail,
   ImportItem,
-  Node,
   PendingItem,
 } from '../api/domain';
-import { NodeIdentifiers } from '../components/NodeIdentifiers';
 import {
   entitySummary,
   entityTitle,
@@ -29,14 +26,18 @@ import {
   pendingProposal,
   pendingTitle,
 } from '../components/labels';
+import { MeaningResults } from './MeaningResults';
+import { RecordItem } from './RecordItem';
 import { RecordSearch } from './RecordSearch';
 import {
   countText,
   emptyText,
   filtersFromParams,
   isSearchable,
+  meaningMode,
   paramsFromFilters,
 } from './searchFilters';
+import type { SearchFilters } from './searchFilters';
 export const typeLabels: Record<EntityType, string> = {
   nodes: 'Pontos',
   relations: 'Relações',
@@ -45,13 +46,43 @@ export const typeLabels: Record<EntityType, string> = {
   views: 'Views salvas',
 };
 export function RecordsPage({ type }: { type: EntityType }) {
-  const { api } = useServices();
   const [params, setParams] = useSearchParams();
   // Só pontos, fontes e contextos têm busca; nas outras listas a URL não conta.
   const searchable = isSearchable(type);
-  const filters: ListFilters = searchable
+  const filters: SearchFilters = searchable
     ? filtersFromParams(type, params)
     : {};
+  return (
+    <section>
+      <PageHeading type={type} />
+      {searchable && (
+        <RecordSearch
+          key={type}
+          type={type}
+          filters={filters}
+          onSearch={(next) => setParams(paramsFromFilters(next))}
+        />
+      )}
+      {filters.mode === meaningMode ? (
+        <MeaningResults
+          key={paramsFromFilters(filters).toString()}
+          filters={filters}
+        />
+      ) : (
+        <NameResults type={type} filters={filters} />
+      )}
+    </section>
+  );
+}
+// Lista por nome (a de sempre): paginada por cursor, com a linha de estado.
+function NameResults({
+  type,
+  filters,
+}: {
+  type: EntityType;
+  filters: SearchFilters;
+}) {
+  const { api } = useServices();
   // Os filtros fazem parte da chave: a API recusa o cursor de outra busca, então
   // mudar um filtro recomeça a lista em vez de continuar a paginação antiga.
   const query = useInfiniteQuery({
@@ -63,16 +94,13 @@ export function RecordsPage({ type }: { type: EntityType }) {
   });
   const items = query.data?.pages.flatMap((p) => p.items) ?? [];
   return (
-    <section>
-      <PageHeading type={type} />
-      <SearchSection
-        type={type}
-        filters={filters}
-        summary={
-          query.isSuccess ? countText(items.length, query.hasNextPage) : ''
-        }
-        onSearch={(next) => setParams(paramsFromFilters(next))}
-      />
+    <>
+      {isSearchable(type) && (
+        // Região viva: o leitor de tela anuncia a contagem.
+        <p className="record-count" aria-live="polite">
+          {query.isSuccess ? countText(items.length, query.hasNextPage) : ''}
+        </p>
+      )}
       {query.isPending && <p role="status">Carregando…</p>}
       {query.error && (
         <Failure error={query.error} retry={() => void query.refetch()} />
@@ -93,33 +121,6 @@ export function RecordsPage({ type }: { type: EntityType }) {
           Carregar mais
         </button>
       )}
-    </section>
-  );
-}
-// Busca e linha de estado (região viva: o leitor de tela anuncia a contagem).
-function SearchSection({
-  type,
-  filters,
-  summary,
-  onSearch,
-}: {
-  type: EntityType;
-  filters: ListFilters;
-  summary: string;
-  onSearch: (filters: ListFilters) => void;
-}) {
-  if (!isSearchable(type)) return null;
-  return (
-    <>
-      <RecordSearch
-        key={type}
-        type={type}
-        filters={filters}
-        onSearch={onSearch}
-      />
-      <p className="record-count" aria-live="polite">
-        {summary}
-      </p>
     </>
   );
 }
@@ -141,7 +142,7 @@ function EmptyList({
   filters,
 }: {
   type: EntityType;
-  filters: ListFilters;
+  filters: SearchFilters;
 }) {
   return (
     <p className="empty">
@@ -150,23 +151,6 @@ function EmptyList({
         : 'Nenhum registro encontrado.'}
       {type === 'views' && ' Salve um recorte na tela Explorar mapa.'}
     </p>
-  );
-}
-function RecordItem({ type, item }: { type: EntityType; item: Entity }) {
-  return (
-    <article>
-      <h2>{entityTitle(type, item)}</h2>
-      <p>{entitySummary(type, item)}</p>
-      {type === 'nodes' && (
-        <NodeIdentifiers identifiers={(item as Node).identifiers} />
-      )}
-      <p>Estado: {editorialLabels[item.status]}</p>
-      {type === 'views' ? (
-        <Link to={`/map?view=${item.id}`}>Restaurar view</Link>
-      ) : (
-        <Link to={`/edit/${type}/${item.id}`}>Ver e editar</Link>
-      )}
-    </article>
   );
 }
 export function ImportsPage() {

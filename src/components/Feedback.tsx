@@ -5,7 +5,7 @@ export function Failure({
   retry,
 }: {
   error: unknown;
-  retry?: () => void;
+  retry?: (() => void) | undefined;
 }) {
   const { session } = useServices();
   return (
